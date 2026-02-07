@@ -1,0 +1,10 @@
+{
+  "name": "Cursed Hearts Assistant",
+  "version": "1.0.0",
+  "action": {
+    "title": "☠️ Cursed Hearts",
+    "icon": "/icon.svg",
+    "height": 700,
+    "width": 400
+  }
+}
