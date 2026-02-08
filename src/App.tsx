@@ -2,17 +2,19 @@ import { useEffect, useState, useRef } from 'react';
 import { useGameStore } from './stores/useGameStore';
 import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
+import { diceService } from './services/diceService';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
 import { CombatTab } from './components/tabs/CombatTab';
 import { MagicTab } from './components/tabs/MagicTab';
 import { CardsTab } from './components/tabs/CardsTab';
 import { ActionsTab } from './components/tabs/ActionsTab';
+import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
 
-type TabId = 'combat' | 'magic' | 'cards' | 'actions' | 'settings';
+type TabId = 'combat' | 'magic' | 'cards' | 'actions' | 'notes' | 'settings';
 
 interface Tab {
   id: TabId;
@@ -25,12 +27,12 @@ const TABS: Tab[] = [
   { id: 'magic', label: 'Маг', icon: '✨' },
   { id: 'cards', label: 'Рок', icon: '🃏' },
   { id: 'actions', label: 'Дейст', icon: '⚡' },
+  { id: 'notes', label: 'Зам', icon: '📝' },
   { id: 'settings', label: 'Настр', icon: '⚙️' }
 ];
 
 export function App() {
   const [isLoading, setIsLoading] = useState(true);
-  const [, setObrReady] = useState(false);
   const initRef = useRef(false);
   
   const {
@@ -54,8 +56,11 @@ export function App() {
       try {
         // Инициализируем OBR SDK
         await initOBR();
-        setObrReady(true);
         setConnection('owlbear', true);
+        
+        // Инициализируем Dice Service
+        await diceService.initialize();
+        setConnection('dice', diceService.getStatus());
         
         // Инициализируем Google Docs сервис (только если URL настроен)
         if (settings.googleDocsUrl) {
@@ -98,6 +103,25 @@ export function App() {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
   
+  // Получение иконки статуса Dice
+  const getDiceStatusIcon = () => {
+    switch (connections.dice) {
+      case 'dice3d': return '🟢';
+      case 'broadcast': return '🟡';
+      case 'notification': return '🔴';
+      default: return '⚪';
+    }
+  };
+  
+  const getDiceStatusLabel = () => {
+    switch (connections.dice) {
+      case 'dice3d': return '3D';
+      case 'broadcast': return 'BC';
+      case 'notification': return 'Текст';
+      default: return '?';
+    }
+  };
+  
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss">
@@ -115,21 +139,21 @@ export function App() {
       {/* STAT BARS: HP & Mana */}
       <StatBars />
       
-      {/* TABS */}
-      <div className="flex border-b border-edge-bone bg-obsidian">
+      {/* TABS — 6 вкладок */}
+      <div className="flex border-b border-edge-bone bg-obsidian shrink-0">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'flex-1 py-2 text-xs font-cinzel uppercase tracking-wide transition-all',
+              'flex-1 py-2 text-[10px] font-cinzel uppercase tracking-wide transition-all min-w-0',
               activeTab === tab.id
                 ? 'tab-active'
                 : 'tab-inactive'
             )}
           >
-            <span className="mr-1">{tab.icon}</span>
-            {tab.label}
+            <span className="block text-sm leading-none mb-0.5">{tab.icon}</span>
+            <span className="block truncate">{tab.label}</span>
           </button>
         ))}
       </div>
@@ -140,17 +164,21 @@ export function App() {
         {activeTab === 'magic' && <MagicTab />}
         {activeTab === 'cards' && <CardsTab />}
         {activeTab === 'actions' && <ActionsTab />}
+        {activeTab === 'notes' && <NotesTab />}
         {activeTab === 'settings' && <SettingsTab />}
       </div>
       
       {/* STATUS BAR */}
-      <div className="h-6 flex items-center justify-between px-3 bg-obsidian border-t border-edge-bone text-xs">
-        <div className="flex items-center gap-3">
+      <div className="h-6 flex items-center justify-between px-2 bg-obsidian border-t border-edge-bone text-[10px] shrink-0">
+        <div className="flex items-center gap-2">
           <span className={connections.owlbear ? 'text-green-500' : 'text-blood'}>
-            OBR: {connections.owlbear ? '🟢' : '🔴'}
+            OBR:{connections.owlbear ? '🟢' : '🔴'}
           </span>
           <span className={connections.docs ? 'text-green-500' : 'text-faded'}>
-            Docs: {connections.docs ? '🟢' : (settings.googleDocsUrl ? '🔴' : '⚪')}
+            Docs:{connections.docs ? '🟢' : (settings.googleDocsUrl ? '🔴' : '⚪')}
+          </span>
+          <span className="text-faded" title={`Кубики: ${getDiceStatusLabel()}`}>
+            Dice:{getDiceStatusIcon()}
           </span>
         </div>
         <div className="text-faded">
@@ -158,15 +186,16 @@ export function App() {
         </div>
       </div>
       
-      {/* NOTIFICATIONS — макс 3 штуки */}
-      <div className="fixed top-2 right-2 z-50 space-y-2 max-w-xs">
+      {/* NOTIFICATIONS — макс 3 штуки, фиксированная позиция */}
+      <div className="fixed top-2 right-2 z-50 space-y-2 max-w-xs pointer-events-none">
         {notifications.map(notification => (
-          <NotificationToast
-            key={notification.id}
-            message={notification.message}
-            type={notification.type}
-            onClose={() => clearNotification(notification.id)}
-          />
+          <div key={notification.id} className="pointer-events-auto">
+            <NotificationToast
+              message={notification.message}
+              type={notification.type}
+              onClose={() => clearNotification(notification.id)}
+            />
+          </div>
         ))}
       </div>
     </div>
