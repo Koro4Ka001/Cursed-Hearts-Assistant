@@ -52,8 +52,11 @@ export interface Unit {
   customActions: CustomAction[];
   
   hasRokCards: boolean;        // только для Кассиана
+  rokDeckResourceId?: string;  // ID ресурса, используемого как колода Рока
   hasDoubleShot: boolean;      // способность ДаблШот (только для Кассиана)
   doubleShotThreshold: number; // порог для ДаблШот (18)
+  
+  notes: string;               // Заметки персонажа (только локально)
 }
 
 export type WeaponType = 'melee' | 'ranged';
@@ -63,12 +66,13 @@ export interface Weapon {
   id: string;
   name: string;                    // "Фамильная сабля"
   type: WeaponType;                // melee / ranged
-  damageFormula: string;           // "5d20" или "6d10"
+  damageFormula: string;           // "5d20" или "6d10" — для melee, пустой для ranged
   damageType: DamageType;          // "chopping" / "piercing" / etc
   proficiencyType: ProficiencyType;
   statBonus: 'physicalPower' | 'dexterity' | 'none';
   // physicalPower = стат × 5 к урону, dexterity = стат × 3 к урону
   hitBonus: number;                // доп бонус к попаданию (напр. +3 от лука)
+  multishot: number;               // кол-во стрел за выстрел (для ranged, по умолчанию 1)
   extraDamageFormula?: string;     // доп урон (напр. стрелы с рунами)
   extraDamageType?: DamageType;
   notes?: string;                  // "все стрелы разделяются на две"
@@ -83,20 +87,28 @@ export interface Spell {
   costType: SpellCostType;         // 'mana' (по умолчанию) или 'health'
   elements: string[];              // ["электричество"] или ["земля", "тьма"]
   type: 'targeted' | 'aoe' | 'self' | 'summon';
-  projectiles: number;             // кол-во снарядов (для targeted)
+  projectiles: string;             // кол-во снарядов — число "3" или формула "d4", "2d6+1"
   damageFormula?: string;          // "d20+d4" — формула урона ЗА ОДИН СНАРЯД
   damageType?: DamageType;
   description?: string;            // текстовое описание эффекта
   equipmentBonus?: number;         // доп бонус от экипировки (напр. +10 от посоха)
 }
 
+export type ResourceType = 'generic' | 'ammo';
+
 export interface Resource {
   id: string;
-  name: string;         // "Колода Рока"
-  icon: string;         // "🃏"
-  current: number;
-  max: number;
-  syncWithDocs: boolean; // синхронизировать с Google Docs
+  name: string;           // "Колода Рока" или "Стрелы с рунами Пустоты"
+  icon: string;           // "🃏" или "🏹"
+  current: number;        // текущее количество
+  max: number;            // максимум
+  resourceType: ResourceType;  // 'generic' или 'ammo'
+  // Поля для ammo:
+  damageFormula?: string;      // "6d10" — урон за стрелу
+  damageType?: DamageType;     // "piercing" — тип урона стрелы
+  extraDamageFormula?: string; // доп урон (например от рун)
+  extraDamageType?: DamageType;
+  syncWithDocs: boolean;       // синхронизировать с Google Docs
 }
 
 // === КАСТОМНЫЕ ДЕЙСТВИЯ ===
@@ -188,6 +200,7 @@ export interface Settings {
 export interface ConnectionStatus {
   owlbear: boolean;
   docs: boolean;
+  dice: 'dice3d' | 'broadcast' | 'notification';
   lastSyncTime?: number;
 }
 
@@ -250,3 +263,23 @@ export const STAT_NAMES: Record<StatKey, string> = {
   charisma: 'Харизма',
   initiative: 'Инициатива'
 };
+
+// Опции для множителей урона
+export const MULTIPLIER_OPTIONS = [
+  { value: 0, label: '×0 (Иммунитет)' },
+  { value: 0.25, label: '×0.25' },
+  { value: 0.5, label: '×0.5 (Резист)' },
+  { value: 0.75, label: '×0.75' },
+  { value: 1, label: '×1 (Обычный)' },
+  { value: 1.5, label: '×1.5' },
+  { value: 2, label: '×2 (Уязвимость)' },
+  { value: 3, label: '×3' }
+];
+
+// Все типы урона для выбора
+export const ALL_DAMAGE_TYPES: DamageType[] = [
+  'slashing', 'piercing', 'bludgeoning', 'chopping',
+  'fire', 'water', 'earth', 'air', 'light', 'darkness',
+  'electricity', 'frost', 'nature', 'corruption', 'life', 'death',
+  'blood', 'void', 'astral', 'space', 'transcendence', 'pure'
+];
