@@ -3,10 +3,33 @@ import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState } from '../ui';
 import { rollDice, getMaxMagicBonus, isHit } from '../../utils/dice';
 import { getIntelligenceBonus } from '../../utils/damage';
-import { announceSpellCast, announceDamage, showNotification } from '../../services/obrService';
+import { diceService } from '../../services/diceService';
 import type { DiceRollResult, Spell } from '../../types';
 import { DAMAGE_TYPE_NAMES } from '../../types';
 import { SPELL_TYPES } from '../../constants/elements';
+
+/**
+ * Парсит строку projectiles и возвращает количество снарядов
+ * Если строка — число, возвращает его. Если формула — бросает кубик.
+ */
+function parseProjectiles(projectiles: string): { count: number; rolls?: number[] } {
+  const trimmed = projectiles.trim();
+  
+  // Если это просто число
+  const asNumber = parseInt(trimmed, 10);
+  if (!isNaN(asNumber) && !trimmed.includes('d')) {
+    return { count: Math.max(1, asNumber) };
+  }
+  
+  // Если это формула с кубиком
+  if (trimmed.includes('d')) {
+    const result = rollDice(trimmed);
+    return { count: Math.max(1, result.total), rolls: result.rolls };
+  }
+  
+  // По умолчанию 1 снаряд
+  return { count: 1 };
+}
 
 export function MagicTab() {
   const { units, selectedUnitId, spendMana, takeDamage } = useGameStore();
@@ -16,7 +39,6 @@ export function MagicTab() {
   const [targetCount, setTargetCount] = useState(1);
   const [useDoubleShot, setUseDoubleShot] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
-  const [, setCastResults] = useState<DiceRollResult[]>([]);
   const [damageResults, setDamageResults] = useState<DiceRollResult[]>([]);
   const [castLog, setCastLog] = useState<string[]>([]);
   
@@ -46,12 +68,10 @@ export function MagicTab() {
     if (!selectedSpell) return;
     
     setIsCasting(true);
-    setCastResults([]);
     setDamageResults([]);
     setCastLog([]);
     
     const log: string[] = [];
-    const newCastResults: DiceRollResult[] = [];
     const newDamageResults: DiceRollResult[] = [];
     
     try {
@@ -84,15 +104,13 @@ export function MagicTab() {
       const castFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
       
       const castResult = rollDice(castFormula, `Каст ${selectedSpell.name}`);
-      newCastResults.push(castResult);
       
       const castSuccess = isHit(castResult);
-      await announceSpellCast(unit.shortName, selectedSpell.name, castSuccess, castResult);
+      await diceService.announceSpellCast(unit.shortName, selectedSpell.name, castSuccess, castResult);
       
       if (!castSuccess) {
         log.push(`❌ Каст провален! [${castResult.rawD20}] + ${magicBonus} = ${castResult.total}`);
         setCastLog(log);
-        setCastResults(newCastResults);
         return;
       }
       
@@ -104,7 +122,7 @@ export function MagicTab() {
         if (castResult.rawD20 >= unit.doubleShotThreshold) {
           spellCount = 2;
           log.push(`⚡ ДаблШот активирован! d20 = ${castResult.rawD20} >= ${unit.doubleShotThreshold}`);
-          await showNotification(`⚡ ${unit.shortName}: ДаблШот! 2× ${selectedSpell.name}!`);
+          await diceService.showNotification(`⚡ ${unit.shortName}: ДаблШот! 2× ${selectedSpell.name}!`);
         } else {
           log.push(`💨 ДаблШот не сработал (${castResult.rawD20} < ${unit.doubleShotThreshold}), но мана ×2 потрачена`);
         }
@@ -137,7 +155,7 @@ export function MagicTab() {
               
               log.push(`💥 АОЕ урон: [${aoeResult.rolls.join(', ')}] + ${totalBonus} = ${aoeResult.total} ${DAMAGE_TYPE_NAMES[selectedSpell.damageType]}`);
               
-              await announceDamage(
+              await diceService.announceDamage(
                 unit.shortName,
                 aoeResult.total,
                 DAMAGE_TYPE_NAMES[selectedSpell.damageType],
@@ -149,17 +167,30 @@ export function MagicTab() {
             }
             break;
             
-          case 'targeted':
-            // Для targeted кастуем по каждой цели или по projectiles
-            const projectileCount = selectedSpell.projectiles || 1;
-            const targets = selectedSpell.projectiles ? 1 : targetCount;
+          case 'targeted': {
+            // Парсим количество снарядов (может быть формула)
+            const { count: projectileCount, rolls: projectileRolls } = parseProjectiles(selectedSpell.projectiles);
+            
+            // Если снаряды определялись кубиком — показываем
+            if (projectileRolls) {
+              log.push(`🎲 Количество снарядов: [${projectileRolls.join(', ')}] = ${projectileCount}`);
+              await diceService.announceProjectileCount(unit.shortName, projectileCount, projectileRolls);
+            }
+            
+            // Если снаряды фиксированные — бросаем по каждой цели
+            // Если снаряды по формуле — они все летят в одну цель
+            const targets = projectileRolls ? 1 : targetCount;
+            const projectilesPerTarget = projectileRolls ? projectileCount : parseInt(selectedSpell.projectiles, 10) || 1;
             
             for (let t = 0; t < targets; t++) {
-              for (let p = 0; p < projectileCount; p++) {
+              if (targets > 1) {
+                log.push(`--- Цель ${t + 1} ---`);
+              }
+              
+              for (let p = 0; p < projectilesPerTarget; p++) {
                 // Бросок на попадание снаряда
                 const projectileHitFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
                 const projectileHit = rollDice(projectileHitFormula, `Снаряд ${p + 1}`);
-                newCastResults.push(projectileHit);
                 
                 const projectileSuccess = isHit(projectileHit);
                 
@@ -173,7 +204,7 @@ export function MagicTab() {
                   
                   log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20}] = ${projectileHit.total} → 💥 ${dmgResult.total} ${DAMAGE_TYPE_NAMES[selectedSpell.damageType]}`);
                   
-                  await announceDamage(
+                  await diceService.announceDamage(
                     unit.shortName,
                     dmgResult.total,
                     DAMAGE_TYPE_NAMES[selectedSpell.damageType],
@@ -188,16 +219,19 @@ export function MagicTab() {
               }
             }
             break;
+          }
         }
       }
       
     } finally {
       setCastLog(log);
-      setCastResults(newCastResults);
       setDamageResults(newDamageResults);
       setIsCasting(false);
     }
   };
+  
+  // Проверяем, содержит ли projectiles формулу с кубиком
+  const hasProjectileFormula = selectedSpell?.projectiles?.includes('d') ?? false;
   
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
@@ -224,10 +258,12 @@ export function MagicTab() {
                   </span>
                   <span className="text-faded">|</span>
                   <span className="text-gold">{SPELL_TYPES[selectedSpell.type]}</span>
-                  {selectedSpell.projectiles > 1 && (
+                  {selectedSpell.projectiles && (
                     <>
                       <span className="text-faded">|</span>
-                      <span className="text-ancient">{selectedSpell.projectiles} снарядов</span>
+                      <span className="text-ancient">
+                        {hasProjectileFormula ? `${selectedSpell.projectiles} снарядов` : `${selectedSpell.projectiles} снаряд(ов)`}
+                      </span>
                     </>
                   )}
                 </div>
@@ -247,7 +283,8 @@ export function MagicTab() {
               </div>
             )}
             
-            {selectedSpell?.type === 'targeted' && !selectedSpell.projectiles && (
+            {/* Показываем количество целей только если снаряды НЕ по формуле */}
+            {selectedSpell?.type === 'targeted' && !hasProjectileFormula && (
               <NumberStepper
                 label="Количество целей"
                 value={targetCount}
