@@ -50,6 +50,9 @@ const createDefaultUnit = (): Unit => ({
   doubleShotThreshold: 18
 });
 
+// Максимум уведомлений одновременно
+const MAX_NOTIFICATIONS = 3;
+
 interface GameState {
   // === PERSISTED ===
   units: Unit[];
@@ -86,8 +89,8 @@ interface GameState {
   spendResource: (unitId: string, resourceId: string, amount: number) => boolean;
   
   // === ACTIONS: Sync ===
-  syncFromDocs: (unitId: string) => Promise<void>;
-  syncAllFromDocs: () => Promise<void>;
+  syncFromDocs: (unitId: string, showNotifications?: boolean) => Promise<void>;
+  syncAllFromDocs: (silent?: boolean) => Promise<void>;
   startAutoSync: () => void;
   stopAutoSync: () => void;
   
@@ -174,8 +177,8 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        // Синхронизируем с Google Docs
-        if (state.settings.syncHP && unit.googleDocsHeader) {
+        // Синхронизируем с Google Docs (только если URL настроен)
+        if (state.settings.syncHP && unit.googleDocsHeader && state.settings.googleDocsUrl) {
           try {
             await docsService.setHealth(unit.googleDocsHeader, hp, unit.health.max);
           } catch (error) {
@@ -231,8 +234,8 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        // Синхронизируем с Google Docs
-        if (state.settings.syncMana && unit.googleDocsHeader) {
+        // Синхронизируем с Google Docs (только если URL настроен)
+        if (state.settings.syncMana && unit.googleDocsHeader && state.settings.googleDocsUrl) {
           try {
             await docsService.setMana(unit.googleDocsHeader, mana, unit.mana.max);
           } catch (error) {
@@ -297,10 +300,27 @@ export const useGameStore = create<GameState>()(
       },
       
       // === SYNC ===
-      syncFromDocs: async (unitId) => {
+      // showNotifications = true для ручной синхронизации, false для автоматической
+      syncFromDocs: async (unitId, showNotifications = true) => {
         const state = get();
         const unit = state.units.find(u => u.id === unitId);
-        if (!unit || !unit.googleDocsHeader) return;
+        
+        // Проверяем наличие юнита и его googleDocsHeader
+        if (!unit || !unit.googleDocsHeader) {
+          if (showNotifications) {
+            get().addNotification('Персонаж не привязан к Google Docs', 'info');
+          }
+          return;
+        }
+        
+        // ВАЖНО: Проверяем URL — если не настроен, молча выходим (или показываем уведомление если ручная синхр)
+        if (!state.settings.googleDocsUrl) {
+          if (showNotifications) {
+            get().addNotification('Настройте URL Google Docs в настройках', 'info');
+          }
+          // Для автоматической синхронизации — просто молча выходим
+          return;
+        }
         
         set({ isSyncing: true });
         
@@ -328,23 +348,50 @@ export const useGameStore = create<GameState>()(
               connections: { ...s.connections, docs: true, lastSyncTime: Date.now() }
             }));
             
-            get().addNotification(`${unit.shortName}: синхронизировано!`, 'success');
+            if (showNotifications) {
+              get().addNotification(`${unit.shortName}: синхронизировано!`, 'success');
+            }
           } else {
-            get().addNotification(`Ошибка синхронизации: ${result.error}`, 'error');
+            if (showNotifications) {
+              get().addNotification(`Ошибка синхронизации: ${result.error ?? 'неизвестная ошибка'}`, 'error');
+            }
           }
         } catch (error) {
           console.error('Sync error:', error);
-          get().addNotification('Ошибка синхронизации', 'error');
+          if (showNotifications) {
+            get().addNotification('Ошибка подключения к Google Docs', 'error');
+          }
         } finally {
           set({ isSyncing: false });
         }
       },
       
-      syncAllFromDocs: async () => {
-        const units = get().units.filter(u => u.googleDocsHeader);
+      // silent = true для автоматической синхронизации (без уведомлений)
+      syncAllFromDocs: async (silent = false) => {
+        const state = get();
+        
+        // ВАЖНО: Если URL не настроен — молча выходим, БЕЗ уведомлений
+        if (!state.settings.googleDocsUrl) {
+          return;
+        }
+        
+        const units = state.units.filter(u => u.googleDocsHeader);
+        
+        // Если нет юнитов для синхронизации — молча выходим
+        if (units.length === 0) {
+          return;
+        }
         
         for (const unit of units) {
-          await get().syncFromDocs(unit.id);
+          // Для автоматической синхронизации не показываем уведомления
+          await get().syncFromDocs(unit.id, !silent);
+        }
+        
+        // Обновляем время последней синхронизации
+        if (units.length > 0) {
+          set((s) => ({ 
+            connections: { ...s.connections, lastSyncTime: Date.now() }
+          }));
         }
       },
       
@@ -359,7 +406,8 @@ export const useGameStore = create<GameState>()(
         const intervalMs = state.settings.autoSyncInterval * 60 * 1000;
         
         const intervalId = window.setInterval(() => {
-          get().syncAllFromDocs();
+          // silent = true — автоматическая синхронизация без уведомлений
+          get().syncAllFromDocs(true);
         }, intervalMs);
         
         set({ autoSyncIntervalId: intervalId });
@@ -395,6 +443,14 @@ export const useGameStore = create<GameState>()(
       setActiveTab: (tab) => set({ activeTab: tab }),
       
       addNotification: (message, type) => {
+        const state = get();
+        
+        // ЗАЩИТА ОТ ДУБЛЕЙ: Проверяем, нет ли уже такого же сообщения
+        const isDuplicate = state.notifications.some(n => n.message === message);
+        if (isDuplicate) {
+          return; // Не добавляем дублирующее уведомление
+        }
+        
         const notification: Notification = {
           id: generateId(),
           message,
@@ -402,9 +458,14 @@ export const useGameStore = create<GameState>()(
           timestamp: Date.now()
         };
         
-        set((state) => ({
-          notifications: [...state.notifications, notification].slice(-10)
-        }));
+        set((s) => {
+          // ОГРАНИЧЕНИЕ: Максимум MAX_NOTIFICATIONS уведомлений, новые вытесняют старые
+          const newNotifications = [...s.notifications, notification];
+          if (newNotifications.length > MAX_NOTIFICATIONS) {
+            return { notifications: newNotifications.slice(-MAX_NOTIFICATIONS) };
+          }
+          return { notifications: newNotifications };
+        });
         
         // Авто-удаление через 5 сек
         setTimeout(() => {
@@ -430,7 +491,7 @@ export const useGameStore = create<GameState>()(
           combatLog: [...state.combatLog, entry].slice(-100)
         }));
         
-        // Логирование в Google Docs
+        // Логирование в Google Docs (только если URL настроен)
         const settings = get().settings;
         if (settings.writeLogs && settings.googleDocsUrl) {
           const unit = get().units.find(u => u.shortName === unitName);
@@ -461,10 +522,13 @@ export const useGameStore = create<GameState>()(
 const initStore = () => {
   const state = useGameStore.getState();
   
-  // Устанавливаем URL в сервис
+  // Устанавливаем URL в сервис (только если он не пустой)
   if (state.settings.googleDocsUrl) {
     docsService.setUrl(state.settings.googleDocsUrl);
   }
+  
+  // НЕ запускаем авто-синхронизацию при инициализации — 
+  // она будет запущена в App.tsx после инициализации OBR
 };
 
 initStore();
