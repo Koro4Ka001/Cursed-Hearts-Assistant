@@ -1,9 +1,19 @@
 import OBR, { isShape, isText, Item } from '@owlbear-rodeo/sdk';
-import { isOBRConnected } from './obrService';
 
 // Ключ метаданных HP Tracker (Game Master's Grimoire)
 const HP_TRACKER_KEY = 'com.bitperfect-software.hp-tracker/data';
 const HP_BAR_MAX_WIDTH = 146;
+
+// Флаг подключения
+let obrConnected = false;
+
+export function setOBRConnected(connected: boolean): void {
+  obrConnected = connected;
+}
+
+export function isOBRConnected(): boolean {
+  return obrConnected;
+}
 
 interface HPTrackerData {
   hp: number;
@@ -19,7 +29,7 @@ export async function updateTokenHp(
   newHp: number,
   maxHp?: number
 ): Promise<boolean> {
-  if (!isOBRConnected()) {
+  if (!obrConnected) {
     console.warn('OBR not connected, skipping HP Tracker update');
     return false;
   }
@@ -111,7 +121,7 @@ export async function updateTokenHp(
 export async function getTokenHp(
   tokenId: string
 ): Promise<{ hp: number; maxHp: number } | null> {
-  if (!isOBRConnected()) {
+  if (!obrConnected) {
     return null;
   }
   
@@ -152,7 +162,7 @@ export async function hasHpTracker(tokenId: string): Promise<boolean> {
  * Получает имя токена
  */
 export async function getTokenName(tokenId: string): Promise<string | null> {
-  if (!isOBRConnected()) {
+  if (!obrConnected) {
     return null;
   }
   
