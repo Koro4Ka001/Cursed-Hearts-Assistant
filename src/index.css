@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@theme {
+  --color-abyss: #030303;
+  --color-dark: #0c0a09;
+  --color-panel: #0f0d0c;
+  --color-input: #161412;
+  --color-hover: #1a1816;
+  --color-bone: #d4c8b8;
+  --color-ancient: #b8a892;
+  --color-faded: #7a6f62;
+  --color-dim: #4a433a;
+  --color-gold-bright: #ffd700;
+  --color-gold: #d4a726;
+  --color-gold-dark: #8b6914;
+  --color-blood-bright: #ff2a2a;
+  --color-blood: #8b0000;
+  --color-blood-dark: #4a0000;
+  --color-mana-bright: #4a9eff;
+  --color-mana: #1a4a8b;
+  --color-mana-dark: #0a2040;
+  --color-success: #2e5a1c;
+  --color-success-text: #a0d090;
+  --color-error: #5a1c1c;
+  --color-error-text: #d09090;
+  --color-border-bone: #3a332a;
+  --color-border-gold: #6a5014;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #030303;
+  color: #d4c8b8;
+  font-size: 14px;
+  line-height: 1.4;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #030303; }
+::-webkit-scrollbar-thumb { background: #8b6914; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #d4a726; }
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(139, 0, 0, 0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+@keyframes dice-roll {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(90deg) scale(1.2); }
+  50% { transform: rotate(180deg) scale(1); }
+  75% { transform: rotate(270deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.animate-pulse-red { animation: pulse-red 1.5s ease-in-out infinite; }
+.animate-fade-in { animation: fade-in 0.3s ease-out; }
+.animate-shake { animation: shake 0.3s ease-out; }
+.animate-dice { animation: dice-roll 0.5s ease-out; }
+
+/* Custom input styles */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }

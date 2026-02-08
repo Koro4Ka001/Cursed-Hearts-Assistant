@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="12" fill="#030303"/>
+  <rect x="2" y="2" width="96" height="96" rx="10" fill="none" stroke="#8b6914" stroke-width="2"/>
+  <text x="50" y="62" font-size="48" text-anchor="middle" fill="#d4a726">☠</text>
+  <text x="50" y="82" font-size="8" text-anchor="middle" fill="#7a6f62" font-family="sans-serif" letter-spacing="2">CURSED HEARTS</text>
+</svg>
