@@ -1,201 +1,58 @@
-import type { GoogleDocsResponse } from '@/types';
-
-let webAppUrl = '';
-
-export function setWebAppUrl(url: string): void {
-  webAppUrl = url;
+interface SyncResult {
+  success: boolean;
+  health?: { current: number; max: number };
+  mana?: { current: number; max: number };
+  error?: string;
 }
 
-export function getWebAppUrl(): string {
-  return webAppUrl;
-}
-
-// Получить статы персонажа
-export async function getStats(characterHeader: string): Promise<GoogleDocsResponse> {
+export async function syncWithGoogleDocs(
+  webAppUrl: string,
+  characterHeader: string,
+  action: 'get' | 'damage' | 'heal' | 'mana' | 'log',
+  data?: Record<string, unknown>
+): Promise<SyncResult> {
   if (!webAppUrl) {
-    return { success: false, error: 'Google Web App URL не настроен' };
+    return { success: false, error: 'Web App URL не настроен' };
   }
-  
+
   try {
-    const url = new URL(webAppUrl);
-    url.searchParams.set('action', 'stats');
-    url.searchParams.set('character', characterHeader);
-    
-    const response = await fetch(url.toString(), {
+    const params = new URLSearchParams({
+      action,
+      character: characterHeader,
+      ...Object.fromEntries(
+        Object.entries(data || {}).map(([k, v]) => [k, String(v)])
+      ),
+    });
+
+    const response = await fetch(`${webAppUrl}?${params}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      mode: 'cors',
     });
-    
+
     if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
+      throw new Error(`HTTP ${response.status}`);
     }
-    
-    const data = await response.json();
-    return data as GoogleDocsResponse;
+
+    const result = await response.json();
+    return result;
   } catch (error) {
-    console.error('Error fetching stats:', error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Ошибка соединения' 
+      error: error instanceof Error ? error.message : 'Ошибка синхронизации' 
     };
   }
 }
 
-// Нанести урон
-export async function applyDamage(
+export async function logToGoogleDocs(
+  webAppUrl: string,
   characterHeader: string,
-  damage: number,
-  damageType: string,
-  damageCategory: string,
-  isUndead: boolean = false
-): Promise<GoogleDocsResponse> {
-  if (!webAppUrl) {
-    return { success: false, error: 'Google Web App URL не настроен' };
-  }
+  message: string
+): Promise<void> {
+  if (!webAppUrl) return;
   
   try {
-    const response = await fetch(webAppUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'damage',
-        character: characterHeader,
-        damage,
-        damageType,
-        damageCategory,
-        isUndead,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error applying damage:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Ошибка соединения' 
-    };
+    await syncWithGoogleDocs(webAppUrl, characterHeader, 'log', { message });
+  } catch {
+    console.error('Failed to log to Google Docs');
   }
-}
-
-// Исцелить
-export async function heal(
-  characterHeader: string,
-  amount: number
-): Promise<GoogleDocsResponse> {
-  if (!webAppUrl) {
-    return { success: false, error: 'Google Web App URL не настроен' };
-  }
-  
-  try {
-    const response = await fetch(webAppUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'heal',
-        character: characterHeader,
-        amount,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error healing:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Ошибка соединения' 
-    };
-  }
-}
-
-// Изменить ману
-export async function modifyMana(
-  characterHeader: string,
-  delta: number
-): Promise<GoogleDocsResponse> {
-  if (!webAppUrl) {
-    return { success: false, error: 'Google Web App URL не настроен' };
-  }
-  
-  try {
-    const response = await fetch(webAppUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'mana',
-        character: characterHeader,
-        delta,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error modifying mana:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Ошибка соединения' 
-    };
-  }
-}
-
-// Записать в лог
-export async function writeLog(
-  characterHeader: string,
-  characterShortName: string,
-  action: string
-): Promise<{ success: boolean; error?: string }> {
-  if (!webAppUrl) {
-    return { success: false, error: 'Google Web App URL не настроен' };
-  }
-  
-  try {
-    const response = await fetch(webAppUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'log',
-        character: characterHeader,
-        shortName: characterShortName,
-        logEntry: action,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error writing log:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Ошибка соединения' 
-    };
-  }
-}
-
-// Синхронизировать все данные юнита
-export async function syncUnit(characterHeader: string): Promise<GoogleDocsResponse> {
-  return getStats(characterHeader);
 }
