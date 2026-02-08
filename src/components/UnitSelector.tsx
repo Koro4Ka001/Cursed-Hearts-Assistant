@@ -7,26 +7,47 @@ export function UnitSelector() {
     selectedUnitId,
     selectUnit,
     isSyncing,
-    syncFromDocs
+    syncFromDocs,
+    settings,
+    setActiveTab
   } = useGameStore();
   
   const selectedUnit = units.find(u => u.id === selectedUnitId);
   
   const handleSync = async () => {
     if (selectedUnitId) {
-      await syncFromDocs(selectedUnitId);
+      // showNotifications = true для ручной синхронизации
+      await syncFromDocs(selectedUnitId, true);
     }
   };
   
+  // Если нет юнитов — показываем подсказку
   if (units.length === 0) {
     return (
       <div className="flex items-center justify-center h-10 px-3 bg-obsidian border-b border-edge-bone">
-        <span className="text-faded text-sm font-garamond">
-          Создайте персонажа в настройках →
-        </span>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className="text-gold hover:text-gold-bright text-sm font-garamond transition-colors"
+        >
+          ✨ Создайте первого персонажа в настройках →
+        </button>
       </div>
     );
   }
+  
+  // Проверяем, можно ли синхронизировать
+  const canSync = selectedUnit?.googleDocsHeader && settings.googleDocsUrl;
+  
+  // Формируем подсказку для кнопки синхронизации
+  const getSyncTitle = (): string => {
+    if (!settings.googleDocsUrl) {
+      return 'Настройте URL Google Docs в настройках';
+    }
+    if (!selectedUnit?.googleDocsHeader) {
+      return 'Укажите заголовок Google Docs для персонажа';
+    }
+    return 'Синхронизировать с Google Docs';
+  };
   
   return (
     <div className="flex items-center gap-2 h-10 px-3 bg-obsidian border-b border-edge-bone">
@@ -47,8 +68,8 @@ export function UnitSelector() {
         size="sm"
         onClick={handleSync}
         loading={isSyncing}
-        disabled={!selectedUnit?.googleDocsHeader}
-        title={selectedUnit?.googleDocsHeader ? 'Синхронизировать с Google Docs' : 'Нет привязки к Google Docs'}
+        disabled={!canSync || isSyncing}
+        title={getSyncTitle()}
       >
         🔄
       </Button>
