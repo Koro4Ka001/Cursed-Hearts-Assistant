@@ -4,8 +4,8 @@ import { Button, Section, Input, Select, Checkbox, NumberStepper, Modal, SubTabs
 import { docsService } from '../../services/docsService';
 import { selectToken } from '../../services/obrService';
 import { generateId } from '../../utils/dice';
-import type { Unit, Weapon, Spell, Resource, DamageType, ProficiencyType, WeaponType, SpellCostType } from '../../types';
-import { DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES } from '../../types';
+import type { Unit, Weapon, Spell, Resource, DamageType, ProficiencyType, WeaponType, SpellCostType, ResourceType } from '../../types';
+import { DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES, MULTIPLIER_OPTIONS, ALL_DAMAGE_TYPES } from '../../types';
 import { MAGIC_ELEMENTS } from '../../constants/elements';
 
 export function SettingsTab() {
@@ -152,7 +152,7 @@ function UnitEditor({ unit, onSave, onClose }: UnitEditorProps) {
         onChange={setEditorTab}
       />
       
-      <div className="max-h-96 overflow-y-auto space-y-3">
+      <div className="max-h-96 overflow-y-auto space-y-3 pr-1">
         {editorTab === 'basic' && (
           <>
             <Input
@@ -208,6 +208,20 @@ function UnitEditor({ unit, onSave, onClose }: UnitEditorProps) {
               onChange={(v) => update('hasRokCards', v)}
               label="🃏 Имеет карты Рока"
             />
+            {editedUnit.hasRokCards && (
+              <Select
+                label="Ресурс колоды Рока"
+                value={editedUnit.rokDeckResourceId ?? ''}
+                onChange={(e) => update('rokDeckResourceId', e.target.value || undefined)}
+                options={[
+                  { value: '', label: '— Выберите ресурс —' },
+                  ...editedUnit.resources.map(r => ({
+                    value: r.id,
+                    label: `${r.icon} ${r.name} (${r.current}/${r.max})`
+                  }))
+                ]}
+              />
+            )}
             <Checkbox
               checked={editedUnit.hasDoubleShot}
               onChange={(v) => update('hasDoubleShot', v)}
@@ -313,8 +327,14 @@ function UnitEditor({ unit, onSave, onClose }: UnitEditorProps) {
                 value={editedUnit.armor.magicBase}
                 onChange={(v) => update('armor', { ...editedUnit.armor, magicBase: v })}
                 min={0}
-                max={100}
+                max={200}
               />
+              <div className="mt-2">
+                <MagicArmorEditor
+                  overrides={editedUnit.armor.magicOverrides}
+                  onChange={(overrides) => update('armor', { ...editedUnit.armor, magicOverrides: overrides })}
+                />
+              </div>
               <NumberStepper
                 label="От нежити"
                 value={editedUnit.armor.undead}
@@ -326,7 +346,7 @@ function UnitEditor({ unit, onSave, onClose }: UnitEditorProps) {
             
             <div>
               <h4 className="text-gold text-sm font-cinzel mb-2">МНОЖИТЕЛИ УРОНА</h4>
-              <p className="text-xs text-faded mb-2">Задайте множители для типов урона (1.0 = обычный, 0.5 = сопротивление, 2.0 = уязвимость)</p>
+              <p className="text-xs text-faded mb-2">Резистансы (зелёные) и уязвимости (красные)</p>
               <MultiplierEditor
                 multipliers={editedUnit.damageMultipliers}
                 onChange={(m) => update('damageMultipliers', m)}
@@ -367,7 +387,8 @@ function WeaponEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (w: 
       damageType: 'slashing',
       proficiencyType: 'swords',
       statBonus: 'physicalPower',
-      hitBonus: 0
+      hitBonus: 0,
+      multishot: 1
     }]);
   };
   
@@ -379,14 +400,15 @@ function WeaponEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (w: 
     onChange(weapons.filter(w => w.id !== id));
   };
   
-  const damageTypeOptions = Object.entries(DAMAGE_TYPE_NAMES).map(([k, v]) => ({ value: k, label: v }));
+  const physicalDamageTypes: DamageType[] = ['slashing', 'piercing', 'bludgeoning', 'chopping'];
+  const damageTypeOptions = physicalDamageTypes.map(k => ({ value: k, label: DAMAGE_TYPE_NAMES[k] }));
   const profOptions = Object.entries(PROFICIENCY_NAMES).map(([k, v]) => ({ value: k, label: v }));
   
   return (
     <div className="space-y-2">
       {weapons.map(weapon => (
         <div key={weapon.id} className="p-2 bg-obsidian rounded border border-edge-bone space-y-2">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2">
             <Input
               value={weapon.name}
               onChange={(e) => updateWeapon(weapon.id, { name: e.target.value })}
@@ -396,31 +418,63 @@ function WeaponEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (w: 
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Select
+              label="Тип"
               value={weapon.type}
-              onChange={(e) => updateWeapon(weapon.id, { type: e.target.value as WeaponType })}
+              onChange={(e) => updateWeapon(weapon.id, { 
+                type: e.target.value as WeaponType,
+                // Очищаем формулу урона для дальнего оружия
+                damageFormula: e.target.value === 'ranged' ? '' : weapon.damageFormula
+              })}
               options={[
                 { value: 'melee', label: 'Ближний бой' },
                 { value: 'ranged', label: 'Дальний бой' }
               ]}
             />
-            <Input
-              value={weapon.damageFormula}
-              onChange={(e) => updateWeapon(weapon.id, { damageFormula: e.target.value })}
-              placeholder="5d20"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
             <Select
-              value={weapon.damageType}
-              onChange={(e) => updateWeapon(weapon.id, { damageType: e.target.value as DamageType })}
-              options={damageTypeOptions}
-            />
-            <Select
+              label="Владение"
               value={weapon.proficiencyType}
               onChange={(e) => updateWeapon(weapon.id, { proficiencyType: e.target.value as ProficiencyType })}
               options={profOptions}
             />
           </div>
+          
+          {weapon.type === 'melee' ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                label="Формула урона"
+                value={weapon.damageFormula}
+                onChange={(e) => updateWeapon(weapon.id, { damageFormula: e.target.value })}
+                placeholder="5d20"
+              />
+              <Select
+                label="Тип урона"
+                value={weapon.damageType}
+                onChange={(e) => updateWeapon(weapon.id, { damageType: e.target.value as DamageType })}
+                options={damageTypeOptions}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="text-xs text-faded p-2 bg-dark rounded">
+                ℹ️ Урон дальнего оружия зависит от боеприпасов
+              </div>
+              <NumberStepper
+                label="Стрел за выстрел"
+                value={weapon.multishot}
+                onChange={(v) => updateWeapon(weapon.id, { multishot: v })}
+                min={1}
+                max={10}
+              />
+            </>
+          )}
+          
+          <NumberStepper
+            label="Бонус попадания"
+            value={weapon.hitBonus}
+            onChange={(v) => updateWeapon(weapon.id, { hitBonus: v })}
+            min={-10}
+            max={20}
+          />
         </div>
       ))}
       <Button variant="secondary" onClick={addWeapon} className="w-full">+ Добавить оружие</Button>
@@ -437,7 +491,7 @@ function SpellEditor({ spells, onChange }: { spells: Spell[]; onChange: (s: Spel
       costType: 'mana',
       elements: [],
       type: 'targeted',
-      projectiles: 1
+      projectiles: '1'
     }]);
   };
   
@@ -449,11 +503,13 @@ function SpellEditor({ spells, onChange }: { spells: Spell[]; onChange: (s: Spel
     onChange(spells.filter(s => s.id !== id));
   };
   
+  const magicalDamageTypes = ALL_DAMAGE_TYPES.filter(t => !['slashing', 'piercing', 'bludgeoning', 'chopping'].includes(t));
+  
   return (
     <div className="space-y-2">
       {spells.map(spell => (
         <div key={spell.id} className="p-2 bg-obsidian rounded border border-edge-bone space-y-2">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2">
             <Input
               value={spell.name}
               onChange={(e) => updateSpell(spell.id, { name: e.target.value })}
@@ -478,12 +534,11 @@ function SpellEditor({ spells, onChange }: { spells: Spell[]; onChange: (s: Spel
                 { value: 'health', label: 'HP' }
               ]}
             />
-            <NumberStepper
+            <Input
               label="Снаряды"
               value={spell.projectiles}
-              onChange={(v) => updateSpell(spell.id, { projectiles: v })}
-              min={1}
-              max={20}
+              onChange={(e) => updateSpell(spell.id, { projectiles: e.target.value })}
+              placeholder="3 или d4"
             />
           </div>
           <Input
@@ -492,11 +547,28 @@ function SpellEditor({ spells, onChange }: { spells: Spell[]; onChange: (s: Spel
             onChange={(e) => updateSpell(spell.id, { elements: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
             placeholder="огонь, электричество"
           />
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              label="Формула урона"
+              value={spell.damageFormula ?? ''}
+              onChange={(e) => updateSpell(spell.id, { damageFormula: e.target.value || undefined })}
+              placeholder="d20+d4"
+            />
+            <Select
+              label="Тип урона"
+              value={spell.damageType ?? ''}
+              onChange={(e) => updateSpell(spell.id, { damageType: (e.target.value || undefined) as DamageType | undefined })}
+              options={[
+                { value: '', label: '— Нет —' },
+                ...magicalDamageTypes.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] }))
+              ]}
+            />
+          </div>
           <Input
-            label="Формула урона"
-            value={spell.damageFormula ?? ''}
-            onChange={(e) => updateSpell(spell.id, { damageFormula: e.target.value || undefined })}
-            placeholder="d20+d4"
+            label="Описание"
+            value={spell.description ?? ''}
+            onChange={(e) => updateSpell(spell.id, { description: e.target.value || undefined })}
+            placeholder="Описание эффекта"
           />
         </div>
       ))}
@@ -555,11 +627,63 @@ function MagicBonusEditor({ bonuses, onChange }: { bonuses: Record<string, numbe
   );
 }
 
+// Редактор персональной магической защиты по элементам
+function MagicArmorEditor({ overrides, onChange }: { overrides: Record<string, number>; onChange: (o: Record<string, number>) => void }) {
+  const [newElement, setNewElement] = useState('');
+  
+  const addOverride = () => {
+    if (newElement && overrides[newElement] === undefined) {
+      onChange({ ...overrides, [newElement]: 0 });
+      setNewElement('');
+    }
+  };
+  
+  const updateOverride = (element: string, value: number) => {
+    onChange({ ...overrides, [element]: value });
+  };
+  
+  const removeOverride = (element: string) => {
+    const newOverrides = { ...overrides };
+    delete newOverrides[element];
+    onChange(newOverrides);
+  };
+  
+  return (
+    <div className="space-y-2 p-2 bg-dark rounded border border-edge-bone">
+      <div className="text-xs text-faded uppercase">Персональная защита по элементам:</div>
+      {Object.entries(overrides).map(([element, value]) => (
+        <div key={element} className="flex items-center gap-2">
+          <span className="flex-1 text-ancient capitalize text-sm">{element}</span>
+          <NumberStepper
+            value={value}
+            onChange={(v) => updateOverride(element, v)}
+            min={0}
+            max={200}
+          />
+          <Button variant="danger" size="sm" onClick={() => removeOverride(element)}>×</Button>
+        </div>
+      ))}
+      <div className="flex gap-2">
+        <Select
+          value={newElement}
+          onChange={(e) => setNewElement(e.target.value)}
+          options={[
+            { value: '', label: '+ Добавить элемент' },
+            ...MAGIC_ELEMENTS.map(e => ({ value: e, label: e }))
+          ]}
+          className="flex-1"
+        />
+        <Button variant="secondary" onClick={addOverride} disabled={!newElement}>+</Button>
+      </div>
+    </div>
+  );
+}
+
 function MultiplierEditor({ multipliers, onChange }: { multipliers: Record<string, number>; onChange: (m: Record<string, number>) => void }) {
   const [newType, setNewType] = useState('');
   
   const addMultiplier = () => {
-    if (newType && !multipliers[newType]) {
+    if (newType && multipliers[newType] === undefined) {
       onChange({ ...multipliers, [newType]: 1.0 });
       setNewType('');
     }
@@ -575,26 +699,36 @@ function MultiplierEditor({ multipliers, onChange }: { multipliers: Record<strin
     onChange(newMult);
   };
   
+  const getMultiplierColor = (value: number): string => {
+    if (value < 1) return 'text-green-500';
+    if (value > 1) return 'text-blood-bright';
+    return 'text-faded';
+  };
+  
   return (
     <div className="space-y-2">
       {Object.entries(multipliers).map(([type, value]) => (
         <div key={type} className="flex items-center gap-2">
-          <span className="flex-1 text-ancient">{DAMAGE_TYPE_NAMES[type as DamageType] ?? type}</span>
-          <input
-            type="number"
-            step="0.1"
-            value={value}
-            onChange={(e) => updateMultiplier(type, parseFloat(e.target.value) || 1)}
-            className="w-20 bg-dark border border-edge-bone text-bone rounded px-2 py-1"
+          <span className={`flex-1 text-sm ${getMultiplierColor(value)}`}>
+            {DAMAGE_TYPE_NAMES[type as DamageType] ?? type}
+          </span>
+          <Select
+            value={String(value)}
+            onChange={(e) => updateMultiplier(type, parseFloat(e.target.value))}
+            options={MULTIPLIER_OPTIONS.map(o => ({ value: String(o.value), label: o.label }))}
+            className="w-32"
           />
           <Button variant="danger" size="sm" onClick={() => removeMultiplier(type)}>×</Button>
         </div>
       ))}
       <div className="flex gap-2">
-        <Input
+        <Select
           value={newType}
           onChange={(e) => setNewType(e.target.value)}
-          placeholder="Тип урона"
+          options={[
+            { value: '', label: '+ Добавить тип' },
+            ...ALL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] }))
+          ]}
           className="flex-1"
         />
         <Button variant="secondary" onClick={addMultiplier} disabled={!newType}>+</Button>
@@ -611,6 +745,7 @@ function ResourceEditor({ resources, onChange }: { resources: Resource[]; onChan
       icon: '📦',
       current: 10,
       max: 10,
+      resourceType: 'generic',
       syncWithDocs: false
     }]);
   };
@@ -627,7 +762,7 @@ function ResourceEditor({ resources, onChange }: { resources: Resource[]; onChan
     <div className="space-y-2">
       {resources.map(resource => (
         <div key={resource.id} className="p-2 bg-obsidian rounded border border-edge-bone space-y-2">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2">
             <div className="flex gap-2 flex-1">
               <Input
                 value={resource.icon}
@@ -642,6 +777,17 @@ function ResourceEditor({ resources, onChange }: { resources: Resource[]; onChan
             </div>
             <Button variant="danger" size="sm" onClick={() => removeResource(resource.id)}>×</Button>
           </div>
+          
+          <Select
+            label="Тип ресурса"
+            value={resource.resourceType}
+            onChange={(e) => updateResource(resource.id, { resourceType: e.target.value as ResourceType })}
+            options={[
+              { value: 'generic', label: 'Обычный' },
+              { value: 'ammo', label: 'Боеприпасы' }
+            ]}
+          />
+          
           <div className="grid grid-cols-2 gap-2">
             <NumberStepper
               label="Текущее"
@@ -658,6 +804,48 @@ function ResourceEditor({ resources, onChange }: { resources: Resource[]; onChan
               max={999}
             />
           </div>
+          
+          {resource.resourceType === 'ammo' && (
+            <>
+              <div className="text-xs text-mana-bright p-2 bg-mana-dark/30 rounded">
+                🏹 Настройки боеприпасов
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label="Формула урона"
+                  value={resource.damageFormula ?? ''}
+                  onChange={(e) => updateResource(resource.id, { damageFormula: e.target.value || undefined })}
+                  placeholder="6d10"
+                />
+                <Select
+                  label="Тип урона"
+                  value={resource.damageType ?? ''}
+                  onChange={(e) => updateResource(resource.id, { damageType: (e.target.value || undefined) as DamageType | undefined })}
+                  options={[
+                    { value: '', label: '— Нет —' },
+                    ...ALL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] }))
+                  ]}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label="Доп. урон"
+                  value={resource.extraDamageFormula ?? ''}
+                  onChange={(e) => updateResource(resource.id, { extraDamageFormula: e.target.value || undefined })}
+                  placeholder="2d6"
+                />
+                <Select
+                  label="Тип доп. урона"
+                  value={resource.extraDamageType ?? ''}
+                  onChange={(e) => updateResource(resource.id, { extraDamageType: (e.target.value || undefined) as DamageType | undefined })}
+                  options={[
+                    { value: '', label: '— Нет —' },
+                    ...ALL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] }))
+                  ]}
+                />
+              </div>
+            </>
+          )}
         </div>
       ))}
       <Button variant="secondary" onClick={addResource} className="w-full">+ Добавить ресурс</Button>
