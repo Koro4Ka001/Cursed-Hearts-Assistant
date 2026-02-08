@@ -1,15 +1,25 @@
-// === ТИПЫ ДЛЯ CURSED HEARTS ===
-
 export type DamageType = 
-  | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'  // физические
+  | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'
   | 'fire' | 'water' | 'earth' | 'air' | 'light' | 'darkness' 
   | 'electricity' | 'void' | 'life' | 'death' | 'astral' 
   | 'corruption' | 'space' | 'blood' | 'frost' | 'nature' 
   | 'transcendence' | 'pure';
 
 export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
-
 export type StatType = 'physicalPower' | 'dexterity' | 'intelligence';
+
+export const DAMAGE_TYPE_NAMES: Record<string, string> = {
+  slashing: '🗡️ Режущий', piercing: '🔪 Колющий', bludgeoning: '🔨 Дробящий', chopping: '🪓 Рубящий',
+  fire: '🔥 Огонь', water: '💧 Вода', earth: '🪨 Земля', air: '💨 Воздух',
+  light: '☀️ Свет', darkness: '🌑 Тьма', electricity: '⚡ Электричество', void: '🕳️ Пустота',
+  life: '💚 Жизнь', death: '💀 Смерть', astral: '🌟 Астрал', corruption: '☠️ Скверна',
+  space: '🌀 Пространство', blood: '🩸 Кровь', frost: '❄️ Мороз', nature: '🌿 Природа',
+  transcendence: '✨ Запредельность', pure: '⚪ Чистый',
+};
+
+export const PROFICIENCY_NAMES: Record<ProficiencyType, string> = {
+  swords: 'Мечи', axes: 'Топоры', hammers: 'Молоты', polearms: 'Древковое', unarmed: 'Рукопашный', bows: 'Луки',
+};
 
 export interface Weapon {
   id: string;
@@ -46,6 +56,8 @@ export interface Resource {
   isConsumableWeapon?: boolean;
   damageFormula?: string;
   damageType?: DamageType;
+  proficiencyType?: ProficiencyType;
+  statBonus?: StatType;
 }
 
 export interface QuickAction {
@@ -62,10 +74,8 @@ export interface Unit {
   shortName: string;
   googleDocsHeader: string;
   tokenId?: string;
-  
   health: { current: number; max: number };
   mana: { current: number; max: number };
-  
   stats: {
     physicalPower: number;
     dexterity: number;
@@ -74,20 +84,32 @@ export interface Unit {
     charisma: number;
     initiative: number;
   };
-  
   proficiencies: Record<ProficiencyType, number>;
   magicBonuses: Record<string, number>;
-  
   weapons: Weapon[];
   spells: Spell[];
   resources: Resource[];
   quickActions: QuickAction[];
 }
 
+export interface RollResult {
+  formula: string;
+  rolls: number[];
+  total: number;
+  isCrit: boolean;
+  isFail: boolean;
+  rawD20?: number;
+}
+
+export interface CombatState {
+  phase: 'idle' | 'rolled' | 'waiting_dodge' | 'damage' | 'miss';
+  attackRoll?: RollResult;
+  damageRoll?: RollResult;
+  message?: string;
+}
+
 export interface AppSettings {
   webAppUrl: string;
   syncOnHpChange: boolean;
   syncOnManaChange: boolean;
-  diceMethod: 'built-in' | 'dice-owlbear';
-  grimoireNamespace: string;
 }
