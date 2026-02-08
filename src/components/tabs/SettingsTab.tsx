@@ -668,12 +668,23 @@ function ResourceEditor({ resources, onChange }: { resources: Resource[]; onChan
 // ========== GOOGLE DOCS SETTINGS ==========
 
 function GoogleDocsSettings() {
-  const { settings, updateSettings, addNotification } = useGameStore();
+  const { settings, updateSettings, addNotification, startAutoSync, setConnection } = useGameStore();
   const [isTesting, setIsTesting] = useState(false);
+  
+  // При изменении URL — обновляем сервис и перезапускаем синхронизацию
+  const handleUrlChange = (url: string) => {
+    updateSettings({ googleDocsUrl: url });
+    
+    if (url) {
+      docsService.setUrl(url);
+      // Запускаем авто-синхронизацию если URL появился
+      startAutoSync();
+    }
+  };
   
   const handleTestConnection = async () => {
     if (!settings.googleDocsUrl) {
-      addNotification('Введите URL Google Apps Script', 'warning');
+      addNotification('Введите URL Google Apps Script', 'info');
       return;
     }
     
@@ -683,11 +694,14 @@ function GoogleDocsSettings() {
       const result = await docsService.testConnection();
       
       if (result.success) {
+        setConnection('docs', true);
         addNotification('Подключение успешно!', 'success');
       } else {
-        addNotification(`Ошибка: ${result.error}`, 'error');
+        setConnection('docs', false);
+        addNotification(`Ошибка: ${result.error ?? 'неизвестная'}`, 'error');
       }
     } catch {
+      setConnection('docs', false);
       addNotification('Ошибка подключения', 'error');
     } finally {
       setIsTesting(false);
@@ -701,7 +715,7 @@ function GoogleDocsSettings() {
           <Input
             label="URL Google Apps Script"
             value={settings.googleDocsUrl}
-            onChange={(e) => updateSettings({ googleDocsUrl: e.target.value })}
+            onChange={(e) => handleUrlChange(e.target.value)}
             placeholder="https://script.google.com/..."
           />
           
