@@ -3,13 +3,13 @@ import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, EmptyState } from '../ui';
 import { rollDice } from '../../utils/dice';
 import { ROK_EFFECTS, getRokEffect } from '../../constants/rokEffects';
-import { announceRokCard, showNotification } from '../../services/obrService';
+import { diceService } from '../../services/diceService';
 import type { RokCardResult, DiceRollResult } from '../../types';
 
 type RokTarget = 'enemy' | 'ally' | 'self';
 
 export function CardsTab() {
-  const { units, selectedUnitId, spendResource } = useGameStore();
+  const { units, selectedUnitId, spendResource, setActiveTab } = useGameStore();
   const unit = units.find(u => u.id === selectedUnitId);
   
   const [target, setTarget] = useState<RokTarget>('enemy');
@@ -37,15 +37,37 @@ export function CardsTab() {
     );
   }
   
-  // Находим ресурс "Колода Рока"
-  const rokDeck = unit.resources.find(r => r.name.toLowerCase().includes('рок') || r.name.toLowerCase().includes('колода'));
-  const cardsLeft = rokDeck?.current ?? 0;
-  const maxCards = rokDeck?.max ?? 36;
+  // Находим ресурс колоды по rokDeckResourceId
+  const rokDeck = unit.rokDeckResourceId 
+    ? unit.resources.find(r => r.id === unit.rokDeckResourceId)
+    : null;
+  
+  // Если ресурс не привязан — показываем сообщение
+  if (!rokDeck) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center h-full">
+        <div className="text-4xl mb-4">🃏</div>
+        <h3 className="heading text-gold mb-2">Колода не привязана</h3>
+        <p className="text-faded text-sm text-center mb-4">
+          Привяжите ресурс колоды в настройках персонажа
+        </p>
+        <Button 
+          variant="gold" 
+          onClick={() => setActiveTab('settings')}
+        >
+          ⚙️ Открыть настройки
+        </Button>
+      </div>
+    );
+  }
+  
+  const cardsLeft = rokDeck.current;
+  const maxCards = rokDeck.max;
   
   // Бросок карт
   const handleRollCards = async (count: number) => {
-    if (!rokDeck || cardsLeft < count) {
-      await showNotification(`❌ Недостаточно карт! Осталось ${cardsLeft}`);
+    if (cardsLeft < count) {
+      await diceService.showNotification(`❌ Недостаточно карт! Осталось ${cardsLeft}`);
       return;
     }
     
@@ -111,7 +133,7 @@ export function CardsTab() {
         results.push(cardResult);
         
         // Анонсируем
-        await announceRokCard(
+        await diceService.announceRokCard(
           unit.shortName,
           cardIndex,
           isHit,
@@ -136,7 +158,9 @@ export function CardsTab() {
         <div className="space-y-3">
           {/* Счётчик карт */}
           <div className="flex items-center justify-between p-2 bg-obsidian rounded border border-edge-bone">
-            <span className="text-bone font-garamond">Карт в колоде:</span>
+            <div>
+              <span className="text-bone font-garamond">{rokDeck.icon} {rokDeck.name}</span>
+            </div>
             <span className={`font-cinzel text-lg ${cardsLeft < 5 ? 'text-blood-bright' : 'text-gold'}`}>
               {cardsLeft}/{maxCards}
             </span>
