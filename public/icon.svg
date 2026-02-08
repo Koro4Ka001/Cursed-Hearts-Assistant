@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700"/>
+      <stop offset="100%" style="stop-color:#8b6914"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="20" fill="#0c0a09"/>
+  <rect x="3" y="3" width="94" height="94" rx="17" fill="none" stroke="#3a332a" stroke-width="2"/>
+  <!-- Skull -->
+  <ellipse cx="50" cy="42" rx="22" ry="24" fill="url(#goldGrad)" opacity="0.9"/>
+  <ellipse cx="50" cy="40" rx="18" ry="20" fill="#0c0a09"/>
+  <ellipse cx="50" cy="42" rx="16" ry="18" fill="url(#goldGrad)" opacity="0.8"/>
+  <!-- Eyes -->
+  <ellipse cx="42" cy="38" rx="5" ry="6" fill="#0c0a09"/>
+  <ellipse cx="58" cy="38" rx="5" ry="6" fill="#0c0a09"/>
+  <ellipse cx="42" cy="37" rx="2" ry="2" fill="#8b0000"/>
+  <ellipse cx="58" cy="37" rx="2" ry="2" fill="#8b0000"/>
+  <!-- Nose -->
+  <path d="M48 46 L50 50 L52 46" fill="none" stroke="#0c0a09" stroke-width="2"/>
+  <!-- Mouth -->
+  <line x1="44" y1="54" x2="56" y2="54" stroke="#0c0a09" stroke-width="2"/>
+  <line x1="46" y1="54" x2="46" y2="58" stroke="#0c0a09" stroke-width="1.5"/>
+  <line x1="50" y1="54" x2="50" y2="58" stroke="#0c0a09" stroke-width="1.5"/>
+  <line x1="54" y1="54" x2="54" y2="58" stroke="#0c0a09" stroke-width="1.5"/>
+  <!-- Heart -->
+  <path d="M42 70 C42 66, 46 64, 50 68 C54 64, 58 66, 58 70 C58 76, 50 82, 50 82 C50 82, 42 76, 42 70Z" fill="#8b0000"/>
+  <!-- Cross on heart -->
+  <line x1="50" y1="68" x2="50" y2="78" stroke="#ffd700" stroke-width="1.5"/>
+  <line x1="46" y1="72" x2="54" y2="72" stroke="#ffd700" stroke-width="1.5"/>
+</svg>
