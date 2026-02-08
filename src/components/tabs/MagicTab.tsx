@@ -1,0 +1,326 @@
+import { useState } from 'react';
+import { useGameStore } from '../../stores/useGameStore';
+import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState } from '../ui';
+import { rollDice, getMaxMagicBonus, isHit } from '../../utils/dice';
+import { getIntelligenceBonus } from '../../utils/damage';
+import { announceSpellCast, announceDamage, showNotification } from '../../services/obrService';
+import type { DiceRollResult, Spell } from '../../types';
+import { DAMAGE_TYPE_NAMES } from '../../types';
+import { SPELL_TYPES } from '../../constants/elements';
+
+export function MagicTab() {
+  const { units, selectedUnitId, spendMana, takeDamage } = useGameStore();
+  const unit = units.find(u => u.id === selectedUnitId);
+  
+  const [selectedSpellId, setSelectedSpellId] = useState<string>('');
+  const [targetCount, setTargetCount] = useState(1);
+  const [useDoubleShot, setUseDoubleShot] = useState(false);
+  const [isCasting, setIsCasting] = useState(false);
+  const [, setCastResults] = useState<DiceRollResult[]>([]);
+  const [damageResults, setDamageResults] = useState<DiceRollResult[]>([]);
+  const [castLog, setCastLog] = useState<string[]>([]);
+  
+  if (!unit) {
+    return (
+      <EmptyState
+        icon="✨"
+        title="Нет персонажа"
+        description="Выберите персонажа для магии"
+      />
+    );
+  }
+  
+  const selectedSpell = unit.spells.find(s => s.id === selectedSpellId) ?? unit.spells[0];
+  
+  // Рассчитываем стоимость с учётом ДаблШота
+  const getManaCost = (spell: Spell): number => {
+    const base = spell.manaCost;
+    return useDoubleShot && unit.hasDoubleShot ? base * 2 : base;
+  };
+  
+  const currentManaCost = selectedSpell ? getManaCost(selectedSpell) : 0;
+  const canCast = unit.mana.current >= currentManaCost;
+  
+  // Обработчик каста
+  const handleCast = async () => {
+    if (!selectedSpell) return;
+    
+    setIsCasting(true);
+    setCastResults([]);
+    setDamageResults([]);
+    setCastLog([]);
+    
+    const log: string[] = [];
+    const newCastResults: DiceRollResult[] = [];
+    const newDamageResults: DiceRollResult[] = [];
+    
+    try {
+      // 1. Проверяем стоимость
+      const cost = getManaCost(selectedSpell);
+      
+      if (selectedSpell.costType === 'mana') {
+        if (unit.mana.current < cost) {
+          log.push(`❌ Недостаточно маны! Нужно ${cost}, есть ${unit.mana.current}`);
+          setCastLog(log);
+          return;
+        }
+        
+        // 2. Списываем ману СРАЗУ
+        const success = await spendMana(unit.id, cost);
+        if (!success) {
+          log.push('❌ Не удалось потратить ману');
+          setCastLog(log);
+          return;
+        }
+        log.push(`💠 Потрачено ${cost} маны`);
+      } else {
+        // costType === 'health' — стоимость HP
+        log.push(`🩸 Заклинание стоит ${cost} HP`);
+        await takeDamage(unit.id, cost);
+      }
+      
+      // 3. Бросок на каст
+      const magicBonus = getMaxMagicBonus(selectedSpell.elements, unit.magicBonuses);
+      const castFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
+      
+      const castResult = rollDice(castFormula, `Каст ${selectedSpell.name}`);
+      newCastResults.push(castResult);
+      
+      const castSuccess = isHit(castResult);
+      await announceSpellCast(unit.shortName, selectedSpell.name, castSuccess, castResult);
+      
+      if (!castSuccess) {
+        log.push(`❌ Каст провален! [${castResult.rawD20}] + ${magicBonus} = ${castResult.total}`);
+        setCastLog(log);
+        setCastResults(newCastResults);
+        return;
+      }
+      
+      log.push(`✅ Каст успешен! [${castResult.rawD20}] + ${magicBonus} = ${castResult.total}`);
+      
+      // 4. ДаблШот проверка
+      let spellCount = 1;
+      if (useDoubleShot && unit.hasDoubleShot && castResult.rawD20) {
+        if (castResult.rawD20 >= unit.doubleShotThreshold) {
+          spellCount = 2;
+          log.push(`⚡ ДаблШот активирован! d20 = ${castResult.rawD20} >= ${unit.doubleShotThreshold}`);
+          await showNotification(`⚡ ${unit.shortName}: ДаблШот! 2× ${selectedSpell.name}!`);
+        } else {
+          log.push(`💨 ДаблШот не сработал (${castResult.rawD20} < ${unit.doubleShotThreshold}), но мана ×2 потрачена`);
+        }
+      }
+      
+      // 5. Применяем заклинание
+      const intBonus = getIntelligenceBonus(unit);
+      const equipBonus = selectedSpell.equipmentBonus ?? 0;
+      const totalBonus = intBonus + equipBonus;
+      
+      for (let cast = 0; cast < spellCount; cast++) {
+        if (spellCount > 1) {
+          log.push(`--- Заклинание ${cast + 1} ---`);
+        }
+        
+        switch (selectedSpell.type) {
+          case 'self':
+          case 'summon':
+            log.push(`✨ ${selectedSpell.description ?? 'Эффект применён'}`);
+            break;
+            
+          case 'aoe':
+            if (selectedSpell.damageFormula && selectedSpell.damageType) {
+              const aoeFormula = totalBonus > 0 
+                ? `${selectedSpell.damageFormula}+${totalBonus}`
+                : selectedSpell.damageFormula;
+              
+              const aoeResult = rollDice(aoeFormula, 'Урон по площади');
+              newDamageResults.push(aoeResult);
+              
+              log.push(`💥 АОЕ урон: [${aoeResult.rolls.join(', ')}] + ${totalBonus} = ${aoeResult.total} ${DAMAGE_TYPE_NAMES[selectedSpell.damageType]}`);
+              
+              await announceDamage(
+                unit.shortName,
+                aoeResult.total,
+                DAMAGE_TYPE_NAMES[selectedSpell.damageType],
+                aoeResult.rolls,
+                totalBonus
+              );
+            } else {
+              log.push(`✨ ${selectedSpell.description ?? 'АОЕ эффект применён'}`);
+            }
+            break;
+            
+          case 'targeted':
+            // Для targeted кастуем по каждой цели или по projectiles
+            const projectileCount = selectedSpell.projectiles || 1;
+            const targets = selectedSpell.projectiles ? 1 : targetCount;
+            
+            for (let t = 0; t < targets; t++) {
+              for (let p = 0; p < projectileCount; p++) {
+                // Бросок на попадание снаряда
+                const projectileHitFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
+                const projectileHit = rollDice(projectileHitFormula, `Снаряд ${p + 1}`);
+                newCastResults.push(projectileHit);
+                
+                const projectileSuccess = isHit(projectileHit);
+                
+                if (projectileSuccess && selectedSpell.damageFormula && selectedSpell.damageType) {
+                  const dmgFormula = totalBonus > 0 
+                    ? `${selectedSpell.damageFormula}+${totalBonus}`
+                    : selectedSpell.damageFormula;
+                  
+                  const dmgResult = rollDice(dmgFormula, `Урон снаряда ${p + 1}`);
+                  newDamageResults.push(dmgResult);
+                  
+                  log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20}] = ${projectileHit.total} → 💥 ${dmgResult.total} ${DAMAGE_TYPE_NAMES[selectedSpell.damageType]}`);
+                  
+                  await announceDamage(
+                    unit.shortName,
+                    dmgResult.total,
+                    DAMAGE_TYPE_NAMES[selectedSpell.damageType],
+                    dmgResult.rolls,
+                    totalBonus
+                  );
+                } else if (projectileSuccess) {
+                  log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20}] = ${projectileHit.total} → Попадание!`);
+                } else {
+                  log.push(`💨 Снаряд ${p + 1}: [${projectileHit.rawD20}] = ${projectileHit.total} → Промах`);
+                }
+              }
+            }
+            break;
+        }
+      }
+      
+    } finally {
+      setCastLog(log);
+      setCastResults(newCastResults);
+      setDamageResults(newDamageResults);
+      setIsCasting(false);
+    }
+  };
+  
+  return (
+    <div className="space-y-3 p-3 overflow-y-auto h-full">
+      <Section title="Сотворение заклинания" icon="✨">
+        {unit.spells.length === 0 ? (
+          <p className="text-faded text-sm">Добавьте заклинания в настройках</p>
+        ) : (
+          <div className="space-y-3">
+            <Select
+              label="Заклинание"
+              value={selectedSpell?.id ?? ''}
+              onChange={(e) => setSelectedSpellId(e.target.value)}
+              options={unit.spells.map(s => ({ 
+                value: s.id, 
+                label: `${s.name} (${s.manaCost} ${s.costType === 'health' ? 'HP' : 'маны'})` 
+              }))}
+            />
+            
+            {selectedSpell && (
+              <div className="p-2 bg-obsidian rounded border border-edge-bone text-sm">
+                <div className="flex flex-wrap gap-2 mb-1">
+                  <span className="text-mana-bright">
+                    {selectedSpell.costType === 'health' ? '🩸' : '💠'} {currentManaCost}
+                  </span>
+                  <span className="text-faded">|</span>
+                  <span className="text-gold">{SPELL_TYPES[selectedSpell.type]}</span>
+                  {selectedSpell.projectiles > 1 && (
+                    <>
+                      <span className="text-faded">|</span>
+                      <span className="text-ancient">{selectedSpell.projectiles} снарядов</span>
+                    </>
+                  )}
+                </div>
+                <div className="text-xs text-faded">
+                  Элементы: {selectedSpell.elements.join(', ') || 'нет'}
+                </div>
+                {selectedSpell.damageFormula && (
+                  <div className="text-xs text-ancient">
+                    Урон: {selectedSpell.damageFormula} {selectedSpell.damageType && DAMAGE_TYPE_NAMES[selectedSpell.damageType]}
+                  </div>
+                )}
+                {selectedSpell.description && (
+                  <div className="text-xs text-bone mt-1 italic">
+                    {selectedSpell.description}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {selectedSpell?.type === 'targeted' && !selectedSpell.projectiles && (
+              <NumberStepper
+                label="Количество целей"
+                value={targetCount}
+                onChange={setTargetCount}
+                min={1}
+                max={10}
+              />
+            )}
+            
+            {unit.hasDoubleShot && (
+              <Checkbox
+                checked={useDoubleShot}
+                onChange={setUseDoubleShot}
+                label={`⚡ ДаблШот (×2 мана, d20 >= ${unit.doubleShotThreshold} = 2 заклинания)`}
+              />
+            )}
+            
+            {useDoubleShot && unit.mana.current < currentManaCost && (
+              <div className="text-blood-bright text-xs">
+                ⚠️ Нужно {currentManaCost} маны для ДаблШот!
+              </div>
+            )}
+            
+            <Button
+              variant="mana"
+              onClick={handleCast}
+              loading={isCasting}
+              disabled={!selectedSpell || !canCast}
+              className="w-full"
+            >
+              ✨ СОТВОРИТЬ
+            </Button>
+            
+            {!canCast && selectedSpell && (
+              <div className="text-blood-bright text-xs text-center">
+                Мало маны! Нужно {currentManaCost}, есть {unit.mana.current}
+              </div>
+            )}
+            
+            {/* Лог каста */}
+            {castLog.length > 0 && (
+              <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1">
+                {castLog.map((line, idx) => (
+                  <div key={idx} className="text-sm font-garamond">{line}</div>
+                ))}
+              </div>
+            )}
+            
+            {damageResults.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-faded uppercase">Урон:</div>
+                <DiceResultDisplay results={damageResults} />
+              </div>
+            )}
+          </div>
+        )}
+      </Section>
+      
+      {/* Информация о магических бонусах */}
+      <Section title="Магические бонусы" icon="📚" collapsible defaultOpen={false}>
+        {Object.keys(unit.magicBonuses).length === 0 ? (
+          <p className="text-faded text-sm">Нет магических бонусов</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {Object.entries(unit.magicBonuses).map(([element, bonus]) => (
+              <div key={element} className="flex justify-between">
+                <span className="text-ancient capitalize">{element}</span>
+                <span className="text-gold">+{bonus}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}

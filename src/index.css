@@ -1,0 +1,289 @@
+@import "tailwindcss";
+
+/* === CSS ПЕРЕМЕННЫЕ ТЕМЫ === */
+:root {
+  /* Фоны */
+  --color-abyss: #030303;
+  --color-obsidian: #080706;
+  --color-dark: #0c0a09;
+  --color-panel: #0f0d0c;
+  
+  /* Текст */
+  --color-bone: #d4c8b8;
+  --color-ancient: #b8a892;
+  --color-faded: #7a6f62;
+  --color-dim: #4a433a;
+  
+  /* Золото */
+  --color-gold-bright: #ffd700;
+  --color-gold: #d4a726;
+  --color-gold-dark: #8b6914;
+  
+  /* Кровь */
+  --color-blood-bright: #ff2a2a;
+  --color-blood: #8b0000;
+  --color-blood-dark: #4a0000;
+  
+  /* Мана */
+  --color-mana-bright: #4a9eff;
+  --color-mana: #1a4a8b;
+  --color-mana-dark: #0a2040;
+  
+  /* Грани */
+  --color-edge-bone: #3a332a;
+  --color-edge-rust: #4a3020;
+}
+
+/* === ШРИФТЫ === */
+@theme {
+  --font-cinzel: 'Cinzel', serif;
+  --font-cinzel-decorative: 'Cinzel Decorative', 'Cinzel', serif;
+  --font-garamond: 'EB Garamond', Georgia, serif;
+  --font-medieval: 'MedievalSharp', cursive;
+  
+  /* Цвета для Tailwind */
+  --color-abyss: #030303;
+  --color-obsidian: #080706;
+  --color-dark: #0c0a09;
+  --color-panel: #0f0d0c;
+  --color-bone: #d4c8b8;
+  --color-ancient: #b8a892;
+  --color-faded: #7a6f62;
+  --color-dim: #4a433a;
+  --color-gold-bright: #ffd700;
+  --color-gold: #d4a726;
+  --color-gold-dark: #8b6914;
+  --color-blood-bright: #ff2a2a;
+  --color-blood: #8b0000;
+  --color-blood-dark: #4a0000;
+  --color-mana-bright: #4a9eff;
+  --color-mana: #1a4a8b;
+  --color-mana-dark: #0a2040;
+  --color-edge-bone: #3a332a;
+  --color-edge-rust: #4a3020;
+}
+
+/* === БАЗОВЫЕ СТИЛИ === */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'EB Garamond', Georgia, serif;
+  background-color: var(--color-abyss);
+  color: var(--color-bone);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* === СКРОЛЛБАР === */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-obsidian);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-gold-dark);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
+/* === ЗАГОЛОВКИ === */
+.heading {
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-gold);
+}
+
+.heading-decorative {
+  font-family: 'Cinzel Decorative', serif;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+
+/* === АНИМАЦИИ === */
+@keyframes pulse-blood {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes shimmer-mana {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px currentColor; }
+  50% { box-shadow: 0 0 15px currentColor, 0 0 25px currentColor; }
+}
+
+.animate-pulse-blood {
+  animation: pulse-blood 1s ease-in-out infinite;
+}
+
+.animate-shimmer-mana {
+  background: linear-gradient(90deg, var(--color-mana) 0%, var(--color-mana-bright) 50%, var(--color-mana) 100%);
+  background-size: 200% 100%;
+  animation: shimmer-mana 2s linear infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* === ПАНЕЛИ С УГОЛКАМИ === */
+.panel {
+  position: relative;
+  background: var(--color-panel);
+  border: 1px solid var(--color-edge-bone);
+}
+
+.panel::before,
+.panel::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--color-gold-dark);
+}
+
+.panel::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.panel::after {
+  top: -1px;
+  right: -1px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.panel-corners::before,
+.panel-corners::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--color-gold-dark);
+}
+
+/* === КНОПКИ === */
+.btn {
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, var(--color-gold-dark), var(--color-panel));
+  border-color: var(--color-gold);
+  color: var(--color-gold-bright);
+}
+
+.btn-gold:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-gold), var(--color-gold-dark));
+  box-shadow: 0 0 10px var(--color-gold);
+}
+
+.btn-blood {
+  background: linear-gradient(135deg, var(--color-blood-dark), var(--color-panel));
+  border-color: var(--color-blood);
+  color: var(--color-blood-bright);
+}
+
+.btn-blood:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-blood), var(--color-blood-dark));
+  box-shadow: 0 0 10px var(--color-blood);
+}
+
+.btn-mana {
+  background: linear-gradient(135deg, var(--color-mana-dark), var(--color-panel));
+  border-color: var(--color-mana);
+  color: var(--color-mana-bright);
+}
+
+.btn-mana:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--color-mana), var(--color-mana-dark));
+  box-shadow: 0 0 10px var(--color-mana);
+}
+
+/* === ИНПУТЫ === */
+input, select {
+  font-family: 'EB Garamond', Georgia, serif;
+  background: var(--color-obsidian);
+  border: 1px solid var(--color-edge-bone);
+  color: var(--color-bone);
+  padding: 0.5rem;
+  border-radius: 2px;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  box-shadow: 0 0 5px var(--color-gold-dark);
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* === РЕЗУЛЬТАТЫ БРОСКОВ === */
+.dice-crit {
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 10px var(--color-gold);
+}
+
+.dice-fail {
+  color: var(--color-blood-bright);
+  text-shadow: 0 0 10px var(--color-blood);
+}
+
+/* === ВКЛАДКИ === */
+.tab-active {
+  background: var(--color-panel);
+  border-bottom: 2px solid var(--color-gold);
+  color: var(--color-gold);
+}
+
+.tab-inactive {
+  background: var(--color-obsidian);
+  border-bottom: 2px solid transparent;
+  color: var(--color-faded);
+}
+
+.tab-inactive:hover {
+  color: var(--color-ancient);
+  border-bottom-color: var(--color-edge-bone);
+}
