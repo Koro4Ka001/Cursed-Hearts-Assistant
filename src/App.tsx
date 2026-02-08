@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useGameStore } from './stores/useGameStore';
 import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
@@ -31,6 +31,7 @@ const TABS: Tab[] = [
 export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [, setObrReady] = useState(false);
+  const initRef = useRef(false);
   
   const {
     activeTab,
@@ -43,8 +44,12 @@ export function App() {
     startAutoSync
   } = useGameStore();
   
-  // Инициализация
+  // Инициализация — выполняется ОДИН РАЗ
   useEffect(() => {
+    // Защита от двойного вызова в StrictMode
+    if (initRef.current) return;
+    initRef.current = true;
+    
     const init = async () => {
       try {
         // Инициализируем OBR SDK
@@ -52,15 +57,21 @@ export function App() {
         setObrReady(true);
         setConnection('owlbear', true);
         
-        // Инициализируем Google Docs сервис
+        // Инициализируем Google Docs сервис (только если URL настроен)
         if (settings.googleDocsUrl) {
           docsService.setUrl(settings.googleDocsUrl);
-          const test = await docsService.testConnection();
-          setConnection('docs', test.success);
+          try {
+            const test = await docsService.testConnection();
+            setConnection('docs', test.success);
+          } catch {
+            // Ошибка подключения — не показываем уведомление при запуске
+            setConnection('docs', false);
+          }
+          
+          // Запускаем авто-синхронизацию ТОЛЬКО если URL настроен
+          startAutoSync();
         }
-        
-        // Запускаем авто-синхронизацию
-        startAutoSync();
+        // Если URL не настроен — НЕ запускаем авто-синхронизацию, НЕ показываем ошибки
         
       } catch (error) {
         console.error('Initialization error:', error);
@@ -70,6 +81,7 @@ export function App() {
     };
     
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Форматирование времени последней синхронизации
@@ -137,8 +149,8 @@ export function App() {
           <span className={connections.owlbear ? 'text-green-500' : 'text-blood'}>
             OBR: {connections.owlbear ? '🟢' : '🔴'}
           </span>
-          <span className={connections.docs ? 'text-green-500' : 'text-blood'}>
-            Docs: {connections.docs ? '🟢' : '🔴'}
+          <span className={connections.docs ? 'text-green-500' : 'text-faded'}>
+            Docs: {connections.docs ? '🟢' : (settings.googleDocsUrl ? '🔴' : '⚪')}
           </span>
         </div>
         <div className="text-faded">
@@ -146,7 +158,7 @@ export function App() {
         </div>
       </div>
       
-      {/* NOTIFICATIONS */}
+      {/* NOTIFICATIONS — макс 3 штуки */}
       <div className="fixed top-2 right-2 z-50 space-y-2 max-w-xs">
         {notifications.map(notification => (
           <NotificationToast
