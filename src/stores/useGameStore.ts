@@ -46,8 +46,10 @@ const createDefaultUnit = (): Unit => ({
   resources: [],
   customActions: [],
   hasRokCards: false,
+  rokDeckResourceId: undefined,
   hasDoubleShot: false,
-  doubleShotThreshold: 18
+  doubleShotThreshold: 18,
+  notes: ''
 });
 
 // Максимум уведомлений одновременно
@@ -88,6 +90,9 @@ interface GameState {
   setResource: (unitId: string, resourceId: string, current: number) => void;
   spendResource: (unitId: string, resourceId: string, amount: number) => boolean;
   
+  // === ACTIONS: Notes ===
+  setNotes: (unitId: string, notes: string) => void;
+  
   // === ACTIONS: Sync ===
   syncFromDocs: (unitId: string, showNotifications?: boolean) => Promise<void>;
   syncAllFromDocs: (silent?: boolean) => Promise<void>;
@@ -102,7 +107,7 @@ interface GameState {
   addNotification: (message: string, type: Notification['type']) => void;
   clearNotification: (id: string) => void;
   addCombatLog: (unitName: string, action: string, details: string) => void;
-  setConnection: (key: keyof ConnectionStatus, value: boolean | number) => void;
+  setConnection: (key: keyof ConnectionStatus, value: boolean | number | string) => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -122,7 +127,7 @@ export const useGameStore = create<GameState>()(
       
       // Transient state
       activeTab: 'combat',
-      connections: { owlbear: false, docs: false },
+      connections: { owlbear: false, docs: false, dice: 'notification' },
       notifications: [],
       combatLog: [],
       isSyncing: false,
@@ -297,6 +302,15 @@ export const useGameStore = create<GameState>()(
         
         get().setResource(unitId, resourceId, resource.current - amount);
         return true;
+      },
+      
+      // === NOTES ===
+      setNotes: (unitId, notes) => {
+        set((state) => ({
+          units: state.units.map(u => 
+            u.id === unitId ? { ...u, notes } : u
+          )
+        }));
       },
       
       // === SYNC ===
