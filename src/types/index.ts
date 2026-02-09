@@ -200,7 +200,7 @@ export interface Settings {
 export interface ConnectionStatus {
   owlbear: boolean;
   docs: boolean;
-  dice: 'dice3d' | 'local';
+  dice: 'local';
   lastSyncTime?: number;
 }
 
