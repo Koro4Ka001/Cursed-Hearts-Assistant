@@ -155,22 +155,9 @@ export function App() {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
   
-  // Получение иконки статуса Dice
-  const getDiceStatusIcon = () => {
-    switch (connections.dice) {
-      case 'dice3d': return '🟢';
-      case 'local': return '🟡';
-      default: return '⚪';
-    }
-  };
-  
-  const getDiceStatusLabel = () => {
-    switch (connections.dice) {
-      case 'dice3d': return '3D';
-      case 'local': return 'Лок';
-      default: return '?';
-    }
-  };
+  // Получение иконки статуса Dice — теперь используем broadcast для всех
+  const getDiceStatusIcon = () => '🟢';
+  const getDiceStatusLabel = () => 'Broadcast';
   
   if (isLoading) {
     return (
