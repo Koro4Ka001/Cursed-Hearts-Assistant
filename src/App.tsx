@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, Component, type ReactNode } from 'react';
+import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from './stores/useGameStore';
 import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
-import { diceService } from './services/diceService';
+import { diceService, DICE_BROADCAST_CHANNEL } from './services/diceService';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
 import { CombatTab } from './components/tabs/CombatTab';
@@ -114,6 +115,19 @@ export function App() {
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
         
+        // Слушаем броски кубиков от ДРУГИХ игроков
+        // OBR.broadcast.sendMessage отправляет ТОЛЬКО другим (не себе)
+        // Поэтому когда мы получаем сообщение — это бросок ДРУГОГО игрока
+        OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+          const data = event.data as { message?: string } | undefined;
+          const message = data?.message;
+          if (message && typeof message === 'string') {
+            // Показываем уведомление о броске другого игрока
+            OBR.notification.show(message);
+          }
+        });
+        console.log('[App] Broadcast listener для кубиков установлен');
+        
         // Инициализируем Google Docs сервис (только если URL настроен)
         if (settings.googleDocsUrl) {
           docsService.setUrl(settings.googleDocsUrl);
@@ -155,7 +169,7 @@ export function App() {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
   
-  // Получение иконки статуса Dice — теперь используем broadcast для всех
+  // Статус Dice — теперь всегда broadcast
   const getDiceStatusIcon = () => '🟢';
   const getDiceStatusLabel = () => 'Broadcast';
   
