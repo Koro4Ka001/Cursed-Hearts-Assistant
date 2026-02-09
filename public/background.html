@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cursed Hearts Background</title>
+    <script type="module">
+      import OBR from "https://esm.sh/@owlbear-rodeo/sdk@3.1.0";
+
+      const CHANNEL = "cursed-hearts/dice-notification";
+
+      OBR.onReady(() => {
+        console.log("[CursedHearts BG] Background ready, listening for dice rolls...");
+
+        OBR.broadcast.onMessage(CHANNEL, (event) => {
+          const message = event.data?.message;
+          if (message && typeof message === "string") {
+            OBR.notification.show(message);
+          }
+        });
+      });
+    </script>
+  </head>
+  <body></body>
+</html>
