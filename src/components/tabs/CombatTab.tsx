@@ -145,13 +145,17 @@ export function CombatTab() {
   const handleRangedAttack = async () => {
     if (!selectedRangedWeapon || !selectedAmmo) return;
     
-    const arrowsPerShot = selectedRangedWeapon.multishot ?? 1;
-    const totalArrowsNeeded = rangedShotCount * arrowsPerShot;
+    // Количество стрел, которые ЛЕТЯТ
+    const arrowsFlying = selectedRangedWeapon.multishot ?? 1;
+    // Количество боеприпасов, которые ТРАТЯТСЯ
+    const ammoConsumed = selectedRangedWeapon.ammoPerShot ?? arrowsFlying;
+    // Общее количество боеприпасов, нужное для всех выстрелов
+    const totalAmmoNeeded = rangedShotCount * ammoConsumed;
     
     // Проверяем количество боеприпасов
     const ammoCurrent = selectedAmmo.current ?? 0;
-    if (ammoCurrent < totalArrowsNeeded) {
-      await diceService.showNotification(`❌ Недостаточно ${selectedAmmo.name}! Нужно ${totalArrowsNeeded}, есть ${ammoCurrent}`);
+    if (ammoCurrent < totalAmmoNeeded) {
+      await diceService.showNotification(`❌ Недостаточно ${selectedAmmo.name}! Нужно ${totalAmmoNeeded}, есть ${ammoCurrent}`);
       return;
     }
     
@@ -163,16 +167,13 @@ export function CombatTab() {
     const log: string[] = [];
     
     try {
-      let arrowsUsed = 0;
-      
       for (let shot = 0; shot < rangedShotCount; shot++) {
         if (rangedShotCount > 1) {
           log.push(`--- Выстрел ${shot + 1} ---`);
         }
         
-        for (let arrow = 0; arrow < arrowsPerShot; arrow++) {
-          arrowsUsed++;
-          
+        // Для каждой стрелы, которая ЛЕТИТ
+        for (let arrow = 0; arrow < arrowsFlying; arrow++) {
           // Бросок на попадание через diceService (3D кубики!)
           const bowsProf = proficiencies.bows ?? 0;
           const hitBonus = bowsProf + (selectedRangedWeapon.hitBonus ?? 0);
@@ -239,9 +240,10 @@ export function CombatTab() {
         }
       }
       
-      // Списываем боеприпасы
-      await setResource(unit.id, selectedAmmo.id, ammoCurrent - arrowsUsed);
-      log.push(`📦 Списано ${arrowsUsed} ${selectedAmmo.name}`);
+      // Списываем боеприпасы (ammoPerShot × кол-во выстрелов)
+      const totalSpent = rangedShotCount * ammoConsumed;
+      await setResource(unit.id, selectedAmmo.id, ammoCurrent - totalSpent);
+      log.push(`📦 Списано ${totalSpent} ${selectedAmmo.name} (${ammoConsumed} за выстрел × ${rangedShotCount})`);
       
     } finally {
       setRangedDamageResults(newDamageResults);
@@ -399,6 +401,10 @@ export function CombatTab() {
                 {(selectedRangedWeapon.multishot ?? 1) > 1 && (
                   <div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел за выстрел</div>
                 )}
+                {selectedRangedWeapon.ammoPerShot !== undefined && 
+                 selectedRangedWeapon.ammoPerShot !== (selectedRangedWeapon.multishot ?? 1) && (
+                  <div className="text-mana-bright">✨ Тратится: {selectedRangedWeapon.ammoPerShot} за выстрел</div>
+                )}
                 <div className="mt-1">
                   🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType && (DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? selectedAmmo.damageType)}
                 </div>
@@ -418,7 +424,8 @@ export function CombatTab() {
             
             {selectedRangedWeapon && selectedAmmo && (
               <div className="text-xs text-faded">
-                Будет потрачено: {rangedShotCount * (selectedRangedWeapon.multishot ?? 1)} стрел
+                Летит: {rangedShotCount * (selectedRangedWeapon.multishot ?? 1)} стрел | 
+                Тратится: {rangedShotCount * (selectedRangedWeapon.ammoPerShot ?? selectedRangedWeapon.multishot ?? 1)} боеприпасов
               </div>
             )}
             
@@ -426,7 +433,7 @@ export function CombatTab() {
               variant="danger"
               onClick={handleRangedAttack}
               loading={isRangedAttacking}
-              disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.multishot ?? 1)}
+              disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)}
               className="w-full"
             >
               🏹 ВЫСТРЕЛИТЬ
