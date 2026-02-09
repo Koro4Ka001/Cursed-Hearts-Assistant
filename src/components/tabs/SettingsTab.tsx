@@ -12,7 +12,7 @@ import {
   DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES, 
   ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS 
 } from '../../types';
-import { MAGIC_ELEMENTS, SPELL_TYPES } from '../../constants/elements';
+import { MAGIC_ELEMENTS, SPELL_TYPES, ELEMENT_ICONS } from '../../constants/elements';
 
 export function SettingsTab() {
   const { 
@@ -704,6 +704,56 @@ function DamageMultipliersEditor({
   );
 }
 
+// === ВЫБОР ЭЛЕМЕНТОВ ЗАКЛИНАНИЯ ===
+
+function ElementsPicker({
+  selected,
+  onChange
+}: {
+  selected: string[];
+  onChange: (elements: string[]) => void;
+}) {
+  const toggle = (element: string) => {
+    if (selected.includes(element)) {
+      onChange(selected.filter(e => e !== element));
+    } else {
+      onChange([...selected, element]);
+    }
+  };
+
+  return (
+    <div>
+      <div className="text-xs text-faded mb-1">Элементы</div>
+      <div className="flex flex-wrap gap-1">
+        {MAGIC_ELEMENTS.map(element => {
+          const isSelected = selected.includes(element);
+          const icon = ELEMENT_ICONS[element] ?? '✨';
+          return (
+            <button
+              key={element}
+              type="button"
+              onClick={() => toggle(element)}
+              className={`px-2 py-1 rounded text-xs border transition-all ${
+                isSelected
+                  ? 'border-gold bg-gold-dark/30 text-gold'
+                  : 'border-edge-bone bg-obsidian text-faded hover:border-ancient hover:text-bone'
+              }`}
+              title={element}
+            >
+              {icon} {element}
+            </button>
+          );
+        })}
+      </div>
+      {selected.length > 0 && (
+        <div className="text-xs text-ancient mt-1">
+          Выбрано: {selected.map(e => `${ELEMENT_ICONS[e] ?? '✨'} ${e}`).join(', ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // === РЕДАКТОР ОРУЖИЯ ===
 
 function WeaponsEditor({
@@ -798,12 +848,24 @@ function WeaponsEditor({
                   ℹ️ Урон дальнего оружия берётся от боеприпасов
                 </div>
                 <NumberStepper
-                  label="Стрел за выстрел"
+                  label="Стрел летит за выстрел"
                   value={editingWeapon.multishot ?? 1}
                   onChange={(v) => updateWeapon(editingWeapon.id, { multishot: v })}
                   min={1}
                   max={10}
                 />
+                <NumberStepper
+                  label="Боеприпасов тратится за выстрел"
+                  value={editingWeapon.ammoPerShot ?? editingWeapon.multishot ?? 1}
+                  onChange={(v) => updateWeapon(editingWeapon.id, { ammoPerShot: v })}
+                  min={0}
+                  max={10}
+                />
+                {(editingWeapon.ammoPerShot ?? editingWeapon.multishot ?? 1) !== (editingWeapon.multishot ?? 1) && (
+                  <div className="text-xs text-ancient p-2 bg-obsidian rounded border border-edge-bone">
+                    ✨ Магический эффект: летит {editingWeapon.multishot ?? 1} стрел, тратится {editingWeapon.ammoPerShot ?? editingWeapon.multishot ?? 1}
+                  </div>
+                )}
               </>
             )}
             
@@ -955,13 +1017,10 @@ function SpellsEditor({
               placeholder="3 или d4 или 2d6+1"
             />
             
-            <Input
-              label="Элементы (через запятую)"
-              value={(editingSpell.elements ?? []).join(', ')}
-              onChange={(e) => updateSpell(editingSpell.id, { 
-                elements: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-              })}
-              placeholder="огонь, электричество"
+            {/* Новый компонент выбора элементов */}
+            <ElementsPicker
+              selected={editingSpell.elements ?? []}
+              onChange={(elements) => updateSpell(editingSpell.id, { elements })}
             />
             
             <Input
