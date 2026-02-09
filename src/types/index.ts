@@ -72,7 +72,9 @@ export interface Weapon {
   statBonus: 'physicalPower' | 'dexterity' | 'none';
   // physicalPower = стат × 5 к урону, dexterity = стат × 3 к урону
   hitBonus: number;                // доп бонус к попаданию (напр. +3 от лука)
-  multishot: number;               // кол-во стрел за выстрел (для ranged, по умолчанию 1)
+  multishot: number;               // кол-во стрел/снарядов ЛЕТЯЩИХ за выстрел (для ranged, по умолчанию 1)
+  ammoPerShot?: number;            // кол-во боеприпасов ТРАТЯЩИХСЯ за выстрел (по умолчанию = multishot)
+                                   // Пример: multishot=2, ammoPerShot=1 → летит 2 стрелы, тратится 1
   extraDamageFormula?: string;     // доп урон (напр. стрелы с рунами)
   extraDamageType?: DamageType;
   notes?: string;                  // "все стрелы разделяются на две"
