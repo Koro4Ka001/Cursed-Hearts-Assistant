@@ -167,7 +167,7 @@ function localRollDice(formula: string, label?: string): DiceRollResult {
 class DiceService {
   private diceAvailable = true; // По умолчанию считаем что 3D доступны
   private rollCounter = 0;
-  private currentStyle = 'DEFAULT';
+  private currentStyle = 'GALAXY'; // ИЗМЕНЕНИЕ 1: Валидный стиль вместо 'DEFAULT'
   private initialized = false;
   private failedAttempts = 0; // Счётчик неудачных попыток
   private readonly MAX_FAILED_ATTEMPTS = 2; // После 2 неудач переключаемся на локальный
@@ -191,7 +191,7 @@ class DiceService {
       this.diceAvailable = true;
       this.failedAttempts = 0;
       
-      console.log('[DiceService] Инициализирован, 3D кубики включены');
+      console.log('[DiceService] Инициализирован, 3D кубики включены, стиль:', this.currentStyle);
     } catch (error) {
       console.warn('[DiceService] Ошибка при инициализации, используем локальные кубики:', error);
       this.diceAvailable = false;
@@ -256,7 +256,8 @@ class DiceService {
     
     for (const group of parsed.groups) {
       for (let i = 0; i < group.count; i++) {
-        const id = `ch_${++this.rollCounter}_${Date.now()}`;
+        // ИЗМЕНЕНИЕ 2: Простые числовые ID вместо сложных
+        const id = String(++this.rollCounter);
         const diceType = DICE_TYPE_MAP[group.sides];
         
         if (diceType) {
@@ -276,7 +277,20 @@ class DiceService {
       return this.rollLocal(formula, label, unitName);
     }
     
-    // Записываем конфигурацию броска в metadata
+    // ИЗМЕНЕНИЕ 3: Двухэтапная запись — сначала сброс, потом новый бросок
+    
+    // Шаг 1: Сброс — сигнализируем что предыдущий бросок завершён
+    await OBR.player.setMetadata({
+      [METADATA_KEYS.roll]: null,
+      [METADATA_KEYS.throws]: {},
+      [METADATA_KEYS.values]: {},
+      [METADATA_KEYS.transforms]: {}
+    });
+    
+    // Шаг 2: Пауза — даём Dice Extension время обработать сброс
+    await new Promise(resolve => setTimeout(resolve, 150));
+    
+    // Шаг 3: Записываем новый бросок
     await OBR.player.setMetadata({
       [METADATA_KEYS.roll]: {
         dice: diceConfigs,
@@ -336,7 +350,7 @@ class DiceService {
    */
   private waitForResults(ids: string[]): Promise<Record<string, number>> {
     return new Promise((resolve, reject) => {
-      // Уменьшен таймаут с 15 до 10 секунд
+      // Таймаут 10 секунд
       const timeout = setTimeout(() => {
         unsub();
         reject(new Error('Dice timeout — кубики не упали за 10 секунд'));
@@ -525,3 +539,58 @@ class DiceService {
 
 // Синглтон
 export const diceService = new DiceService();
+
+// ИЗМЕНЕНИЕ 4: Тестовая функция — вызвать из консоли: window.__testDice()
+(window as unknown as { __testDice: () => Promise<void> }).__testDice = async () => {
+  console.log('=== ТЕСТ 3D КУБИКОВ ===');
+  
+  console.log('Шаг 1: Сброс...');
+  await OBR.player.setMetadata({
+    'rodeo.owlbear.dice/roll': null,
+    'rodeo.owlbear.dice/rollThrows': {},
+    'rodeo.owlbear.dice/rollValues': {},
+    'rodeo.owlbear.dice/rollTransforms': {}
+  });
+  
+  console.log('Шаг 2: Пауза 200мс...');
+  await new Promise(r => setTimeout(r, 200));
+  
+  console.log('Шаг 3: Записываю бросок d20...');
+  await OBR.player.setMetadata({
+    'rodeo.owlbear.dice/roll': {
+      dice: [{ id: '99', style: 'GALAXY', type: 'D20' }],
+      bonus: 0,
+      hidden: false
+    },
+    'rodeo.owlbear.dice/rollThrows': {
+      '99': {
+        position: { x: 0, y: 1.2, z: 0 },
+        rotation: { x: 0.5, y: 0.5, z: 0.5, w: 0.5 },
+        linearVelocity: { x: 1, y: 0, z: -1 },
+        angularVelocity: { x: 5, y: 5, z: 5 }
+      }
+    },
+    'rodeo.owlbear.dice/rollValues': { '99': null },
+    'rodeo.owlbear.dice/rollTransforms': { '99': null }
+  });
+  
+  console.log('Шаг 4: Записано! Смотри на экран — должен появиться 3D d20');
+  console.log('Шаг 5: Жду результат 10 секунд...');
+  
+  const start = Date.now();
+  const checkInterval = setInterval(async () => {
+    const meta = await OBR.player.getMetadata();
+    const vals = meta['rodeo.owlbear.dice/rollValues'] as Record<string, number | null> | undefined;
+    console.log(`  [${((Date.now() - start) / 1000).toFixed(1)}с] rollValues:`, JSON.stringify(vals));
+    
+    if (vals && vals['99'] != null) {
+      clearInterval(checkInterval);
+      console.log(`✅ УСПЕХ! Кубик упал: ${vals['99']}`);
+    }
+  }, 500);
+  
+  setTimeout(() => {
+    clearInterval(checkInterval);
+    console.log('❌ Таймаут — Dice Extension не отреагировал за 10 секунд');
+  }, 10000);
+};
