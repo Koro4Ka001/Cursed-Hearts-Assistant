@@ -1,12 +1,14 @@
 /**
  * DiceService — локальные кубики + уведомления для ВСЕХ игроков
  *
- * Архитектура:
- * - Кубики бросаются локально (Math.random)
- * - Результат отправляется через OBR.broadcast.sendMessage() ВСЕМ игрокам
- * - У каждого игрока загружен background.html, который слушает broadcast
- *   и вызывает OBR.notification.show() локально
- * - Таким образом ВСЕ игроки в комнате видят уведомления о бросках
+ * Механизм:
+ * 1. Кубики бросаются локально (Math.random)
+ * 2. Результат показывается СЕБЕ через OBR.notification.show()
+ * 3. Результат отправляется ДРУГИМ через OBR.broadcast.sendMessage()
+ * 4. В App.tsx стоит слушатель OBR.broadcast.onMessage() —
+ *    когда другой игрок бросает кубик, вызывается OBR.notification.show()
+ *
+ * Оба игрока должны иметь расширение ОТКРЫТЫМ, чтобы видеть броски друг друга.
  */
 
 import OBR from "@owlbear-rodeo/sdk";
@@ -14,7 +16,8 @@ import type { DiceRollResult } from "../types";
 
 export type DiceStatus = "local";
 
-const BROADCAST_CHANNEL = "cursed-hearts/dice-notification";
+/** Канал для broadcast */
+export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-notification";
 
 // ============================================================
 // Парсер формул
@@ -25,10 +28,7 @@ interface DiceGroup {
   sides: number;
 }
 
-function parseFormula(formula: string): {
-  groups: DiceGroup[];
-  bonus: number;
-} {
+function parseFormula(formula: string): { groups: DiceGroup[]; bonus: number } {
   const groups: DiceGroup[] = [];
   let bonus = 0;
 
@@ -97,25 +97,28 @@ function localRoll(formula: string, label?: string): DiceRollResult {
 }
 
 // ============================================================
-// Broadcast-уведомления — видно ВСЕМ игрокам
+// Уведомления — СЕБЕ + broadcast ДРУГИМ
 // ============================================================
 
 /**
- * Отправляет уведомление ВСЕМ игрокам через broadcast.
- * Background script у каждого игрока получит сообщение
- * и вызовет OBR.notification.show() локально.
+ * Показывает уведомление СЕБЕ и отправляет ДРУГИМ игрокам.
+ * OBR.broadcast.sendMessage — отправляет ТОЛЬКО другим (не себе).
+ * OBR.notification.show — показывает ТОЛЬКО себе.
+ * Вместе — все видят.
  */
 async function notifyAll(message: string): Promise<void> {
+  // Показать себе
   try {
-    await OBR.broadcast.sendMessage(BROADCAST_CHANNEL, { message });
+    await OBR.notification.show(message);
+  } catch {
+    console.log("[Dice]", message);
+  }
+
+  // Отправить другим
+  try {
+    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, { message });
   } catch (error) {
-    // Fallback на локальное уведомление если broadcast не работает
-    console.warn("[DiceService] Broadcast failed, fallback to local:", error);
-    try {
-      await OBR.notification.show(message);
-    } catch {
-      console.log("[Dice]", message);
-    }
+    console.warn("[DiceService] Broadcast failed:", error);
   }
 }
 
@@ -130,7 +133,7 @@ class DiceService {
     if (this.initialized) return;
     this.initialized = true;
     console.log(
-      "[DiceService] Инициализирован — локальные кубики + broadcast уведомления для всех"
+      "[DiceService] Инициализирован — локальные кубики + broadcast уведомления"
     );
   }
 
@@ -178,7 +181,7 @@ class DiceService {
     return this.roll(f, critLabel, unitName);
   }
 
-  // ── Анонсы (уведомления для ВСЕХ через broadcast) ───────
+  // ── Анонсы ───────────────────────────────────────────────
 
   async announceHit(
     unitName: string,
@@ -236,7 +239,7 @@ class DiceService {
     const icon = success ? "✨" : "💨";
     const status = success ? "успех" : "провал";
     await notifyAll(
-      `${icon} ${unitName}: ${spellName} — [${result.rawD20 ?? result.rolls[0]}] = ${result.total} (${status})`
+      `${icon} ${unitName}: ${spellName} — [${result.rawD20}] = ${result.total} (${status})`
     );
   }
 
@@ -259,7 +262,9 @@ class DiceService {
   ): Promise<void> {
     const percent = Math.floor((currentHP / maxHP) * 100);
     const icon = percent < 25 ? "💀" : "💔";
-    await notifyAll(`${icon} ${unitName}: −${damage} HP (${currentHP}/${maxHP})`);
+    await notifyAll(
+      `${icon} ${unitName}: −${damage} HP (${currentHP}/${maxHP})`
+    );
   }
 
   async announceHealing(
