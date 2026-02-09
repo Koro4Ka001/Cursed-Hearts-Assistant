@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState } from '../ui';
-import { rollDice, rollWithCrit, isHit } from '../../utils/dice';
+import { isHit } from '../../utils/dice';
 import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
 import type { DiceRollResult, DamageType, DamageCategory } from '../../types';
@@ -63,7 +63,7 @@ export function CombatTab() {
   const selectedRangedWeapon = rangedWeapons.find(w => w.id === selectedRangedWeaponId) ?? rangedWeapons[0];
   const selectedAmmo = ammoResources.find(r => r.id === selectedAmmoId) ?? ammoResources[0];
   
-  // Обработчик ближней атаки
+  // Обработчик ближней атаки — ВСЕ БРОСКИ ЧЕРЕЗ diceService
   const handleMeleeAttack = async () => {
     if (!selectedMeleeWeapon) return;
     
@@ -76,31 +76,34 @@ export function CombatTab() {
     
     try {
       for (let target = 0; target < meleeTargetCount; target++) {
-        // Бросок на попадание
+        // Бросок на попадание через diceService (3D кубики!)
         const profKey = selectedMeleeWeapon.proficiencyType;
         const profBonus = proficiencies[profKey] ?? 0;
         const hitBonus = profBonus + (selectedMeleeWeapon.hitBonus ?? 0);
         const hitFormula = hitBonus >= 0 ? `d20+${hitBonus}` : `d20${hitBonus}`;
         
-        const hitResult = rollDice(hitFormula, `Попадание ${selectedMeleeWeapon.name}`);
+        // ✅ Используем diceService.roll() для 3D кубиков
+        const hitResult = await diceService.roll(
+          hitFormula, 
+          `Попадание ${selectedMeleeWeapon.name}`, 
+          unit.shortName ?? unit.name
+        );
         newAttackResults.push(hitResult);
-        
-        await diceService.announceHit(unit.shortName, selectedMeleeWeapon.name, hitResult);
         
         // Проверка попадания
         if (hitResult.isCritFail) {
-          await diceService.announceMiss(unit.shortName, selectedMeleeWeapon.name, hitResult);
+          // Крит промах — пропускаем урон
           continue;
         }
         
         const hit = isHit(hitResult);
         
         if (!hit) {
-          await diceService.announceMiss(unit.shortName, selectedMeleeWeapon.name, hitResult);
+          // Промах
           continue;
         }
         
-        // Бросок урона
+        // Бросок урона через diceService
         const isCrit = hitResult.isCrit;
         const statBonus = getStatDamageBonus(unit, selectedMeleeWeapon.statBonus);
         
@@ -110,35 +113,25 @@ export function CombatTab() {
           ? `${baseDamageFormula}+${statBonus}`
           : baseDamageFormula;
         
-        const damageResult = rollWithCrit(damageFormula, isCrit, `Урон ${selectedMeleeWeapon.name}`);
-        newDamageResults.push(damageResult);
-        
-        await diceService.announceDamage(
-          unit.shortName,
-          damageResult.total,
-          DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? 'физ',
-          damageResult.rolls,
-          statBonus,
-          isCrit
+        // ✅ Используем diceService.rollWithCrit() для 3D кубиков с удвоением при крите
+        const damageResult = await diceService.rollWithCrit(
+          damageFormula, 
+          isCrit, 
+          `Урон ${selectedMeleeWeapon.name}`, 
+          unit.shortName ?? unit.name
         );
+        newDamageResults.push(damageResult);
         
         // Дополнительный урон (если есть)
         if (selectedMeleeWeapon.extraDamageFormula && selectedMeleeWeapon.extraDamageType) {
-          const extraResult = rollWithCrit(
+          // ✅ Дополнительный урон тоже через diceService
+          const extraResult = await diceService.rollWithCrit(
             selectedMeleeWeapon.extraDamageFormula,
             isCrit,
-            `Доп. урон (${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? 'доп'})`
+            `Доп. урон (${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? 'доп'})`,
+            unit.shortName ?? unit.name
           );
           newDamageResults.push(extraResult);
-          
-          await diceService.announceDamage(
-            unit.shortName,
-            extraResult.total,
-            DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? 'доп',
-            extraResult.rolls,
-            0,
-            isCrit
-          );
         }
       }
     } finally {
@@ -148,7 +141,7 @@ export function CombatTab() {
     }
   };
   
-  // Обработчик дальней атаки
+  // Обработчик дальней атаки — ВСЕ БРОСКИ ЧЕРЕЗ diceService
   const handleRangedAttack = async () => {
     if (!selectedRangedWeapon || !selectedAmmo) return;
     
@@ -180,12 +173,17 @@ export function CombatTab() {
         for (let arrow = 0; arrow < arrowsPerShot; arrow++) {
           arrowsUsed++;
           
-          // Бросок на попадание
+          // Бросок на попадание через diceService (3D кубики!)
           const bowsProf = proficiencies.bows ?? 0;
           const hitBonus = bowsProf + (selectedRangedWeapon.hitBonus ?? 0);
           const hitFormula = hitBonus >= 0 ? `d20+${hitBonus}` : `d20${hitBonus}`;
           
-          const hitResult = rollDice(hitFormula, `Стрела ${arrow + 1}`);
+          // ✅ Используем diceService.roll() для 3D кубиков
+          const hitResult = await diceService.roll(
+            hitFormula, 
+            `Стрела ${arrow + 1}`, 
+            unit.shortName ?? unit.name
+          );
           
           const hit = isHit(hitResult);
           const isCrit = hitResult.isCrit;
@@ -193,13 +191,11 @@ export function CombatTab() {
           
           if (isCritFail) {
             log.push(`💀 Стрела ${arrow + 1}: [${hitResult.rawD20}] = КРИТ ПРОМАХ!`);
-            await diceService.announceMiss(unit.shortName, selectedAmmo.name ?? 'стрела', hitResult);
             continue;
           }
           
           if (!hit) {
             log.push(`❌ Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total} — Промах`);
-            await diceService.announceMiss(unit.shortName, selectedAmmo.name ?? 'стрела', hitResult);
             continue;
           }
           
@@ -212,40 +208,30 @@ export function CombatTab() {
               ? `${ammoFormula}+${dexBonus}`
               : ammoFormula;
             
-            const damageResult = rollWithCrit(dmgFormula, isCrit, `Урон ${selectedAmmo.name}`);
+            // ✅ Используем diceService.rollWithCrit() для 3D кубиков
+            const damageResult = await diceService.rollWithCrit(
+              dmgFormula, 
+              isCrit, 
+              `Урон ${selectedAmmo.name}`, 
+              unit.shortName ?? unit.name
+            );
             newDamageResults.push(damageResult);
             
             const critText = isCrit ? '✨ КРИТ! ' : '';
             log.push(`🎯 Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total} ${critText}→ 💥 ${damageResult.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? 'физ'}`);
             
-            await diceService.announceDamage(
-              unit.shortName,
-              damageResult.total,
-              DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? 'физ',
-              damageResult.rolls,
-              dexBonus,
-              isCrit
-            );
-            
             // Дополнительный урон от боеприпаса (рунами и т.д.)
             if (selectedAmmo.extraDamageFormula && selectedAmmo.extraDamageType) {
-              const extraResult = rollWithCrit(
+              // ✅ Дополнительный урон тоже через diceService
+              const extraResult = await diceService.rollWithCrit(
                 selectedAmmo.extraDamageFormula,
                 isCrit,
-                `Доп. урон (${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? 'доп'})`
+                `Доп. урон (${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? 'доп'})`,
+                unit.shortName ?? unit.name
               );
               newDamageResults.push(extraResult);
               
               log.push(`    + ${extraResult.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? 'доп'}`);
-              
-              await diceService.announceDamage(
-                unit.shortName,
-                extraResult.total,
-                DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? 'доп',
-                extraResult.rolls,
-                0,
-                isCrit
-              );
             }
           } else {
             log.push(`🎯 Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total} — Попадание!`);
@@ -278,7 +264,7 @@ export function CombatTab() {
     
     await takeDamage(unit.id, damagePreview.finalDamage);
     await diceService.announceTakeDamage(
-      unit.shortName,
+      unit.shortName ?? unit.name,
       damagePreview.finalDamage,
       currentHP - damagePreview.finalDamage,
       maxHP
@@ -296,7 +282,7 @@ export function CombatTab() {
     
     await healUnit(unit.id, healAmount);
     await diceService.announceHealing(
-      unit.shortName,
+      unit.shortName ?? unit.name,
       healAmount,
       Math.min(maxHP, currentHP + healAmount),
       maxHP
