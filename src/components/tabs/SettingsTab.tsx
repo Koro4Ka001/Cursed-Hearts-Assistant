@@ -12,7 +12,7 @@ import {
   DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES, 
   ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS 
 } from '../../types';
-import { MAGIC_ELEMENTS, SPELL_TYPES, ELEMENT_ICONS } from '../../constants/elements';
+import { MAGIC_ELEMENTS, SPELL_TYPES, ELEMENT_ICONS, DEFAULT_ELEMENT_TABLE, DEFAULT_DAMAGE_TIERS } from '../../constants/elements';
 
 export function SettingsTab() {
   const { 
@@ -1051,6 +1051,132 @@ function SpellsEditor({
               value={editingSpell.equipmentBonus ?? 0}
               onChange={(v) => updateSpell(editingSpell.id, { equipmentBonus: v })}
             />
+            
+            {/* Многошаговая механика */}
+            <div className="border-t border-edge-bone pt-3 mt-3">
+              <Checkbox
+                checked={editingSpell.isMultiStep ?? false}
+                onChange={(v) => {
+                  const updates: Partial<Spell> = { isMultiStep: v };
+                  // При включении — заполняем дефолтами если пусто
+                  if (v && !editingSpell.elementTable) {
+                    updates.elementTable = { ...DEFAULT_ELEMENT_TABLE };
+                  }
+                  if (v && !editingSpell.damageTiers) {
+                    updates.damageTiers = [...DEFAULT_DAMAGE_TIERS];
+                  }
+                  updateSpell(editingSpell.id, updates);
+                }}
+                label="⚡ Многошаговый режим (d20 → d12 элемент → d20 сила → урон)"
+              />
+              
+              {editingSpell.isMultiStep && (
+                <div className="mt-3 space-y-3">
+                  {/* Таблица d12 → элемент */}
+                  <div>
+                    <div className="text-xs text-faded uppercase mb-2">Таблица d12 → Элемент</div>
+                    <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(num => (
+                        <div key={num} className="flex items-center gap-1">
+                          <span className="text-gold text-xs w-6 text-right">{num}:</span>
+                          <Select
+                            value={(editingSpell.elementTable ?? DEFAULT_ELEMENT_TABLE)[num] ?? 'fire'}
+                            onChange={(e) => {
+                              const table = { ...(editingSpell.elementTable ?? DEFAULT_ELEMENT_TABLE) };
+                              table[num] = e.target.value as DamageType;
+                              updateSpell(editingSpell.id, { elementTable: table });
+                            }}
+                            options={ALL_DAMAGE_TYPES.filter(t => t !== 'pure').map(t => ({ 
+                              value: t, 
+                              label: DAMAGE_TYPE_NAMES[t] ?? t 
+                            }))}
+                            className="flex-1"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Таблица tier'ов урона */}
+                  <div>
+                    <div className="text-xs text-faded uppercase mb-2">Tier'ы урона (по d20)</div>
+                    <div className="space-y-2">
+                      {(editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS).map((tier, idx) => (
+                        <div key={idx} className="flex items-center gap-1 flex-wrap">
+                          <input
+                            type="number"
+                            value={tier.minRoll}
+                            onChange={(e) => {
+                              const tiers = [...(editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS)];
+                              tiers[idx] = { ...tiers[idx]!, minRoll: parseInt(e.target.value) || 1 };
+                              updateSpell(editingSpell.id, { damageTiers: tiers });
+                            }}
+                            className="w-10 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs text-center"
+                          />
+                          <span className="text-faded text-xs">—</span>
+                          <input
+                            type="number"
+                            value={tier.maxRoll}
+                            onChange={(e) => {
+                              const tiers = [...(editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS)];
+                              tiers[idx] = { ...tiers[idx]!, maxRoll: parseInt(e.target.value) || 20 };
+                              updateSpell(editingSpell.id, { damageTiers: tiers });
+                            }}
+                            className="w-10 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs text-center"
+                          />
+                          <span className="text-faded text-xs">→</span>
+                          <input
+                            type="text"
+                            value={tier.formula}
+                            onChange={(e) => {
+                              const tiers = [...(editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS)];
+                              tiers[idx] = { ...tiers[idx]!, formula: e.target.value };
+                              updateSpell(editingSpell.id, { damageTiers: tiers });
+                            }}
+                            className="w-24 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs"
+                            placeholder="4d12+2d10"
+                          />
+                          <input
+                            type="text"
+                            value={tier.label ?? ''}
+                            onChange={(e) => {
+                              const tiers = [...(editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS)];
+                              tiers[idx] = { ...tiers[idx]!, label: e.target.value };
+                              updateSpell(editingSpell.id, { damageTiers: tiers });
+                            }}
+                            className="flex-1 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs min-w-[60px]"
+                            placeholder="Название"
+                          />
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => {
+                              const tiers = (editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS).filter((_, i) => i !== idx);
+                              updateSpell(editingSpell.id, { damageTiers: tiers });
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const tiers = [...(editingSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS)];
+                          const lastMax = tiers.length > 0 ? (tiers[tiers.length - 1]?.maxRoll ?? 0) + 1 : 1;
+                          tiers.push({ minRoll: lastMax, maxRoll: lastMax + 3, formula: 'd6', label: 'Новый' });
+                          updateSpell(editingSpell.id, { damageTiers: tiers });
+                        }}
+                        className="w-full"
+                      >
+                        + Добавить tier
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             
             <Button variant="gold" onClick={() => setEditingId(null)} className="w-full">
               Готово
