@@ -94,6 +94,21 @@ export interface Spell {
   damageType?: DamageType;
   description?: string;            // текстовое описание эффекта
   equipmentBonus?: number;         // доп бонус от экипировки (напр. +10 от посоха)
+  
+  // === Многошаговая механика ===
+  isMultiStep?: boolean;           // включает многошаговый режим (d20 попадание → d12 элемент → d20 сила → урон по tier)
+  
+  // Таблица d12 → элемент (12 записей, настраиваемая)
+  elementTable?: Record<number, DamageType>;
+  // Пример: { 1: "fire", 2: "water", 3: "earth", ... 12: "corruption" }
+  
+  // Таблица tier'ов урона: диапазон d20 → формула урона
+  damageTiers?: Array<{
+    minRoll: number;    // минимальное значение d20 (включительно)
+    maxRoll: number;    // максимальное значение d20 (включительно)
+    formula: string;    // формула урона, например "d6" или "4d12+2d10"
+    label?: string;     // отображаемое название tier'а
+  }>;
 }
 
 export type ResourceType = 'generic' | 'ammo';
