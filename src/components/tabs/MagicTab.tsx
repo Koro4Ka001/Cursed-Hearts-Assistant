@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState } from '../ui';
-import { rollDice, getMaxMagicBonus, isHit } from '../../utils/dice';
+import { getMaxMagicBonus, isHit } from '../../utils/dice';
 import { getIntelligenceBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
 import type { DiceRollResult, Spell } from '../../types';
 import { DAMAGE_TYPE_NAMES } from '../../types';
-import { SPELL_TYPES } from '../../constants/elements';
+import { SPELL_TYPES, DEFAULT_ELEMENT_TABLE, DEFAULT_DAMAGE_TIERS } from '../../constants/elements';
 
 /**
  * Безопасное преобразование projectiles в строку
@@ -30,7 +30,7 @@ function hasProjectileDice(projectiles: string | number | undefined | null): boo
  * Парсит строку projectiles и возвращает количество снарядов
  * Если строка — число, возвращает его. Если формула — бросает кубик.
  */
-function parseProjectiles(projectiles: string | number | undefined | null): { count: number; rolls?: number[] } {
+async function parseProjectiles(projectiles: string | number | undefined | null): Promise<{ count: number; rolls?: number[] }> {
   const str = safeProjectilesToString(projectiles);
   
   // Если это просто число
@@ -39,9 +39,9 @@ function parseProjectiles(projectiles: string | number | undefined | null): { co
     return { count: Math.max(1, asNumber) };
   }
   
-  // Если это формула с кубиком
+  // Если это формула с кубиком — бросаем через diceService
   if (str.toLowerCase().includes('d')) {
-    const result = rollDice(str);
+    const result = await diceService.roll(str, 'Количество снарядов');
     return { count: Math.max(1, result.total), rolls: result.rolls };
   }
   
@@ -139,7 +139,7 @@ export function MagicTab() {
       const magicBonus = getMaxMagicBonus(elements, magicBonuses);
       const castFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
       
-      const castResult = rollDice(castFormula, `Каст ${selectedSpell.name}`);
+      const castResult = await diceService.roll(castFormula, `Каст ${selectedSpell.name}`);
       
       const castSuccess = isHit(castResult);
       await diceService.announceSpellCast(unit.shortName, selectedSpell.name, castSuccess, castResult);
@@ -188,7 +188,7 @@ export function MagicTab() {
                 ? `${selectedSpell.damageFormula}+${totalBonus}`
                 : selectedSpell.damageFormula;
               
-              const aoeResult = rollDice(aoeFormula, 'Урон по площади');
+              const aoeResult = await diceService.roll(aoeFormula, 'Урон по площади');
               newDamageResults.push(aoeResult);
               
               const damageTypeName = DAMAGE_TYPE_NAMES[selectedSpell.damageType] ?? selectedSpell.damageType;
@@ -207,8 +207,79 @@ export function MagicTab() {
             break;
             
           case 'targeted': {
+            // === МНОГОШАГОВЫЙ РЕЖИМ ===
+            if (selectedSpell.isMultiStep) {
+              const elementTable = selectedSpell.elementTable ?? DEFAULT_ELEMENT_TABLE;
+              const damageTiers = selectedSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS;
+              
+              // Шаг 1: d20 на попадание
+              const hitResult = await diceService.roll('d20', 'Попадание', unit.shortName);
+              const hitRoll = hitResult.rawD20 ?? hitResult.total;
+              
+              if (hitRoll <= 10) {
+                // Промах
+                log.push(`❌ Шаг 1 — Попадание: [${hitRoll}] — ПРОМАХ!`);
+                break;
+              }
+              
+              log.push(`✅ Шаг 1 — Попадание: [${hitRoll}]${hitRoll === 20 ? ' — КРИТ! Чистый урон!' : ' — Попадание!'}`);
+              
+              // Шаг 2: Определение элемента
+              let resolvedDamageType: typeof selectedSpell.damageType;
+              
+              if (hitRoll === 20) {
+                // Крит — чистый урон
+                resolvedDamageType = 'pure';
+                log.push(`⚡ Шаг 2 — Элемент: Чистый урон (крит)`);
+              } else {
+                // d12 на элемент
+                const elementResult = await diceService.roll('d12', 'Элемент', unit.shortName);
+                const elementRoll = elementResult.total;
+                resolvedDamageType = elementTable[elementRoll] ?? 'fire';
+                const elementName = DAMAGE_TYPE_NAMES[resolvedDamageType] ?? resolvedDamageType;
+                log.push(`🎲 Шаг 2 — Элемент: [${elementRoll}] → ${elementName}`);
+              }
+              
+              // Шаг 3: d20 на силу удара
+              const powerResult = await diceService.roll('d20', 'Сила удара', unit.shortName);
+              const powerRoll = powerResult.rawD20 ?? powerResult.total;
+              
+              // Находим подходящий tier
+              const tier = damageTiers.find(t => powerRoll >= t.minRoll && powerRoll <= t.maxRoll);
+              
+              if (!tier) {
+                log.push(`⚠️ Шаг 3 — Сила: [${powerRoll}] — Tier не найден!`);
+                break;
+              }
+              
+              const tierLabel = tier.label ?? `${tier.minRoll}-${tier.maxRoll}`;
+              log.push(`💪 Шаг 3 — Сила: [${powerRoll}] → ${tierLabel} (${tier.formula})`);
+              
+              // Шаг 4: Бросок урона по формуле tier'а
+              const dmgFormula = totalBonus > 0
+                ? `${tier.formula}+${totalBonus}`
+                : tier.formula;
+              
+              const dmgResult = await diceService.roll(dmgFormula, `Урон (${tierLabel})`);
+              newDamageResults.push(dmgResult);
+              
+              const damageTypeName = resolvedDamageType ? (DAMAGE_TYPE_NAMES[resolvedDamageType] ?? resolvedDamageType) : 'неизвестный';
+              log.push(`💥 Шаг 4 — Урон: [${dmgResult.rolls.join(', ')}]${totalBonus > 0 ? ` + ${totalBonus}` : ''} = ${dmgResult.total} ${damageTypeName}`);
+              
+              await diceService.announceDamage(
+                unit.shortName,
+                dmgResult.total,
+                damageTypeName,
+                dmgResult.rolls,
+                totalBonus
+              );
+              
+              break;
+            }
+            
+            // === ОБЫЧНЫЙ TARGETED РЕЖИМ (оригинальный код) ===
             // Парсим количество снарядов (может быть формула)
-            const { count: projectileCount, rolls: projectileRolls } = parseProjectiles(selectedSpell.projectiles);
+            const { count: projectileCount, rolls: projectileRolls } = await parseProjectiles(selectedSpell.projectiles);
             
             // Если снаряды определялись кубиком — показываем
             if (projectileRolls) {
@@ -229,27 +300,27 @@ export function MagicTab() {
               
               for (let p = 0; p < projectilesPerTarget; p++) {
                 // Бросок на попадание снаряда
-                const projectileHitFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
-                const projectileHit = rollDice(projectileHitFormula, `Снаряд ${p + 1}`);
+                const projectileHitFormula2 = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
+                const projectileHit = await diceService.roll(projectileHitFormula2, `Снаряд ${p + 1}`);
                 
                 const projectileSuccess = isHit(projectileHit);
                 
                 if (projectileSuccess && selectedSpell.damageFormula && selectedSpell.damageType) {
-                  const dmgFormula = totalBonus > 0 
+                  const dmgFormula2 = totalBonus > 0 
                     ? `${selectedSpell.damageFormula}+${totalBonus}`
                     : selectedSpell.damageFormula;
                   
-                  const dmgResult = rollDice(dmgFormula, `Урон снаряда ${p + 1}`);
-                  newDamageResults.push(dmgResult);
+                  const dmgResult2 = await diceService.roll(dmgFormula2, `Урон снаряда ${p + 1}`);
+                  newDamageResults.push(dmgResult2);
                   
-                  const damageTypeName = DAMAGE_TYPE_NAMES[selectedSpell.damageType] ?? selectedSpell.damageType;
-                  log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20 ?? '?'}] = ${projectileHit.total} → 💥 ${dmgResult.total} ${damageTypeName}`);
+                  const damageTypeName2 = DAMAGE_TYPE_NAMES[selectedSpell.damageType] ?? selectedSpell.damageType;
+                  log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20 ?? '?'}] = ${projectileHit.total} → 💥 ${dmgResult2.total} ${damageTypeName2}`);
                   
                   await diceService.announceDamage(
                     unit.shortName,
-                    dmgResult.total,
-                    damageTypeName,
-                    dmgResult.rolls,
+                    dmgResult2.total,
+                    damageTypeName2,
+                    dmgResult2.rolls,
                     totalBonus
                   );
                 } else if (projectileSuccess) {
