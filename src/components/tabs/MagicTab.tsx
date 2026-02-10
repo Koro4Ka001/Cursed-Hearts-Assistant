@@ -94,7 +94,8 @@ export function MagicTab() {
   
   const currentManaCost = getManaCost(selectedSpell);
   const currentMana = unit.mana?.current ?? 0;
-  const canCast = currentMana >= currentManaCost;
+  const costType = selectedSpell?.costType ?? 'mana';
+  const canCast = costType === 'health' ? true : currentMana >= currentManaCost;
   
   // Обработчик каста
   const handleCast = async () => {
@@ -133,28 +134,34 @@ export function MagicTab() {
         await takeDamage(unit.id, cost);
       }
       
-      // 3. Бросок на каст
+      // 3. Бросок на каст (пропускается для многошаговых заклинаний — у них свой бросок)
       const elements = selectedSpell.elements ?? [];
       const magicBonuses = unit.magicBonuses ?? {};
       const magicBonus = getMaxMagicBonus(elements, magicBonuses);
-      const castFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
       
-      const castResult = await diceService.roll(castFormula, `Каст ${selectedSpell.name}`);
+      // Переменная для отслеживания результата каста (для ДаблШот)
+      let castResult: DiceRollResult | null = null;
       
-      const castSuccess = isHit(castResult);
-      await diceService.announceSpellCast(unit.shortName, selectedSpell.name, castSuccess, castResult);
-      
-      if (!castSuccess) {
-        log.push(`❌ Каст провален! [${castResult.rawD20 ?? '?'}] + ${magicBonus} = ${castResult.total}`);
-        setCastLog(log);
-        return;
+      if (!selectedSpell.isMultiStep) {
+        const castFormula = magicBonus >= 0 ? `d20+${magicBonus}` : `d20${magicBonus}`;
+        
+        castResult = await diceService.roll(castFormula, `Каст ${selectedSpell.name}`);
+        
+        const castSuccess = isHit(castResult);
+        await diceService.announceSpellCast(unit.shortName, selectedSpell.name, castSuccess, castResult);
+        
+        if (!castSuccess) {
+          log.push(`❌ Каст провален! [${castResult.rawD20 ?? '?'}] + ${magicBonus} = ${castResult.total}`);
+          setCastLog(log);
+          return;
+        }
+        
+        log.push(`✅ Каст успешен! [${castResult.rawD20 ?? '?'}] + ${magicBonus} = ${castResult.total}`);
       }
       
-      log.push(`✅ Каст успешен! [${castResult.rawD20 ?? '?'}] + ${magicBonus} = ${castResult.total}`);
-      
-      // 4. ДаблШот проверка
+      // 4. ДаблШот проверка (только для обычных заклинаний, не многошаговых)
       let spellCount = 1;
-      if (useDoubleShot && unit.hasDoubleShot && castResult.rawD20) {
+      if (useDoubleShot && unit.hasDoubleShot && castResult && castResult.rawD20) {
         const threshold = unit.doubleShotThreshold ?? 18;
         if (castResult.rawD20 >= threshold) {
           spellCount = 2;
