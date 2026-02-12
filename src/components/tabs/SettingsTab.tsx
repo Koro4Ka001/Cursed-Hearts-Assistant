@@ -1343,3 +1343,8 @@ function ResourcesEditor({
     </div>
   );
 }
+<Checkbox
+  checked={settings.showTokenBars ?? true}
+  onChange={(v) => updateSettings({ showTokenBars: v })}
+  label="🗺️ HP/Mana бары на токенах (видны всем)"
+/>
