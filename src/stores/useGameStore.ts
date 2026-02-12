@@ -1,11 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Unit, Settings, ConnectionStatus, Notification, CombatLogEntry, Resource, DiceOverlayData } from '../types';
+import type { Unit, Settings, ConnectionStatus, Notification, CombatLogEntry, Resource } from '../types';
 import { docsService } from '../services/docsService';
 import { updateTokenHp } from '../services/hpTrackerService';
 import { generateId } from '../utils/dice';
 
-// Дефолтный юнит для примера
 const createDefaultUnit = (): Unit => ({
   id: generateId(),
   name: 'Новый персонаж',
@@ -53,14 +52,7 @@ const createDefaultUnit = (): Unit => ({
   useManaAsHp: false
 });
 
-// Максимум уведомлений одновременно
 const MAX_NOTIFICATIONS = 3;
-
-// Типы экранных эффектов
-type ScreenEffect = 'none' | 'shake' | 'crit' | 'fail' | 'heal';
-
-// Таймер для сброса эффекта
-let effectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 interface GameState {
   // === PERSISTED ===
@@ -75,14 +67,7 @@ interface GameState {
   combatLog: CombatLogEntry[];
   isSyncing: boolean;
   autoSyncIntervalId: number | null;
-  
-  // Экранные эффекты
-  screenEffect: ScreenEffect;
-  activeEffect: string | null;  // Альтернативное поле для CSS-эффектов: 'shake' | 'heal' | 'crit-gold' | 'crit-fail' | null
-  
-  // Dice overlay
-  diceOverlay: DiceOverlayData | null;
-  isExpanded: boolean;
+  activeEffect: string | null;
   
   // === ACTIONS: Units ===
   addUnit: (unit?: Partial<Unit>) => void;
@@ -119,18 +104,11 @@ interface GameState {
   
   // === ACTIONS: UI ===
   setActiveTab: (tab: string) => void;
+  triggerEffect: (effect: string) => void;
   addNotification: (message: string, type: Notification['type']) => void;
   clearNotification: (id: string) => void;
   addCombatLog: (unitName: string, action: string, details: string) => void;
   setConnection: (key: keyof ConnectionStatus, value: boolean | number | string) => void;
-  
-  // === ACTIONS: Effects ===
-  triggerEffect: (effect: string) => void;
-  
-  // === ACTIONS: Dice Overlay ===
-  showDiceOverlay: (data: DiceOverlayData) => void;
-  clearDiceOverlay: () => void;
-  toggleExpand: () => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -148,17 +126,13 @@ export const useGameStore = create<GameState>()(
         writeLogs: true
       },
       
-      // Transient state
       activeTab: 'combat',
       connections: { owlbear: false, docs: false, dice: 'local' },
       notifications: [],
       combatLog: [],
       isSyncing: false,
       autoSyncIntervalId: null,
-      screenEffect: 'none',
       activeEffect: null,
-      diceOverlay: null,
-      isExpanded: false,
       
       // === UNITS ===
       addUnit: (partial) => {
@@ -200,7 +174,6 @@ export const useGameStore = create<GameState>()(
         const unit = state.units.find(u => u.id === unitId);
         if (!unit) return;
         
-        // Обновляем локально
         set((s) => ({
           units: s.units.map(u => 
             u.id === unitId 
@@ -209,7 +182,6 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        // Синхронизируем с Google Docs (только если URL настроен)
         if (state.settings.syncHP && unit.googleDocsHeader && state.settings.googleDocsUrl) {
           try {
             await docsService.setHealth(unit.googleDocsHeader, hp, unit.health.max);
@@ -218,7 +190,6 @@ export const useGameStore = create<GameState>()(
           }
         }
         
-        // Синхронизируем с HP Tracker
         if (unit.owlbearTokenId) {
           try {
             await updateTokenHp(unit.owlbearTokenId, hp, unit.health.max);
@@ -227,7 +198,6 @@ export const useGameStore = create<GameState>()(
           }
         }
         
-        // Добавляем в лог
         get().addCombatLog(unit.shortName, 'HP изменено', `${hp}/${unit.health.max}`);
       },
       
@@ -236,12 +206,10 @@ export const useGameStore = create<GameState>()(
         if (!unit) return;
         
         if (unit.useManaAsHp) {
-          // Урон снимает ману вместо HP
           const newMana = unit.mana.current - damage;
           await get().setMana(unitId, newMana);
           get().addCombatLog(unit.shortName, 'Получен урон', `-${damage} маны`);
         } else {
-          // Обычный режим — урон снимает HP
           const newHP = unit.health.current - damage;
           await get().setHP(unitId, newHP);
           get().addCombatLog(unit.shortName, 'Получен урон', `-${damage} HP`);
@@ -253,12 +221,10 @@ export const useGameStore = create<GameState>()(
         if (!unit) return;
         
         if (unit.useManaAsHp) {
-          // Исцеление восстанавливает ману
           const newMana = Math.min(unit.mana.max, unit.mana.current + amount);
           await get().setMana(unitId, newMana);
           get().addCombatLog(unit.shortName, 'Исцеление', `+${amount} маны`);
         } else {
-          // Обычный режим — исцеление восстанавливает HP
           const newHP = Math.min(unit.health.max, unit.health.current + amount);
           await get().setHP(unitId, newHP);
           get().addCombatLog(unit.shortName, 'Исцеление', `+${amount} HP`);
@@ -271,7 +237,6 @@ export const useGameStore = create<GameState>()(
         const unit = state.units.find(u => u.id === unitId);
         if (!unit) return;
         
-        // Обновляем локально
         set((s) => ({
           units: s.units.map(u => 
             u.id === unitId 
@@ -280,7 +245,6 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        // Синхронизируем с Google Docs (только если URL настроен)
         if (state.settings.syncMana && unit.googleDocsHeader && state.settings.googleDocsUrl) {
           try {
             await docsService.setMana(unit.googleDocsHeader, mana, unit.mana.max);
@@ -325,7 +289,6 @@ export const useGameStore = create<GameState>()(
         const resource = unit.resources.find(r => r.id === resourceId);
         if (!resource) return;
         
-        // Обновляем локально
         set((s) => ({
           units: s.units.map(u => {
             if (u.id !== unitId) return u;
@@ -338,7 +301,6 @@ export const useGameStore = create<GameState>()(
           })
         }));
         
-        // Синхронизируем с Google Docs если включено
         if (resource.syncWithDocs && state.settings.syncResources && state.settings.googleDocsUrl && unit.googleDocsHeader) {
           try {
             await docsService.setResource(unit.googleDocsHeader, resource.name, current, resource.max);
@@ -372,12 +334,10 @@ export const useGameStore = create<GameState>()(
       },
       
       // === SYNC ===
-      // showNotifications = true для ручной синхронизации, false для автоматической
       syncFromDocs: async (unitId, showNotifications = true) => {
         const state = get();
         const unit = state.units.find(u => u.id === unitId);
         
-        // Проверяем наличие юнита и его googleDocsHeader
         if (!unit || !unit.googleDocsHeader) {
           if (showNotifications) {
             get().addNotification('Персонаж не привязан к Google Docs', 'info');
@@ -385,16 +345,13 @@ export const useGameStore = create<GameState>()(
           return;
         }
         
-        // ВАЖНО: Проверяем URL — если не настроен, молча выходим (или показываем уведомление если ручная синхр)
         if (!state.settings.googleDocsUrl) {
           if (showNotifications) {
             get().addNotification('Настройте URL Google Docs в настройках', 'info');
           }
-          // Для автоматической синхронизации — просто молча выходим
           return;
         }
         
-        // Защита от параллельных синхронизаций
         if (state.isSyncing) {
           return;
         }
@@ -414,7 +371,6 @@ export const useGameStore = create<GameState>()(
               updates.mana = result.mana;
             }
             
-            // Обновляем ресурсы из Docs если есть
             if (result.resources && unit.resources.length > 0) {
               const updatedResources: Resource[] = unit.resources.map(r => {
                 if (r.syncWithDocs && result.resources?.[r.name]) {
@@ -427,7 +383,6 @@ export const useGameStore = create<GameState>()(
             
             get().updateUnit(unitId, updates);
             
-            // Обновляем HP Tracker
             if (unit.owlbearTokenId && result.health) {
               await updateTokenHp(unit.owlbearTokenId, result.health.current, result.health.max);
             }
@@ -447,7 +402,6 @@ export const useGameStore = create<GameState>()(
         } catch (error) {
           console.error('Sync error:', error);
           
-          // Отключаем docs при серьёзной ошибке, чтобы не спамить запросами
           set((s) => ({ 
             connections: { ...s.connections, docs: false }
           }));
@@ -460,33 +414,27 @@ export const useGameStore = create<GameState>()(
         }
       },
       
-      // silent = true для автоматической синхронизации (без уведомлений)
       syncAllFromDocs: async (silent = false) => {
         const state = get();
         
-        // Защита от параллельных синхронизаций
         if (state.isSyncing) {
           return;
         }
         
-        // ВАЖНО: Если URL не настроен — молча выходим, БЕЗ уведомлений
         if (!state.settings.googleDocsUrl) {
           return;
         }
         
         const units = state.units.filter(u => u.googleDocsHeader);
         
-        // Если нет юнитов для синхронизации — молча выходим
         if (units.length === 0) {
           return;
         }
         
         for (const unit of units) {
-          // Для автоматической синхронизации не показываем уведомления
           await get().syncFromDocs(unit.id, !silent);
         }
         
-        // Обновляем время последней синхронизации
         if (units.length > 0) {
           set((s) => ({ 
             connections: { ...s.connections, lastSyncTime: Date.now() }
@@ -497,25 +445,20 @@ export const useGameStore = create<GameState>()(
       startAutoSync: () => {
         const state = get();
         
-        // Останавливаем предыдущий
         if (state.autoSyncIntervalId) {
           clearInterval(state.autoSyncIntervalId);
         }
         
-        // Минимальный интервал — 1 минута, чтобы избежать ERR_INSUFFICIENT_RESOURCES
         const intervalMinutes = Math.max(1, state.settings.autoSyncInterval);
         const intervalMs = intervalMinutes * 60 * 1000;
         
         const intervalId = window.setInterval(() => {
-          // Дополнительная проверка перед синхронизацией
           const currentState = get();
           
-          // Не синхронизируем если URL не настроен или уже идёт синхронизация
           if (!currentState.settings.googleDocsUrl || currentState.isSyncing) {
             return;
           }
           
-          // silent = true — автоматическая синхронизация без уведомлений
           get().syncAllFromDocs(true);
         }, intervalMs);
         
@@ -536,12 +479,10 @@ export const useGameStore = create<GameState>()(
           settings: { ...state.settings, ...partial }
         }));
         
-        // Обновляем URL в сервисе
         if (partial.googleDocsUrl !== undefined) {
           docsService.setUrl(partial.googleDocsUrl);
         }
         
-        // Перезапускаем auto-sync если изменился интервал
         if (partial.autoSyncInterval !== undefined) {
           get().stopAutoSync();
           get().startAutoSync();
@@ -551,13 +492,20 @@ export const useGameStore = create<GameState>()(
       // === UI ===
       setActiveTab: (tab) => set({ activeTab: tab }),
       
+      triggerEffect: (effect) => {
+        set({ activeEffect: null });
+        requestAnimationFrame(() => {
+          set({ activeEffect: effect });
+          setTimeout(() => set({ activeEffect: null }), 700);
+        });
+      },
+      
       addNotification: (message, type) => {
         const state = get();
         
-        // ЗАЩИТА ОТ ДУБЛЕЙ: Проверяем, нет ли уже такого же сообщения
         const isDuplicate = state.notifications.some(n => n.message === message);
         if (isDuplicate) {
-          return; // Не добавляем дублирующее уведомление
+          return;
         }
         
         const notification: Notification = {
@@ -568,7 +516,6 @@ export const useGameStore = create<GameState>()(
         };
         
         set((s) => {
-          // ОГРАНИЧЕНИЕ: Максимум MAX_NOTIFICATIONS уведомлений, новые вытесняют старые
           const newNotifications = [...s.notifications, notification];
           if (newNotifications.length > MAX_NOTIFICATIONS) {
             return { notifications: newNotifications.slice(-MAX_NOTIFICATIONS) };
@@ -576,7 +523,6 @@ export const useGameStore = create<GameState>()(
           return { notifications: newNotifications };
         });
         
-        // Авто-удаление через 5 сек
         setTimeout(() => {
           get().clearNotification(notification.id);
         }, 5000);
@@ -600,7 +546,6 @@ export const useGameStore = create<GameState>()(
           combatLog: [...state.combatLog, entry].slice(-100)
         }));
         
-        // Логирование в Google Docs (только если URL настроен)
         const settings = get().settings;
         if (settings.writeLogs && settings.googleDocsUrl) {
           const unit = get().units.find(u => u.shortName === unitName);
@@ -614,78 +559,6 @@ export const useGameStore = create<GameState>()(
         set((state) => ({
           connections: { ...state.connections, [key]: value }
         }));
-      },
-      
-      // === EFFECTS ===
-      /**
-       * Запускает визуальный эффект на экране.
-       * Поддерживаемые эффекты: 'shake', 'heal', 'crit', 'crit-gold', 'crit-fail', 'fail'
-       * 
-       * Логика:
-       * 1. Если эффект уже активен — сначала сбрасываем его
-       * 2. Устанавливаем новый эффект
-       * 3. Через 600ms автоматически сбрасываем в null
-       */
-      triggerEffect: (effect) => {
-        // Очищаем предыдущий таймер если есть
-        if (effectTimeoutId) {
-          clearTimeout(effectTimeoutId);
-          effectTimeoutId = null;
-        }
-        
-        // Если эффект уже активен, сначала сбрасываем для перезапуска анимации
-        const currentEffect = get().activeEffect;
-        if (currentEffect !== null) {
-          set({ 
-            activeEffect: null, 
-            screenEffect: 'none' 
-          });
-          
-          // Даём DOM время обновиться, затем устанавливаем новый эффект
-          requestAnimationFrame(() => {
-            set({ 
-              activeEffect: effect, 
-              screenEffect: effect as ScreenEffect 
-            });
-            
-            // Автоматически сбрасываем эффект через 600мс
-            effectTimeoutId = setTimeout(() => {
-              set({ 
-                activeEffect: null, 
-                screenEffect: 'none' 
-              });
-              effectTimeoutId = null;
-            }, 600);
-          });
-        } else {
-          // Устанавливаем эффект напрямую
-          set({ 
-            activeEffect: effect, 
-            screenEffect: effect as ScreenEffect 
-          });
-          
-          // Автоматически сбрасываем эффект через 600мс
-          effectTimeoutId = setTimeout(() => {
-            set({ 
-              activeEffect: null, 
-              screenEffect: 'none' 
-            });
-            effectTimeoutId = null;
-          }, 600);
-        }
-      },
-      
-      // === DICE OVERLAY ===
-      showDiceOverlay: (data) => {
-        set({ diceOverlay: data });
-      },
-      
-      clearDiceOverlay: () => {
-        set({ diceOverlay: null });
-      },
-      
-      toggleExpand: () => {
-        set((s) => ({ isExpanded: !s.isExpanded }));
       }
     }),
     {
@@ -698,18 +571,3 @@ export const useGameStore = create<GameState>()(
     }
   )
 );
-
-// Инициализация при загрузке
-const initStore = () => {
-  const state = useGameStore.getState();
-  
-  // Устанавливаем URL в сервис (только если он не пустой)
-  if (state.settings.googleDocsUrl) {
-    docsService.setUrl(state.settings.googleDocsUrl);
-  }
-  
-  // НЕ запускаем авто-синхронизацию при инициализации — 
-  // она будет запущена в App.tsx после инициализации OBR
-};
-
-initStore();
