@@ -1,27 +1,17 @@
 /**
  * TokenBarService — HP/Mana бары НА КАРТЕ, привязанные к токенам.
  * ВИДНЫ ВСЕМ ИГРОКАМ — даже тем, у кого нет расширения.
- *
- * Создаёт 4 Shape items на каждый токен:
- * - HP background + HP fill
- * - Mana background + Mana fill
- *
- * Все items привязаны к токену через attachedTo → следуют за ним.
  */
 
 import OBR, { buildShape, isShape, isImage } from "@owlbear-rodeo/sdk";
 
-// ============================================================
-// Constants
-// ============================================================
-
 const META_TYPE  = "com.cursed-hearts/bar-type";
 const META_TOKEN = "com.cursed-hearts/bar-token";
 
-const HP_H      = 8;
-const MANA_H    = 6;
-const GAP       = 2;
-const BOTTOM    = 6;
+const HP_H   = 8;
+const MANA_H = 6;
+const GAP    = 2;
+const BOTTOM = 6;
 
 const C = {
   hpBg:     "#120505",
@@ -44,30 +34,28 @@ interface BarIds {
   manaFill: string;
 }
 
-// ============================================================
-// Service
-// ============================================================
-
 class TokenBarService {
   private reg   = new Map<string, BarIds>();
   private ready = false;
   private dpi   = 150;
 
-  // ── Initialise ────────────────────────────────────────────
-
   async initialize(): Promise<void> {
     if (this.ready) return;
     try {
+      const sceneReady = await OBR.scene.isReady();
+      if (!sceneReady) {
+        console.warn("[TokenBars] Scene not ready, skipping init");
+        return;
+      }
       this.dpi = await OBR.scene.grid.getDpi();
       await this.restore();
       this.ready = true;
-      console.log("[TokenBars] Ready  dpi:", this.dpi, " tokens:", this.reg.size);
+      console.log("[TokenBars] Ready, dpi:", this.dpi, "tokens:", this.reg.size);
     } catch (e) {
       console.warn("[TokenBars] Init failed:", e);
     }
   }
 
-  /** Scan scene for our existing bars and rebuild registry */
   private async restore(): Promise<void> {
     try {
       const all  = await OBR.scene.items.getItems();
@@ -101,8 +89,6 @@ class TokenBarService {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────
-
   private barW(): number {
     return Math.round(this.dpi * 0.85);
   }
@@ -129,11 +115,9 @@ class TokenBarService {
     return this.dpi / 2;
   }
 
-  private meta(type: BarType, tokenId: string) {
+  private meta(type: BarType, tokenId: string): Record<string, string> {
     return { [META_TYPE]: type, [META_TOKEN]: tokenId };
   }
-
-  // ── Create ────────────────────────────────────────────────
 
   async createBars(
     tokenId: string,
@@ -143,7 +127,6 @@ class TokenBarService {
   ): Promise<void> {
     if (!this.ready) return;
 
-    // Already exists → update
     if (this.reg.has(tokenId)) {
       return this.updateBars(tokenId, hp, maxHp, mana, maxMana, hideHp);
     }
@@ -155,21 +138,25 @@ class TokenBarService {
       const hpY = bot + BOTTOM;
       const mnY = hideHp ? hpY : hpY + HP_H + GAP;
 
-      const hpP = maxHp   > 0 ? Math.max(0, Math.min(1, hp   / maxHp))   : 0;
-      const mnP = maxMana  > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+      const hpP = maxHp  > 0 ? Math.max(0, Math.min(1, hp   / maxHp))   : 0;
+      const mnP = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
 
       const hpBg = buildShape()
-        .shapeType("RECTANGLE").width(w).height(HP_H)
+        .shapeType("RECTANGLE")
+        .width(w)
+        .height(HP_H)
         .position({ x, y: hpY })
-        .attachedTo(tokenId).layer("ATTACHMENT")
-        .locked(true).disableHit(true).visible(!hideHp)
-        .disableAutoZIndex(true).zIndex(1)
+        .attachedTo(tokenId)
+        .layer("ATTACHMENT")
+        .locked(true)
+        .disableHit(true)
+        .visible(!hideHp)
+        .zIndex(1)
         .name("ch-hp-bg")
         .metadata(this.meta("hp-bg", tokenId))
-        .style({
-          fillColor: C.hpBg, fillOpacity: 0.9,
-          strokeColor: C.hpStr, strokeWidth: 1
-        })
+        .fillColor(C.hpBg)
+        .strokeColor(C.hpStr)
+        .strokeWidth(1)
         .build();
 
       const hpFill = buildShape()
@@ -177,29 +164,35 @@ class TokenBarService {
         .width(Math.max(1, hpP * (w - 2)))
         .height(HP_H - 2)
         .position({ x: x + 1, y: hpY + 1 })
-        .attachedTo(tokenId).layer("ATTACHMENT")
-        .locked(true).disableHit(true).visible(!hideHp)
-        .disableAutoZIndex(true).zIndex(2)
+        .attachedTo(tokenId)
+        .layer("ATTACHMENT")
+        .locked(true)
+        .disableHit(true)
+        .visible(!hideHp)
+        .zIndex(2)
         .name("ch-hp-fill")
         .metadata(this.meta("hp-fill", tokenId))
-        .style({
-          fillColor: this.hpCol(hpP), fillOpacity: 1,
-          strokeColor: C.hpBg, strokeWidth: 0
-        })
+        .fillColor(this.hpCol(hpP))
+        .strokeColor(C.hpBg)
+        .strokeWidth(0)
         .build();
 
       const manaBg = buildShape()
-        .shapeType("RECTANGLE").width(w).height(MANA_H)
+        .shapeType("RECTANGLE")
+        .width(w)
+        .height(MANA_H)
         .position({ x, y: mnY })
-        .attachedTo(tokenId).layer("ATTACHMENT")
-        .locked(true).disableHit(true).visible(true)
-        .disableAutoZIndex(true).zIndex(3)
+        .attachedTo(tokenId)
+        .layer("ATTACHMENT")
+        .locked(true)
+        .disableHit(true)
+        .visible(true)
+        .zIndex(3)
         .name("ch-mana-bg")
         .metadata(this.meta("mana-bg", tokenId))
-        .style({
-          fillColor: C.manaBg, fillOpacity: 0.9,
-          strokeColor: C.manaStr, strokeWidth: 1
-        })
+        .fillColor(C.manaBg)
+        .strokeColor(C.manaStr)
+        .strokeWidth(1)
         .build();
 
       const manaFill = buildShape()
@@ -207,15 +200,17 @@ class TokenBarService {
         .width(Math.max(1, mnP * (w - 2)))
         .height(MANA_H - 2)
         .position({ x: x + 1, y: mnY + 1 })
-        .attachedTo(tokenId).layer("ATTACHMENT")
-        .locked(true).disableHit(true).visible(true)
-        .disableAutoZIndex(true).zIndex(4)
+        .attachedTo(tokenId)
+        .layer("ATTACHMENT")
+        .locked(true)
+        .disableHit(true)
+        .visible(true)
+        .zIndex(4)
         .name("ch-mana-fill")
         .metadata(this.meta("mana-fill", tokenId))
-        .style({
-          fillColor: this.manaCol(mnP), fillOpacity: 1,
-          strokeColor: C.manaBg, strokeWidth: 0
-        })
+        .fillColor(this.manaCol(mnP))
+        .strokeColor(C.manaBg)
+        .strokeWidth(0)
         .build();
 
       await OBR.scene.items.addItems([hpBg, hpFill, manaBg, manaFill]);
@@ -233,8 +228,6 @@ class TokenBarService {
     }
   }
 
-  // ── Update ────────────────────────────────────────────────
-
   async updateBars(
     tokenId: string,
     hp: number, maxHp: number,
@@ -251,41 +244,39 @@ class TokenBarService {
       const hpP = maxHp  > 0 ? Math.max(0, Math.min(1, hp   / maxHp))   : 0;
       const mnP = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
 
-      await OBR.scene.items.updateItems(
-        [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill],
-        (items) => {
-          for (const item of items) {
-            if (!isShape(item)) continue;
-            const type = (item.metadata as Record<string, unknown>)[META_TYPE] as BarType;
+      const allIds = [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill];
 
-            switch (type) {
-              case "hp-bg":
-                item.visible = !hideHp;
-                break;
+      await OBR.scene.items.updateItems(allIds, (items) => {
+        for (const item of items) {
+          if (!isShape(item)) continue;
+          const type = (item.metadata as Record<string, unknown>)[META_TYPE] as BarType;
 
-              case "hp-fill":
-                item.visible = !hideHp;
-                item.width = Math.max(1, hpP * (w - 2));
-                item.style.fillColor = this.hpCol(hpP);
-                break;
+          switch (type) {
+            case "hp-bg":
+              item.visible = !hideHp;
+              break;
 
-              case "mana-fill":
-                item.width = Math.max(1, mnP * (w - 2));
-                item.style.fillColor = this.manaCol(mnP);
-                break;
+            case "hp-fill":
+              item.visible = !hideHp;
+              item.width = Math.max(1, hpP * (w - 2));
+              item.style.fillColor = this.hpCol(hpP);
+              break;
 
-              // mana-bg — ничего не меняем
-            }
+            case "mana-fill":
+              item.width = Math.max(1, mnP * (w - 2));
+              item.style.fillColor = this.manaCol(mnP);
+              break;
+
+            case "mana-bg":
+              break;
           }
         }
-      );
+      });
     } catch (e) {
       console.warn("[TokenBars] Update failed:", e);
       this.reg.delete(tokenId);
     }
   }
-
-  // ── Remove ────────────────────────────────────────────────
 
   async removeBars(tokenId: string): Promise<void> {
     if (!this.ready) return;
@@ -318,8 +309,6 @@ class TokenBarService {
     this.reg.clear();
   }
 
-  // ── Bulk sync ─────────────────────────────────────────────
-
   async syncAllBars(
     units: Array<{
       owlbearTokenId?: string;
@@ -328,6 +317,7 @@ class TokenBarService {
       useManaAsHp: boolean;
     }>
   ): Promise<void> {
+    if (!this.ready) return;
     for (const u of units) {
       if (u.owlbearTokenId) {
         await this.updateBars(
