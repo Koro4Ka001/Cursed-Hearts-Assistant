@@ -219,12 +219,13 @@ export interface RokCardResult {
 // === НАСТРОЙКИ ===
 
 export interface Settings {
-  googleDocsUrl: string;    // URL Google Apps Script Web App
+  googleDocsUrl: string;
   syncHP: boolean;
   syncMana: boolean;
   syncResources: boolean;
-  autoSyncInterval: number; // минуты (по умолчанию 5)
-  writeLogs: boolean;       // писать логи в Google Docs
+  autoSyncInterval: number;
+  writeLogs: boolean;
+  showTokenBars: boolean;    // ← ДОБАВЬ ЭТУ СТРОКУ
 }
 
 export interface ConnectionStatus {
