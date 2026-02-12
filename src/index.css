@@ -1,0 +1,1189 @@
+@import "tailwindcss";
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CURSED HEARTS GRIMOIRE — ПОЛНАЯ ТЕМА
+   Тёмное фэнтези, проклятая книга заклинаний
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   @THEME — Tailwind CSS 4 переменные
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  --font-cinzel: 'Cinzel', serif;
+  --font-cinzel-decorative: 'Cinzel Decorative', 'Cinzel', serif;
+  --font-garamond: 'EB Garamond', Georgia, serif;
+  --font-medieval: 'MedievalSharp', cursive;
+
+  /* Фоны */
+  --color-abyss: #030303;
+  --color-obsidian: #080706;
+  --color-dark: #0c0a09;
+  --color-panel: #0f0d0c;
+  --color-parchment: #1a1510;
+  --color-parchment-light: #2a2218;
+
+  /* Текст */
+  --color-bone: #d4c8b8;
+  --color-ancient: #b8a892;
+  --color-faded: #7a6f62;
+  --color-dim: #4a433a;
+
+  /* Золото */
+  --color-gold-bright: #ffd700;
+  --color-gold: #d4a726;
+  --color-gold-dark: #8b6914;
+
+  /* Кровь */
+  --color-blood-bright: #ff2a2a;
+  --color-blood: #8b0000;
+  --color-blood-dark: #4a0000;
+
+  /* Мана */
+  --color-mana-bright: #4a9eff;
+  --color-mana: #1a4a8b;
+  --color-mana-dark: #0a2040;
+
+  /* Исцеление */
+  --color-heal-bright: #00ff88;
+  --color-heal: #228b22;
+  --color-heal-dark: #0a3a0a;
+
+  /* Прочее */
+  --color-ember: #ff6b35;
+  --color-edge-bone: #3a332a;
+  --color-edge-rust: #4a3020;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --color-abyss: #030303;
+  --color-obsidian: #080706;
+  --color-dark: #0c0a09;
+  --color-panel: #0f0d0c;
+  --color-parchment: #1a1510;
+  --color-parchment-light: #2a2218;
+  
+  --color-bone: #d4c8b8;
+  --color-ancient: #b8a892;
+  --color-faded: #7a6f62;
+  --color-dim: #4a433a;
+  
+  --color-gold-bright: #ffd700;
+  --color-gold: #d4a726;
+  --color-gold-dark: #8b6914;
+  --color-gold-shadow: rgba(212, 167, 38, 0.4);
+  
+  --color-blood-bright: #ff2a2a;
+  --color-blood: #8b0000;
+  --color-blood-dark: #4a0000;
+  --color-blood-glow: rgba(139, 0, 0, 0.5);
+  
+  --color-mana-bright: #4a9eff;
+  --color-mana: #1a4a8b;
+  --color-mana-dark: #0a2040;
+  --color-mana-glow: rgba(74, 158, 255, 0.4);
+  
+  --color-heal-bright: #00ff88;
+  --color-heal: #228b22;
+  --color-heal-dark: #0a3a0a;
+  --color-heal-glow: rgba(0, 255, 136, 0.3);
+  
+  --color-ember: #ff6b35;
+  --color-edge-bone: #3a332a;
+  --color-edge-rust: #4a3020;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   БАЗОВЫЕ СТИЛИ
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'EB Garamond', Georgia, serif;
+  background-color: var(--color-abyss);
+  color: var(--color-bone);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* ═══ ТЕКСТУРА ПЕРГАМЕНТА ═══ */
+#root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+/* ═══ ВИНЬЕТКА ═══ */
+#root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.65) 100%);
+}
+
+/* ═══ SCROLLBAR ═══ */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-obsidian);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--color-gold-dark), var(--color-edge-bone));
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gold);
+}
+
+/* ═══ HEADINGS ═══ */
+.heading {
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-gold);
+}
+
+.heading-decorative {
+  font-family: 'Cinzel Decorative', serif;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+
+/* ═══ INPUTS ═══ */
+input, select, textarea {
+  font-family: 'EB Garamond', Georgia, serif;
+  background: var(--color-obsidian);
+  border: 1px solid var(--color-edge-bone);
+  color: var(--color-bone);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  box-shadow: 0 0 10px var(--color-gold-shadow);
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237a6f62'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   HP BAR — "БЬЮЩЕЕСЯ СЕРДЦЕ" (Сосуд с кровью)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.hp-bar-wrap {
+  position: relative;
+  height: 28px;
+  background: 
+    radial-gradient(ellipse at 30% 50%, rgba(60,10,10,0.6), transparent 70%),
+    linear-gradient(180deg, #0a0404 0%, #120606 50%, #0a0404 100%);
+  border: 1px solid #3a1515;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 
+    inset 0 2px 4px rgba(0,0,0,0.8),
+    inset 0 -1px 2px rgba(139,0,0,0.2),
+    0 1px 3px rgba(0,0,0,0.5);
+}
+
+.hp-bar-fill {
+  height: 100%;
+  border-radius: 14px;
+  background: 
+    linear-gradient(180deg, 
+      #cc1a1a 0%, 
+      #8b0000 40%, 
+      #5a0000 70%,
+      #8b0000 100%
+    );
+  box-shadow: 
+    inset 0 1px 0 rgba(255,100,100,0.3),
+    inset 0 -1px 0 rgba(0,0,0,0.3),
+    0 0 12px rgba(139,0,0,0.5);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+/* Блик на "жидкости" */
+.hp-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 10%;
+  right: 30%;
+  height: 6px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255,150,150,0.15) 30%, 
+    rgba(255,200,200,0.25) 50%,
+    rgba(255,150,150,0.15) 70%,
+    transparent
+  );
+  border-radius: 50%;
+}
+
+.hp-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(139,0,0,0.5);
+  z-index: 2;
+  letter-spacing: 1px;
+}
+
+/* === НИЗКИЙ HP — пульсация и капли крови === */
+.hp-bar-low .hp-bar-fill {
+  animation: blood-pulse 1.2s ease-in-out infinite;
+}
+
+.hp-bar-low::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 15%;
+  width: 4px;
+  height: 4px;
+  background: #cc1a1a;
+  border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+  z-index: 3;
+  animation: blood-drip 2.5s ease-in infinite;
+  filter: blur(0.5px);
+}
+
+.hp-bar-low .hp-bar-label {
+  animation: label-flicker 1.5s ease-in-out infinite;
+}
+
+@keyframes blood-pulse {
+  0%, 100% { 
+    box-shadow: 
+      inset 0 1px 0 rgba(255,100,100,0.3),
+      0 0 12px rgba(139,0,0,0.5); 
+    filter: brightness(1);
+  }
+  50% { 
+    box-shadow: 
+      inset 0 1px 0 rgba(255,100,100,0.5),
+      0 0 20px rgba(200,0,0,0.7),
+      0 0 40px rgba(139,0,0,0.3); 
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes blood-drip {
+  0% { transform: translateY(0) scale(1); opacity: 0.8; }
+  70% { transform: translateY(20px) scale(0.8, 1.3); opacity: 0.6; }
+  100% { transform: translateY(28px) scale(0.5); opacity: 0; }
+}
+
+@keyframes label-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MANA BAR — "МАГИЧЕСКИЙ КРИСТАЛЛ"
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.mana-bar-wrap {
+  position: relative;
+  height: 22px;
+  background: 
+    radial-gradient(ellipse at 70% 50%, rgba(10,30,80,0.4), transparent 70%),
+    linear-gradient(180deg, #040810 0%, #06101a 50%, #040810 100%);
+  border: 1px solid #152040;
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow: 
+    inset 0 2px 4px rgba(0,0,0,0.8),
+    inset 0 -1px 2px rgba(26,74,139,0.15),
+    0 1px 3px rgba(0,0,0,0.5);
+}
+
+.mana-bar-fill {
+  height: 100%;
+  border-radius: 11px;
+  background: 
+    linear-gradient(180deg, 
+      #3a8aff 0%, 
+      #1a5aaa 35%, 
+      #0d3570 65%,
+      #1a5aaa 100%
+    );
+  box-shadow: 
+    inset 0 1px 0 rgba(150,200,255,0.25),
+    0 0 15px rgba(74,158,255,0.4),
+    0 0 30px rgba(74,158,255,0.15);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  background-size: 200% 100%;
+  animation: mana-shimmer 3s linear infinite;
+}
+
+.mana-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 15%;
+  right: 25%;
+  height: 5px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(150,200,255,0.15) 30%,
+    rgba(200,230,255,0.3) 50%,
+    rgba(150,200,255,0.15) 70%,
+    transparent
+  );
+  border-radius: 50%;
+}
+
+.mana-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  font-weight: 700;
+  color: #c8e0ff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(74,158,255,0.4);
+  z-index: 2;
+  letter-spacing: 1px;
+}
+
+@keyframes mana-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PANEL — Страница гримуара
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.panel {
+  position: relative;
+  background: 
+    linear-gradient(135deg, rgba(15,13,12,0.95), rgba(10,8,7,0.98)),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(58,51,42,0.03) 2px,
+      rgba(58,51,42,0.03) 4px
+    );
+  border: 1px solid var(--color-edge-bone);
+  border-radius: 2px;
+  margin-bottom: 2px;
+}
+
+/* Декоративные уголки */
+.panel::before,
+.panel::after {
+  content: '◆';
+  position: absolute;
+  font-size: 6px;
+  color: var(--color-gold-dark);
+  opacity: 0.6;
+  line-height: 1;
+}
+
+.panel::before { top: -4px; left: 4px; }
+.panel::after { top: -4px; right: 4px; }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-gold);
+  border-bottom: 1px solid transparent;
+  background-image: linear-gradient(90deg, transparent, rgba(212,167,38,0.08) 50%, transparent);
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+}
+
+.section-header h3 {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MODAL — "Разворачивающийся свиток"
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.25s ease;
+  padding: 16px;
+}
+
+.modal-box {
+  background: 
+    linear-gradient(135deg, var(--color-panel), var(--color-obsidian));
+  border: 1px solid var(--color-gold-dark);
+  border-radius: 4px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 
+    0 0 30px rgba(0,0,0,0.8),
+    0 0 60px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(212,167,38,0.05);
+  animation: modal-appear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-edge-bone);
+  background-image: linear-gradient(90deg, transparent, rgba(212,167,38,0.06) 50%, transparent);
+  background-size: 100% 1px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+}
+
+.modal-head h2 {
+  font-family: 'Cinzel', serif;
+  color: var(--color-gold);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 12px;
+  margin: 0;
+}
+
+@keyframes modal-appear {
+  from { 
+    opacity: 0; 
+    transform: translateY(-15px) scale(0.97); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DICE RESULT — "Свиток с выжженным результатом"
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.dice-card {
+  background: 
+    linear-gradient(135deg, var(--color-parchment), var(--color-parchment-light));
+  border: 1px solid var(--color-edge-bone);
+  border-radius: 3px;
+  padding: 10px 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Текстура пергамента */
+.dice-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(58,51,42,0.04) 3px,
+    rgba(58,51,42,0.04) 6px
+  );
+  pointer-events: none;
+}
+
+.dice-card-crit {
+  border-color: var(--color-gold);
+  box-shadow: 
+    0 0 15px rgba(255,215,0,0.2),
+    0 0 30px rgba(255,215,0,0.08),
+    inset 0 0 20px rgba(255,215,0,0.05);
+}
+
+.dice-card-crit::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(255,215,0,0.06) 60deg,
+    transparent 120deg
+  );
+  animation: crit-rays 4s linear infinite;
+  pointer-events: none;
+}
+
+.dice-card-fail {
+  border-color: var(--color-blood);
+  box-shadow: 0 0 12px rgba(139,0,0,0.2);
+}
+
+/* Разворачивание свитка */
+.animate-unfurl {
+  animation: unfurl 0.45s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+
+@keyframes unfurl {
+  from { 
+    opacity: 0; 
+    transform: scaleY(0.3) scaleX(0.95);
+    transform-origin: top center;
+    filter: blur(2px);
+  }
+  to { 
+    opacity: 1; 
+    transform: scaleY(1) scaleX(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes crit-rays {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Грани кубиков */
+.die-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-edge-bone);
+  border-radius: 4px;
+  background: var(--color-obsidian);
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-bone);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.die-face-crit {
+  border-color: var(--color-gold);
+  color: var(--color-gold-bright);
+  background: rgba(139,105,20,0.2);
+  box-shadow: 
+    inset 0 1px 2px rgba(0,0,0,0.3),
+    0 0 10px rgba(255,215,0,0.3);
+  animation: die-glow 1.5s ease-in-out infinite;
+}
+
+.die-face-fail {
+  border-color: var(--color-blood);
+  color: var(--color-blood-bright);
+  background: rgba(74,0,0,0.3);
+}
+
+.dice-total {
+  font-family: 'Cinzel', serif;
+  font-weight: 900;
+  font-size: 20px;
+}
+
+.dice-crit {
+  color: var(--color-gold-bright);
+  text-shadow: 0 0 12px rgba(255,215,0,0.6), 0 0 25px rgba(255,215,0,0.3);
+}
+
+.dice-fail {
+  color: var(--color-blood-bright);
+  text-shadow: 0 0 10px rgba(139,0,0,0.5);
+}
+
+@keyframes die-glow {
+  0%, 100% { box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 8px rgba(255,215,0,0.2); }
+  50% { box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 15px rgba(255,215,0,0.5); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TOAST — "Горящий свиток"
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.toast {
+  background: var(--color-parchment);
+  border: 1px solid var(--color-edge-bone);
+  border-radius: 3px;
+  padding: 10px 14px;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  color: var(--color-bone);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  border-left: 3px solid;
+  animation: toast-in 0.4s cubic-bezier(0.34, 1.3, 0.64, 1);
+  max-width: 300px;
+}
+
+.toast-success { border-left-color: var(--color-heal); }
+.toast-error { border-left-color: var(--color-blood); }
+.toast-info { border-left-color: var(--color-mana-bright); }
+.toast-warning { border-left-color: var(--color-gold); }
+
+@keyframes toast-in {
+  from { 
+    opacity: 0; 
+    transform: translateX(30px) scale(0.95);
+    filter: blur(4px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SUB TABS
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.sub-tab {
+  padding: 6px 12px;
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 1px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--color-obsidian);
+  color: var(--color-faded);
+  border: 1px solid transparent;
+}
+
+.sub-tab:hover {
+  color: var(--color-ancient);
+  background: var(--color-dark);
+}
+
+.sub-tab-active {
+  background: rgba(139,105,20,0.15);
+  color: var(--color-gold);
+  border-color: var(--color-gold-dark);
+  box-shadow: 0 0 8px rgba(212,167,38,0.15);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMBAT LOG
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.combat-log {
+  background: var(--color-obsidian);
+  border: 1px solid var(--color-edge-bone);
+  border-radius: 2px;
+  padding: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+}
+
+.combat-log-line {
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(58,51,42,0.2);
+}
+
+.combat-log-line:last-child {
+  border-bottom: none;
+}
+
+.log-section { 
+  color: var(--color-gold); 
+  font-family: 'Cinzel', serif; 
+  text-transform: uppercase; 
+  font-weight: 700; 
+  font-size: 10px; 
+  letter-spacing: 1px; 
+}
+
+.log-crit { color: var(--color-gold-bright); }
+.log-hit { color: var(--color-heal-bright); }
+.log-miss { color: var(--color-blood-bright); }
+.log-mana { color: var(--color-mana-bright); }
+.log-damage { color: var(--color-ember); }
+.log-info { color: var(--color-faded); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BUTTONS — Рунные печати
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.btn {
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border: 1px solid;
+  min-width: 60px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Вспышка при нажатии */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.15), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.btn:active::after {
+  opacity: 1;
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, rgba(139,105,20,0.4), var(--color-panel));
+  border-color: var(--color-gold-dark);
+  color: var(--color-gold);
+}
+
+.btn-gold:hover:not(:disabled) {
+  border-color: var(--color-gold);
+  box-shadow: 0 0 12px rgba(212,167,38,0.25);
+  color: var(--color-gold-bright);
+}
+
+.btn-blood {
+  background: linear-gradient(135deg, rgba(74,0,0,0.5), var(--color-panel));
+  border-color: var(--color-blood);
+  color: var(--color-blood-bright);
+}
+
+.btn-blood:hover:not(:disabled) {
+  box-shadow: 0 0 12px rgba(139,0,0,0.3);
+}
+
+.btn-mana {
+  background: linear-gradient(135deg, rgba(10,32,64,0.5), var(--color-panel));
+  border-color: var(--color-mana);
+  color: var(--color-mana-bright);
+}
+
+.btn-mana:hover:not(:disabled) {
+  box-shadow: 0 0 12px rgba(74,158,255,0.25);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, rgba(10,58,10,0.5), var(--color-panel));
+  border-color: var(--color-heal);
+  color: var(--color-heal-bright);
+}
+
+.btn-success:hover:not(:disabled) {
+  box-shadow: 0 0 12px rgba(0,255,136,0.2);
+}
+
+.btn-secondary {
+  background: var(--color-obsidian);
+  border-color: var(--color-edge-bone);
+  color: var(--color-faded);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  color: var(--color-bone);
+  border-color: var(--color-ancient);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CARD 3D FLIP
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.card-3d {
+  perspective: 1000px;
+}
+
+.card-3d-inner {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.card-front,
+.card-back {
+  backface-visibility: hidden;
+}
+
+.card-front {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: 
+    linear-gradient(135deg, #1a1510, #0f0d0c),
+    repeating-conic-gradient(
+      rgba(212,167,38,0.03) 0deg 30deg,
+      transparent 30deg 60deg
+    );
+  border: 1px solid var(--color-gold-dark);
+  border-radius: 6px;
+  font-size: 32px;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+}
+
+.animate-card-flip {
+  animation: card-flip 0.7s ease both;
+}
+
+@keyframes card-flip {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(180deg); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TABS — Закладки гримуара
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.tab-active {
+  background: var(--color-panel);
+  border-bottom: 2px solid var(--color-gold);
+  color: var(--color-gold);
+  margin-top: -2px;
+  padding-top: 2px;
+}
+
+.tab-inactive {
+  background: var(--color-obsidian);
+  border-bottom: 2px solid transparent;
+  color: var(--color-faded);
+}
+
+.tab-inactive:hover {
+  color: var(--color-ancient);
+  border-bottom-color: rgba(58,51,42,0.5);
+}
+
+/* Контент вкладки — fade-in */
+.tab-content-enter {
+  animation: tab-fade 0.2s ease;
+}
+
+@keyframes tab-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LOADING SPINNER — Вращающаяся руна
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.rune-spinner {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--color-edge-bone);
+  border-top-color: var(--color-gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  box-shadow: 0 0 10px rgba(212,167,38,0.2);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   STATUS BAR
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.status-bar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: linear-gradient(180deg, var(--color-obsidian), var(--color-abyss));
+  border-top: 1px solid var(--color-edge-bone);
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.status-dot-on {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34,197,94,0.6);
+}
+
+.status-dot-off {
+  background: var(--color-blood-bright);
+  box-shadow: 0 0 6px var(--color-blood-glow);
+}
+
+.status-dot-none {
+  background: var(--color-dim);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ЭКРАННЫЕ ЭФФЕКТЫ — применяются к корневому элементу
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Тряска экрана при получении урона */
+.screen-shake,
+.animate-screen-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translate(0); }
+  10% { transform: translate(-3px, -1px); }
+  20% { transform: translate(3px, 2px); }
+  30% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -2px); }
+  50% { transform: translate(-1px, 2px); }
+  60% { transform: translate(1px, -1px); }
+  70% { transform: translate(-3px, 1px); }
+  80% { transform: translate(2px, -1px); }
+  90% { transform: translate(-1px, 2px); }
+}
+
+/* Золотая вспышка при крите */
+.screen-flash-gold {
+  animation: flash-gold 0.6s ease-out;
+}
+
+@keyframes flash-gold {
+  0% { box-shadow: inset 0 0 0 rgba(255,215,0,0); }
+  15% { box-shadow: inset 0 0 80px rgba(255,215,0,0.25), inset 0 0 150px rgba(255,215,0,0.1); }
+  100% { box-shadow: inset 0 0 0 rgba(255,215,0,0); }
+}
+
+/* Кровавая вспышка при провале / уроне */
+.screen-flash-blood {
+  animation: flash-blood 0.5s ease-out;
+}
+
+@keyframes flash-blood {
+  0% { box-shadow: inset 0 0 0 rgba(139,0,0,0); }
+  20% { box-shadow: inset 0 0 60px rgba(139,0,0,0.3), inset 0 0 120px rgba(139,0,0,0.1); }
+  100% { box-shadow: inset 0 0 0 rgba(139,0,0,0); }
+}
+
+/* Зелёное свечение при исцелении */
+.screen-heal-glow {
+  animation: heal-glow 0.7s ease-out;
+}
+
+@keyframes heal-glow {
+  0% { box-shadow: inset 0 0 0 rgba(0,255,136,0); }
+  20% { box-shadow: inset 0 0 50px rgba(0,255,136,0.15), inset 0 0 100px rgba(34,139,34,0.08); }
+  100% { box-shadow: inset 0 0 0 rgba(0,255,136,0); }
+}
+
+/* FX Layer effects */
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9990;
+}
+
+.fx-crit {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(255,215,0,0.2), transparent 70%);
+  animation: fx-pulse 0.6s ease-out;
+}
+
+.fx-fail {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(139,0,0,0.3) 100%);
+  animation: fx-pulse 0.5s ease-out;
+}
+
+.fx-heal {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0,255,136,0.15), transparent 70%);
+  animation: fx-pulse 0.7s ease-out;
+}
+
+@keyframes fx-pulse {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FLOATING ANIMATION
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   FRAME CORNERS — Золотые уголки рамки приложения
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.app-frame {
+  position: relative;
+}
+
+.frame-corner {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-gold-dark);
+  opacity: 0.5;
+  z-index: 9997;
+  pointer-events: none;
+}
+
+.frame-tl { top: 2px; left: 2px; border-right: none; border-bottom: none; }
+.frame-tr { top: 2px; right: 2px; border-left: none; border-bottom: none; }
+.frame-bl { bottom: 2px; left: 2px; border-right: none; border-top: none; }
+.frame-br { bottom: 2px; right: 2px; border-left: none; border-top: none; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   АДАПТИВНОСТЬ
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 400px) {
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  
+  .btn-group {
+    flex-direction: column;
+  }
+  
+  .btn-group .btn {
+    width: 100%;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   УТИЛИТЫ
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.form-row {
+  margin-bottom: 10px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.form-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.form-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
