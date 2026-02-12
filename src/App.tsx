@@ -4,6 +4,7 @@ import { useGameStore } from './stores/useGameStore';
 import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
 import { diceService, DICE_BROADCAST_CHANNEL } from './services/diceService';
+import { tokenBarService } from './services/tokenBarService';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
 import { CombatTab } from './components/tabs/CombatTab';
@@ -12,7 +13,6 @@ import { CardsTab } from './components/tabs/CardsTab';
 import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
-import { tokenBarService } from './services/tokenBarService';
 import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
 
@@ -105,17 +105,15 @@ export function App() {
 
     const init = async () => {
       try {
+        // 1. OBR SDK
         await initOBR();
         setConnection('owlbear', true);
 
+        // 2. Dice Service
         await diceService.initialize();
-               // ★ Инициализация Token Bars
-        await tokenBarService.initialize();
-        if (settings.showTokenBars ?? true) {
-          const currentUnits = useGameStore.getState().units;
-          await tokenBarService.syncAllBars(currentUnits);
-        }
+        setConnection('dice', diceService.getStatus());
 
+        // 3. Broadcast listener
         OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
           const data = event.data as { message?: string } | undefined;
           const message = data?.message;
@@ -123,7 +121,22 @@ export function App() {
             OBR.notification.show(message);
           }
         });
+        console.log('[App] Broadcast listener установлен');
 
+        // 4. Token Bars
+        try {
+          await tokenBarService.initialize();
+          const currentSettings = useGameStore.getState().settings;
+          if (currentSettings.showTokenBars !== false) {
+            const currentUnits = useGameStore.getState().units;
+            await tokenBarService.syncAllBars(currentUnits);
+          }
+          console.log('[App] Token bars инициализированы');
+        } catch (e) {
+          console.warn('[App] Token bars init failed:', e);
+        }
+
+        // 5. Google Docs
         if (settings.googleDocsUrl) {
           docsService.setUrl(settings.googleDocsUrl);
           try {
@@ -134,6 +147,7 @@ export function App() {
           }
           startAutoSync();
         }
+
       } catch (error) {
         console.error('Initialization error:', error);
       } finally {
@@ -154,7 +168,6 @@ export function App() {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // Маппинг эффектов → CSS классы
   const effectClass = activeEffect
     ? ({
         shake: 'screen-shake',
@@ -167,7 +180,6 @@ export function App() {
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative">
-        {/* Декоративный фон даже при загрузке */}
         <div className="absolute inset-0 bg-runes pointer-events-none">
           <span className="bg-rune">ᚱ</span>
           <span className="bg-rune">ᛟ</span>
@@ -189,9 +201,7 @@ export function App() {
       'h-screen flex flex-col bg-abyss text-bone overflow-hidden app-frame',
       effectClass
     )}>
-      {/* ═══ ДЕКОРАТИВНЫЙ ФОН ═══ */}
-
-      {/* Руны — медленно мерцают */}
+      {/* Декоративные руны */}
       <div className="bg-runes">
         <span className="bg-rune">ᚱ</span>
         <span className="bg-rune">ᛟ</span>
@@ -211,16 +221,12 @@ export function App() {
       {/* Виньетка */}
       <div className="app-vignette" />
 
-      {/* ═══ CONTENT (z-index выше декораций) ═══ */}
+      {/* Контент */}
       <div className="relative z-10 flex flex-col h-full">
-
-        {/* HEADER */}
         <UnitSelector />
-
-        {/* STAT BARS */}
         <StatBars />
 
-        {/* TABS */}
+        {/* Вкладки */}
         <div className="flex border-b border-edge-bone bg-obsidian shrink-0">
           {TABS.map(tab => (
             <button
@@ -237,7 +243,7 @@ export function App() {
           ))}
         </div>
 
-        {/* TAB CONTENT — fade-in при смене */}
+        {/* Контент вкладки */}
         <div className="flex-1 overflow-hidden" key={activeTab}>
           <div className="tab-content-enter h-full">
             {activeTab === 'combat' && (
@@ -261,7 +267,7 @@ export function App() {
           </div>
         </div>
 
-        {/* STATUS BAR */}
+        {/* Статус бар */}
         <div className="h-6 flex items-center justify-between px-3 bg-obsidian border-t border-edge-bone text-[9px] shrink-0 font-cinzel tracking-wider uppercase">
           <div className="flex items-center gap-3">
             <span className={connections.owlbear ? 'text-green-500' : 'text-blood'}>
@@ -280,7 +286,7 @@ export function App() {
         </div>
       </div>
 
-      {/* NOTIFICATIONS */}
+      {/* Уведомления */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(notification => (
           <div key={notification.id} className="pointer-events-auto">
