@@ -12,6 +12,7 @@ import { CardsTab } from './components/tabs/CardsTab';
 import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
+import { tokenBarService } from './services/tokenBarService';
 import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
 
@@ -108,7 +109,12 @@ export function App() {
         setConnection('owlbear', true);
 
         await diceService.initialize();
-        setConnection('dice', diceService.getStatus());
+               // ★ Инициализация Token Bars
+        await tokenBarService.initialize();
+        if (settings.showTokenBars ?? true) {
+          const currentUnits = useGameStore.getState().units;
+          await tokenBarService.syncAllBars(currentUnits);
+        }
 
         OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
           const data = event.data as { message?: string } | undefined;
