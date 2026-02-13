@@ -1,103 +1,109 @@
 // src/services/tokenBarService.ts
 // ═══════════════════════════════════════════════════════════════
-// Token Bar Service — рисует HP/Mana бары прямо на токенах в OBR
-// Использует ТОЛЬКО документированные методы buildShape API
+// Token Bar Service — рисует HP/Mana бары на токенах в OBR
+// 
+// БЕЗОПАСНОСТЬ:
+// - Конструктор БЕЗ side effects (безопасен для top-level import)
+// - Все OBR вызовы в async методах, обёрнуты в try/catch
+// - Если сцена не готова — молча return, без краша
+// - Используются ТОЛЬКО документированные методы buildShape:
+//   .fillColor(), .strokeColor(), .strokeWidth(), .zIndex()
+//   НЕ используются: .style(), .fillOpacity(), .disableAutoZIndex()
 // ═══════════════════════════════════════════════════════════════
 
-import OBR, { buildShape, isShape, Item } from "@owlbear-rodeo/sdk";
+import OBR, { buildShape, isShape } from "@owlbear-rodeo/sdk";
+
+// ── Константы ──────────────────────────────────────────────────
 
 const EXTENSION_ID = "cursed-hearts-assistant";
 const META_KEY = `${EXTENSION_ID}/token-bar`;
 
-/** Метаданные, зашитые в каждый bar-shape */
-interface TokenBarMeta {
+const BAR_W = 100;
+const BAR_H = 8;
+const HP_Y = 55;
+const MANA_Y = 67;
+
+// ── Типы ───────────────────────────────────────────────────────
+
+interface BarMeta {
   tokenId: string;
   barType: "hp" | "mana";
   role: "bg" | "fill";
 }
 
-// ── Константы визуала ──────────────────────────────────────────
-const BAR_WIDTH = 100;
-const BAR_HEIGHT = 8;
-const HP_Y_OFFSET = 55;
-const MANA_Y_OFFSET = 67;
+/** Минимальный интерфейс юнита — чтобы не импортировать весь Unit */
+interface UnitLike {
+  owlbearTokenId?: string;
+  health: { current: number; max: number };
+  mana: { current: number; max: number };
+  useManaAsHp?: boolean;
+}
 
-const HP_COLORS = {
-  high: "#22cc44",
-  mid: "#ccaa22",
-  low: "#cc2222",
-  bg: "#3a1818",
-  border: "#661111",
-};
+// ── Утилиты ────────────────────────────────────────────────────
 
-const MANA_COLORS = {
-  fill: "#4488cc",
-  bg: "#1a2a3a",
-  border: "#224466",
-};
+function hpColor(ratio: number): string {
+  if (ratio > 0.5) return "#22cc44";
+  if (ratio > 0.25) return "#ccaa22";
+  return "#cc2222";
+}
 
 // ════════════════════════════════════════════════════════════════
-class TokenBarService {
-  private initialized = false;
-  private enabled = true;
+// КЛАСС
+// ════════════════════════════════════════════════════════════════
 
-  // ✅ Конструктор БЕЗ side effects — безопасно для top-level import
+class TokenBarService {
+  private ready = false;
+
+  // ✅ Конструктор ПУСТОЙ — никаких OBR вызовов, никаких side effects
   constructor() {}
 
-  // ── Инициализация (вызывать ТОЛЬКО после OBR.onReady) ────────
+  // ── Инициализация (вызывать ПОСЛЕ OBR.onReady) ───────────────
+
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.ready) return;
     try {
-      const ready = await OBR.scene.isReady();
-      if (!ready) {
-        console.log("[TokenBarService] Scene not ready yet, skipping init");
-        return;
+      const sceneReady = await OBR.scene.isReady();
+      if (sceneReady) {
+        this.ready = true;
+        console.log("[TokenBarService] Initialized");
+      } else {
+        console.log("[TokenBarService] Scene not ready, skipping init");
       }
-      this.initialized = true;
-      console.log("[TokenBarService] Initialized successfully");
     } catch (e) {
-      console.warn("[TokenBarService] Init error (non-fatal):", e);
+      console.warn("[TokenBarService] Init failed (non-fatal):", e);
     }
   }
 
-  // ── Включение/выключение ─────────────────────────────────────
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-    if (!enabled) {
-      this.removeAllBars().catch(() => {});
-    }
-  }
+  // ── Проверка готовности ──────────────────────────────────────
 
-  isEnabled(): boolean {
-    return this.enabled;
-  }
-
-  // ── Проверка готовности сцены ────────────────────────────────
   private async ensureReady(): Promise<boolean> {
+    if (this.ready) return true;
     try {
-      const ready = await OBR.scene.isReady();
-      if (!ready) return false;
-      if (!this.initialized) {
-        await this.initialize();
+      const sceneReady = await OBR.scene.isReady();
+      if (sceneReady) {
+        this.ready = true;
+        return true;
       }
-      return this.initialized;
     } catch {
-      return false;
+      // молча
     }
+    return false;
   }
 
   // ── Чтение метаданных из item ────────────────────────────────
-  private getBarMeta(item: Item): TokenBarMeta | null {
+
+  private getBarMeta(item: { metadata?: Record<string, unknown> }): BarMeta | null {
     try {
-      const meta = item.metadata?.[META_KEY];
+      const raw = item.metadata?.[META_KEY];
       if (
-        meta &&
-        typeof meta === "object" &&
-        "tokenId" in (meta as object) &&
-        "barType" in (meta as object) &&
-        "role" in (meta as object)
+        raw &&
+        typeof raw === "object" &&
+        raw !== null &&
+        "tokenId" in raw &&
+        "barType" in raw &&
+        "role" in raw
       ) {
-        return meta as TokenBarMeta;
+        return raw as BarMeta;
       }
     } catch {
       // metadata corrupted — ignore
@@ -105,215 +111,244 @@ class TokenBarService {
     return null;
   }
 
-  // ── Поиск существующих баров для токена ──────────────────────
-  private async findBars(
+  // ── Поиск существующих баров ─────────────────────────────────
+
+  private async findAllBarIds(tokenId: string): Promise<string[]> {
+    try {
+      const items = await OBR.scene.items.getItems();
+      return items
+        .filter((item) => {
+          const m = this.getBarMeta(item);
+          return m !== null && m.tokenId === tokenId;
+        })
+        .map((item) => item.id);
+    } catch {
+      return [];
+    }
+  }
+
+  private async findFillItemId(
     tokenId: string,
     barType: "hp" | "mana"
-  ): Promise<{ bgItem: Item | null; fillItem: Item | null }> {
-    const items = await OBR.scene.items.getItems();
-    let bgItem: Item | null = null;
-    let fillItem: Item | null = null;
-
-    for (const item of items) {
-      const meta = this.getBarMeta(item);
-      if (!meta) continue;
-      if (meta.tokenId !== tokenId || meta.barType !== barType) continue;
-      if (meta.role === "bg") bgItem = item;
-      if (meta.role === "fill") fillItem = item;
+  ): Promise<string | null> {
+    try {
+      const items = await OBR.scene.items.getItems();
+      const found = items.find((item) => {
+        const m = this.getBarMeta(item);
+        return (
+          m !== null &&
+          m.tokenId === tokenId &&
+          m.barType === barType &&
+          m.role === "fill"
+        );
+      });
+      return found?.id ?? null;
+    } catch {
+      return null;
     }
-
-    return { bgItem, fillItem };
   }
 
-  // ── Цвет HP в зависимости от процента ────────────────────────
-  private getHpColor(ratio: number): string {
-    if (ratio > 0.5) return HP_COLORS.high;
-    if (ratio > 0.25) return HP_COLORS.mid;
-    return HP_COLORS.low;
-  }
+  // ── Построение пары shape'ов (bg + fill) ─────────────────────
 
-  // ════════════════════════════════════════════════════════════════
-  // ОСНОВНЫЕ ПУБЛИЧНЫЕ МЕТОДЫ
-  // ════════════════════════════════════════════════════════════════
-
-  /** Обновить (или создать) один бар на токене */
-  async updateBar(
+  private buildBarPair(
     tokenId: string,
+    barType: "hp" | "mana",
     current: number,
     max: number,
-    barType: "hp" | "mana"
+    yOffset: number
+  ) {
+    const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
+
+    const bgColor = barType === "hp" ? "#3a1818" : "#1a2a3a";
+    const borderColor = barType === "hp" ? "#661111" : "#224466";
+    const fillColor = barType === "hp" ? hpColor(ratio) : "#4488cc";
+
+    const bg = buildShape()
+      .shapeType("RECTANGLE")
+      .width(BAR_W)
+      .height(BAR_H)
+      .position({ x: -BAR_W / 2, y: yOffset })
+      .attachedTo(tokenId)
+      .layer("ATTACHMENT")
+      .locked(true)
+      .disableHit(true)
+      .visible(true)
+      .zIndex(2)
+      .name(`${EXTENSION_ID}-${barType}-bg`)
+      .fillColor(bgColor)
+      .strokeColor(borderColor)
+      .strokeWidth(1)
+      .metadata({
+        [META_KEY]: { tokenId, barType, role: "bg" } as BarMeta,
+      })
+      .build();
+
+    const fill = buildShape()
+      .shapeType("RECTANGLE")
+      .width(Math.max(1, BAR_W * ratio))
+      .height(BAR_H)
+      .position({ x: -BAR_W / 2, y: yOffset })
+      .attachedTo(tokenId)
+      .layer("ATTACHMENT")
+      .locked(true)
+      .disableHit(true)
+      .visible(true)
+      .zIndex(3)
+      .name(`${EXTENSION_ID}-${barType}-fill`)
+      .fillColor(fillColor)
+      .strokeColor(borderColor)
+      .strokeWidth(0)
+      .metadata({
+        [META_KEY]: { tokenId, barType, role: "fill" } as BarMeta,
+      })
+      .build();
+
+    return [bg, fill];
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // ПУБЛИЧНЫЕ МЕТОДЫ (API для store и App)
+  // ════════════════════════════════════════════════════════════════
+
+  /**
+   * Создать бары с нуля для токена
+   */
+  async createBars(
+    tokenId: string,
+    hpCur: number,
+    hpMax: number,
+    manaCur: number,
+    manaMax: number,
+    _useManaAsHp?: boolean
   ): Promise<void> {
-    if (!this.enabled) return;
+    if (!(await this.ensureReady())) return;
 
     try {
-      if (!(await this.ensureReady())) return;
+      // Сначала удалить старые (если есть)
+      await this.removeBars(tokenId);
 
-      const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
-      const yOffset = barType === "hp" ? HP_Y_OFFSET : MANA_Y_OFFSET;
+      const shapes = [
+        ...this.buildBarPair(tokenId, "hp", hpCur, hpMax, HP_Y),
+        ...this.buildBarPair(tokenId, "mana", manaCur, manaMax, MANA_Y),
+      ];
 
-      const fillColor =
-        barType === "hp" ? this.getHpColor(ratio) : MANA_COLORS.fill;
-      const bgColor = barType === "hp" ? HP_COLORS.bg : MANA_COLORS.bg;
-      const borderColor =
-        barType === "hp" ? HP_COLORS.border : MANA_COLORS.border;
+      await OBR.scene.items.addItems(shapes);
+    } catch (e) {
+      console.warn("[TokenBarService] createBars failed:", e);
+    }
+  }
 
-      const { bgItem, fillItem } = await this.findBars(tokenId, barType);
+  /**
+   * Обновить бары (или создать если не существуют)
+   */
+  async updateBars(
+    tokenId: string,
+    hpCur: number,
+    hpMax: number,
+    manaCur: number,
+    manaMax: number,
+    useManaAsHp?: boolean
+  ): Promise<void> {
+    if (!(await this.ensureReady())) return;
 
-      if (bgItem && fillItem) {
-        // ── Оба бара существуют → обновляем fill ──────────────
-        await OBR.scene.items.updateItems([fillItem.id], (items) => {
-          for (const item of items) {
-            if (isShape(item)) {
-              item.width = Math.max(1, BAR_WIDTH * ratio);
-              item.style.fillColor = fillColor;
-            }
-          }
-        });
+    try {
+      // Проверяем существуют ли бары
+      const existingIds = await this.findAllBarIds(tokenId);
+
+      if (existingIds.length >= 4) {
+        // Бары существуют — обновляем только fill'ы
+        await this.updateSingleFill(tokenId, "hp", hpCur, hpMax);
+        await this.updateSingleFill(tokenId, "mana", manaCur, manaMax);
       } else {
-        // ── Нет баров (или частичные) → пересоздаём оба ───────
-        const toDelete: string[] = [];
-        if (bgItem) toDelete.push(bgItem.id);
-        if (fillItem) toDelete.push(fillItem.id);
-        if (toDelete.length > 0) {
-          await OBR.scene.items.deleteItems(toDelete);
+        // Баров нет или неполный набор — пересоздаём
+        await this.createBars(tokenId, hpCur, hpMax, manaCur, manaMax, useManaAsHp);
+      }
+    } catch (e) {
+      console.warn("[TokenBarService] updateBars failed:", e);
+    }
+  }
+
+  /**
+   * Обновить один fill-бар
+   */
+  private async updateSingleFill(
+    tokenId: string,
+    barType: "hp" | "mana",
+    current: number,
+    max: number
+  ): Promise<void> {
+    const fillId = await this.findFillItemId(tokenId, barType);
+    if (!fillId) return;
+
+    const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
+    const color = barType === "hp" ? hpColor(ratio) : "#4488cc";
+
+    await OBR.scene.items.updateItems([fillId], (items) => {
+      for (const item of items) {
+        if (isShape(item)) {
+          item.width = Math.max(1, BAR_W * ratio);
+          item.style.fillColor = color;
         }
-
-        // Фон бара
-        const bgShape = buildShape()
-          .shapeType("RECTANGLE")
-          .width(BAR_WIDTH)
-          .height(BAR_HEIGHT)
-          .position({ x: -BAR_WIDTH / 2, y: yOffset })
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .zIndex(2)
-          .name(`${EXTENSION_ID}-${barType}-bg`)
-          .fillColor(bgColor)
-          .strokeColor(borderColor)
-          .strokeWidth(1)
-          .metadata({
-            [META_KEY]: {
-              tokenId,
-              barType,
-              role: "bg",
-            } satisfies TokenBarMeta,
-          })
-          .build();
-
-        // Заполнение бара
-        const fillShape = buildShape()
-          .shapeType("RECTANGLE")
-          .width(Math.max(1, BAR_WIDTH * ratio))
-          .height(BAR_HEIGHT)
-          .position({ x: -BAR_WIDTH / 2, y: yOffset })
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .zIndex(3)
-          .name(`${EXTENSION_ID}-${barType}-fill`)
-          .fillColor(fillColor)
-          .strokeColor(borderColor)
-          .strokeWidth(0)
-          .metadata({
-            [META_KEY]: {
-              tokenId,
-              barType,
-              role: "fill",
-            } satisfies TokenBarMeta,
-          })
-          .build();
-
-        await OBR.scene.items.addItems([bgShape, fillShape]);
       }
-    } catch (e) {
-      // Ошибка НЕ должна крашить приложение
-      console.warn(`[TokenBarService] updateBar(${barType}) failed:`, e);
-    }
+    });
   }
 
-  /** Обновить HP + Mana бары для юнита */
-  async updateUnitBars(unit: {
-    owlbearTokenId?: string;
-    health: { current: number; max: number };
-    mana: { current: number; max: number };
-  }): Promise<void> {
-    if (!unit.owlbearTokenId) return;
+  /**
+   * Удалить все бары конкретного токена
+   */
+  async removeBars(tokenId: string): Promise<void> {
+    if (!(await this.ensureReady())) return;
 
-    await this.updateBar(
-      unit.owlbearTokenId,
-      unit.health.current,
-      unit.health.max,
-      "hp"
-    );
-    await this.updateBar(
-      unit.owlbearTokenId,
-      unit.mana.current,
-      unit.mana.max,
-      "mana"
-    );
-  }
-
-  /** Удалить все бары конкретного токена */
-  async removeBarsForToken(tokenId: string): Promise<void> {
     try {
-      if (!(await this.ensureReady())) return;
-
-      const items = await OBR.scene.items.getItems();
-      const toDelete = items
-        .filter((item) => {
-          const meta = this.getBarMeta(item);
-          return meta !== null && meta.tokenId === tokenId;
-        })
-        .map((i) => i.id);
-
-      if (toDelete.length > 0) {
-        await OBR.scene.items.deleteItems(toDelete);
+      const ids = await this.findAllBarIds(tokenId);
+      if (ids.length > 0) {
+        await OBR.scene.items.deleteItems(ids);
       }
     } catch (e) {
-      console.warn("[TokenBarService] removeBarsForToken failed:", e);
+      console.warn("[TokenBarService] removeBars failed:", e);
     }
   }
 
-  /** Удалить ВСЕ бары расширения со сцены */
+  /**
+   * Удалить ВСЕ бары расширения со сцены
+   */
   async removeAllBars(): Promise<void> {
+    if (!(await this.ensureReady())) return;
+
     try {
-      if (!(await this.ensureReady())) return;
-
       const items = await OBR.scene.items.getItems();
-      const toDelete = items
+      const ids = items
         .filter((item) => this.getBarMeta(item) !== null)
-        .map((i) => i.id);
+        .map((item) => item.id);
 
-      if (toDelete.length > 0) {
-        await OBR.scene.items.deleteItems(toDelete);
-        console.log(`[TokenBarService] Removed ${toDelete.length} bar shapes`);
+      if (ids.length > 0) {
+        await OBR.scene.items.deleteItems(ids);
+        console.log(`[TokenBarService] Removed ${ids.length} bar shapes`);
       }
     } catch (e) {
       console.warn("[TokenBarService] removeAllBars failed:", e);
     }
   }
 
-  /** Обновить бары для ВСЕХ юнитов из массива */
-  async refreshAllUnits(
-    units: Array<{
-      owlbearTokenId?: string;
-      health: { current: number; max: number };
-      mana: { current: number; max: number };
-    }>
-  ): Promise<void> {
+  /**
+   * Синхронизировать бары для всех юнитов
+   */
+  async syncAllBars(units: UnitLike[]): Promise<void> {
     for (const unit of units) {
-      await this.updateUnitBars(unit);
+      if (!unit.owlbearTokenId) continue;
+      await this.updateBars(
+        unit.owlbearTokenId,
+        unit.health.current,
+        unit.health.max,
+        unit.mana.current,
+        unit.mana.max,
+        unit.useManaAsHp
+      );
     }
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Синглтон — конструктор БЕЗ side effects, безопасен для импорта
+// NAMED EXPORT — синглтон, конструктор без side effects
 // ═══════════════════════════════════════════════════════════════
-const tokenBarService = new TokenBarService();
-export default tokenBarService;
+export const tokenBarService = new TokenBarService();
