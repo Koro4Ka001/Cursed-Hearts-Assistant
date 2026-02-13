@@ -5,7 +5,6 @@ import { useGameStore } from './stores/useGameStore';
 import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
 import { diceService, DICE_BROADCAST_CHANNEL } from './services/diceService';
-import { tokenBarService } from './services/tokenBarService';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
 import { CombatTab } from './components/tabs/CombatTab';
@@ -16,10 +15,6 @@ import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
-
-// ═══════════════════════════════════════════════════════════════
-// ERROR BOUNDARY
-// ═══════════════════════════════════════════════════════════════
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -68,10 +63,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TABS
-// ═══════════════════════════════════════════════════════════════
-
 type TabId = 'combat' | 'magic' | 'cards' | 'actions' | 'notes' | 'settings';
 
 interface Tab {
@@ -88,10 +79,6 @@ const TABS: Tab[] = [
   { id: 'settings', icon: '⚙️' }
 ];
 
-// ═══════════════════════════════════════════════════════════════
-// APP
-// ═══════════════════════════════════════════════════════════════
-
 export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const initRef = useRef(false);
@@ -104,9 +91,7 @@ export function App() {
   const setConnection = useGameStore((s) => s.setConnection);
   const startAutoSync = useGameStore((s) => s.startAutoSync);
   const activeEffect = useGameStore((s) => s.activeEffect);
-  // Достаём settings БЕЗОПАСНО через селектор
   const googleDocsUrl = useGameStore((s) => s.settings.googleDocsUrl);
-  const showTokenBars = useGameStore((s) => s.settings.showTokenBars);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -114,15 +99,12 @@ export function App() {
 
     const init = async () => {
       try {
-        // 1. OBR SDK
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. Dice Service
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-        // 3. Broadcast listener
         try {
           OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
             const data = event.data as { message?: string } | undefined;
@@ -131,24 +113,10 @@ export function App() {
               OBR.notification.show(message);
             }
           });
-          console.log('[App] Broadcast listener установлен');
         } catch (e) {
           console.warn('[App] Broadcast setup failed:', e);
         }
 
-        // 4. Token Bars — обёрнуто в отдельный try/catch
-        try {
-          await tokenBarService.initialize();
-          const currentState = useGameStore.getState();
-          if (currentState.settings.showTokenBars !== false) {
-            await tokenBarService.syncAllBars(currentState.units);
-          }
-          console.log('[App] Token bars инициализированы');
-        } catch (e) {
-          console.warn('[App] Token bars init failed (non-fatal):', e);
-        }
-
-        // 5. Google Docs
         const currentUrl = useGameStore.getState().settings.googleDocsUrl;
         if (currentUrl) {
           docsService.setUrl(currentUrl);
@@ -169,10 +137,7 @@ export function App() {
     };
 
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ── Форматирование времени последней синхронизации ────────────
 
   const formatLastSync = () => {
     if (!connections.lastSyncTime) return '—';
@@ -183,8 +148,6 @@ export function App() {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // ── CSS-класс экранного эффекта ──────────────────────────────
-
   const effectClass = activeEffect
     ? ({
         shake: 'screen-shake',
@@ -193,8 +156,6 @@ export function App() {
         'crit-fail': 'screen-flash-blood'
       } as Record<string, string>)[activeEffect] ?? ''
     : '';
-
-  // ── Loading ──────────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -215,14 +176,11 @@ export function App() {
     );
   }
 
-  // ── Render ───────────────────────────────────────────────────
-
   return (
     <div className={cn(
       'h-screen flex flex-col bg-abyss text-bone overflow-hidden app-frame',
       effectClass
     )}>
-      {/* Декоративные руны */}
       <div className="bg-runes">
         <span className="bg-rune">ᚱ</span>
         <span className="bg-rune">ᛟ</span>
@@ -232,22 +190,18 @@ export function App() {
         <span className="bg-rune">ᛊ</span>
       </div>
 
-      {/* Тлеющие угольки */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="ember ember-1" />
         <div className="ember ember-2" />
         <div className="ember ember-3" />
       </div>
 
-      {/* Виньетка */}
       <div className="app-vignette" />
 
-      {/* Контент */}
       <div className="relative z-10 flex flex-col h-full">
         <UnitSelector />
         <StatBars />
 
-        {/* Вкладки */}
         <div className="flex border-b border-edge-bone bg-obsidian shrink-0">
           {TABS.map(tab => (
             <button
@@ -264,7 +218,6 @@ export function App() {
           ))}
         </div>
 
-        {/* Контент вкладки */}
         <div className="flex-1 overflow-hidden" key={activeTab}>
           <div className="tab-content-enter h-full">
             {activeTab === 'combat' && (
@@ -288,7 +241,6 @@ export function App() {
           </div>
         </div>
 
-        {/* Статус бар */}
         <div className="h-6 flex items-center justify-between px-3 bg-obsidian border-t border-edge-bone text-[9px] shrink-0 font-cinzel tracking-wider uppercase">
           <div className="flex items-center gap-3">
             <span className={connections.owlbear ? 'text-green-500' : 'text-blood'}>
@@ -307,7 +259,6 @@ export function App() {
         </div>
       </div>
 
-      {/* Уведомления */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(notification => (
           <div key={notification.id} className="pointer-events-auto">
