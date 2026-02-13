@@ -1,3 +1,4 @@
+// src/stores/useGameStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Unit, Settings, ConnectionStatus, Notification, CombatLogEntry, Resource } from '../types';
@@ -5,6 +6,8 @@ import { docsService } from '../services/docsService';
 import { updateTokenHp } from '../services/hpTrackerService';
 import { tokenBarService } from '../services/tokenBarService';
 import { generateId } from '../utils/dice';
+
+// ── Дефолтный юнит ────────────────────────────────────────────
 
 const createDefaultUnit = (): Unit => ({
   id: generateId(),
@@ -42,7 +45,8 @@ const createDefaultUnit = (): Unit => ({
 
 const MAX_NOTIFICATIONS = 3;
 
-/** Helper: обновить бары на карте для юнита */
+// ── Helper: обновить бары на карте ─────────────────────────────
+
 async function syncBarsForUnit(unit: Unit, showBars: boolean): Promise<void> {
   if (!showBars || !unit.owlbearTokenId) return;
   try {
@@ -56,6 +60,8 @@ async function syncBarsForUnit(unit: Unit, showBars: boolean): Promise<void> {
     console.warn('[Store] Token bar sync failed:', e);
   }
 }
+
+// ── Интерфейс стора ────────────────────────────────────────────
 
 interface GameState {
   // === PERSISTED ===
@@ -114,6 +120,10 @@ interface GameState {
   setConnection: (key: keyof ConnectionStatus, value: boolean | number | string) => void;
 }
 
+// ════════════════════════════════════════════════════════════════
+// STORE
+// ════════════════════════════════════════════════════════════════
+
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
@@ -138,7 +148,9 @@ export const useGameStore = create<GameState>()(
       autoSyncIntervalId: null,
       activeEffect: null,
 
-      // === UNITS ===
+      // ══════════════════════════════════════════════════════════
+      // UNITS
+      // ══════════════════════════════════════════════════════════
 
       addUnit: (partial) => {
         const newUnit = { ...createDefaultUnit(), ...partial };
@@ -156,7 +168,9 @@ export const useGameStore = create<GameState>()(
         }));
 
         // Если изменился owlbearTokenId — пересоздать бары
-        const showBars = get().settings.showTokenBars ?? true;
+        const currentSettings = get().settings;
+        const showBars = currentSettings.showTokenBars ?? true;
+
         if (showBars && partial.owlbearTokenId !== undefined) {
           // Удалить со старого токена
           if (oldUnit?.owlbearTokenId && oldUnit.owlbearTokenId !== partial.owlbearTokenId) {
@@ -201,7 +215,9 @@ export const useGameStore = create<GameState>()(
         return state.units.find(u => u.id === state.selectedUnitId);
       },
 
-      // === HP ===
+      // ══════════════════════════════════════════════════════════
+      // HP
+      // ══════════════════════════════════════════════════════════
 
       setHP: async (unitId, hp) => {
         const state = get();
@@ -234,8 +250,9 @@ export const useGameStore = create<GameState>()(
           }
         }
 
-        // ★ Token Bars на карте
-        if (unit.owlbearTokenId && (state.settings.showTokenBars ?? true)) {
+        // Token Bars на карте
+        const currentSettings = get().settings;
+        if (unit.owlbearTokenId && (currentSettings.showTokenBars ?? true)) {
           tokenBarService.updateBars(
             unit.owlbearTokenId,
             hp, unit.health.max,
@@ -277,7 +294,9 @@ export const useGameStore = create<GameState>()(
         }
       },
 
-      // === MANA ===
+      // ══════════════════════════════════════════════════════════
+      // MANA
+      // ══════════════════════════════════════════════════════════
 
       setMana: async (unitId, mana) => {
         const state = get();
@@ -301,8 +320,9 @@ export const useGameStore = create<GameState>()(
           }
         }
 
-        // ★ Token Bars на карте
-        if (unit.owlbearTokenId && (state.settings.showTokenBars ?? true)) {
+        // Token Bars на карте
+        const currentSettings = get().settings;
+        if (unit.owlbearTokenId && (currentSettings.showTokenBars ?? true)) {
           tokenBarService.updateBars(
             unit.owlbearTokenId,
             unit.health.current, unit.health.max,
@@ -336,7 +356,9 @@ export const useGameStore = create<GameState>()(
         get().addCombatLog(unit.shortName, 'Мана восстановлена', `+${amount} маны`);
       },
 
-      // === RESOURCES ===
+      // ══════════════════════════════════════════════════════════
+      // RESOURCES
+      // ══════════════════════════════════════════════════════════
 
       setResource: async (unitId, resourceId, current) => {
         const state = get();
@@ -381,7 +403,9 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      // === NOTES ===
+      // ══════════════════════════════════════════════════════════
+      // NOTES
+      // ══════════════════════════════════════════════════════════
 
       setNotes: (unitId, notes) => {
         set((state) => ({
@@ -391,7 +415,9 @@ export const useGameStore = create<GameState>()(
         }));
       },
 
-      // === SYNC ===
+      // ══════════════════════════════════════════════════════════
+      // SYNC
+      // ══════════════════════════════════════════════════════════
 
       syncFromDocs: async (unitId, showNotifications = true) => {
         const state = get();
@@ -437,10 +463,11 @@ export const useGameStore = create<GameState>()(
               await updateTokenHp(unit.owlbearTokenId, result.health.current, result.health.max);
             }
 
-            // ★ Token Bars — синхронизируем после обновления данных
+            // Token Bars — синхронизируем после обновления данных
             const updatedUnit = get().units.find(u => u.id === unitId);
+            const currentSettings = get().settings;
             if (updatedUnit) {
-              await syncBarsForUnit(updatedUnit, state.settings.showTokenBars ?? true);
+              await syncBarsForUnit(updatedUnit, currentSettings.showTokenBars ?? true);
             }
 
             set((s) => ({
@@ -500,7 +527,9 @@ export const useGameStore = create<GameState>()(
         }
       },
 
-      // === SETTINGS ===
+      // ══════════════════════════════════════════════════════════
+      // SETTINGS
+      // ══════════════════════════════════════════════════════════
 
       updateSettings: (partial) => {
         set((state) => ({
@@ -516,17 +545,20 @@ export const useGameStore = create<GameState>()(
           get().startAutoSync();
         }
 
-        // ★ Token Bars — включение/выключение
+        // Token Bars — включение/выключение
         if (partial.showTokenBars !== undefined) {
           if (partial.showTokenBars) {
-            tokenBarService.syncAllBars(get().units).catch(console.warn);
+            const currentUnits = get().units;
+            tokenBarService.syncAllBars(currentUnits).catch(console.warn);
           } else {
             tokenBarService.removeAllBars().catch(console.warn);
           }
         }
       },
 
-      // === UI ===
+      // ══════════════════════════════════════════════════════════
+      // UI
+      // ══════════════════════════════════════════════════════════
 
       setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -567,8 +599,9 @@ export const useGameStore = create<GameState>()(
           combatLog: [...state.combatLog, entry].slice(-100)
         }));
 
-        const settings = get().settings;
-        if (settings.writeLogs && settings.googleDocsUrl) {
+        // Достаём settings через get() — НЕ голую переменную!
+        const currentSettings = get().settings;
+        if (currentSettings.writeLogs && currentSettings.googleDocsUrl) {
           const unit = get().units.find(u => u.shortName === unitName);
           if (unit?.googleDocsHeader) {
             docsService.log(unit.googleDocsHeader, `${action}: ${details}`).catch(console.error);
@@ -593,11 +626,16 @@ export const useGameStore = create<GameState>()(
   )
 );
 
-// Init
+// ── Инициализация при загрузке модуля ──────────────────────────
+
 const initStore = () => {
-  const state = useGameStore.getState();
-  if (state.settings.googleDocsUrl) {
-    docsService.setUrl(state.settings.googleDocsUrl);
+  try {
+    const state = useGameStore.getState();
+    if (state.settings.googleDocsUrl) {
+      docsService.setUrl(state.settings.googleDocsUrl);
+    }
+  } catch (e) {
+    console.warn('[Store] initStore failed:', e);
   }
 };
 initStore();
