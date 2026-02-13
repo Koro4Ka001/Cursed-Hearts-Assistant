@@ -47,7 +47,6 @@ export function SettingsTab() {
       if (result.success) {
         addNotification('Подключение успешно!', 'success');
         setConnection('docs', true);
-        // Запускаем авто-синхронизацию после успешного подключения
         startAutoSync();
       } else {
         addNotification(`Ошибка: ${result.error}`, 'error');
@@ -58,7 +57,6 @@ export function SettingsTab() {
     }
   };
   
-  // Отладочная кнопка для Dice
   const handleDebugDice = async () => {
     try {
       const metadata = await OBR.player.getMetadata();
@@ -172,6 +170,12 @@ export function SettingsTab() {
                   checked={settings.writeLogs ?? true}
                   onChange={(v) => updateSettings({ writeLogs: v })}
                   label="Логировать действия"
+                />
+                {/* ★ ВОТ ПРАВИЛЬНОЕ МЕСТО для чекбокса Token Bars ★ */}
+                <Checkbox
+                  checked={settings.showTokenBars ?? true}
+                  onChange={(v) => updateSettings({ showTokenBars: v })}
+                  label="🗺️ HP/Mana бары на токенах (видны всем)"
                 />
               </div>
               
@@ -1023,7 +1027,6 @@ function SpellsEditor({
               placeholder="3 или d4 или 2d6+1"
             />
             
-            {/* Новый компонент выбора элементов */}
             <ElementsPicker
               selected={editingSpell.elements ?? []}
               onChange={(elements) => updateSpell(editingSpell.id, { elements })}
@@ -1058,13 +1061,11 @@ function SpellsEditor({
               onChange={(v) => updateSpell(editingSpell.id, { equipmentBonus: v })}
             />
             
-            {/* Многошаговая механика */}
             <div className="border-t border-edge-bone pt-3 mt-3">
               <Checkbox
                 checked={editingSpell.isMultiStep ?? false}
                 onChange={(v) => {
                   const updates: Partial<Spell> = { isMultiStep: v };
-                  // При включении — заполняем дефолтами если пусто
                   if (v && !editingSpell.elementTable) {
                     updates.elementTable = { ...DEFAULT_ELEMENT_TABLE };
                   }
@@ -1078,7 +1079,6 @@ function SpellsEditor({
               
               {editingSpell.isMultiStep && (
                 <div className="mt-3 space-y-3">
-                  {/* Таблица d12 → элемент */}
                   <div>
                     <div className="text-xs text-faded uppercase mb-2">Таблица d12 → Элемент</div>
                     <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
@@ -1103,7 +1103,6 @@ function SpellsEditor({
                     </div>
                   </div>
                   
-                  {/* Таблица tier'ов урона */}
                   <div>
                     <div className="text-xs text-faded uppercase mb-2">Tier'ы урона (по d20)</div>
                     <div className="space-y-2">
@@ -1343,8 +1342,3 @@ function ResourcesEditor({
     </div>
   );
 }
-<Checkbox
-  checked={settings.showTokenBars ?? true}
-  onChange={(v) => updateSettings({ showTokenBars: v })}
-  label="🗺️ HP/Mana бары на токенах (видны всем)"
-/>
