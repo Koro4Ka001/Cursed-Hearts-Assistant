@@ -4,54 +4,28 @@ import { persist } from 'zustand/middleware';
 import type { Unit, Settings, ConnectionStatus, Notification, CombatLogEntry, Resource } from '../types';
 import { docsService } from '../services/docsService';
 import { updateTokenHp } from '../services/hpTrackerService';
+import { tokenBarService } from '../services/tokenBarService';
 import { generateId } from '../utils/dice';
 
 const createDefaultUnit = (): Unit => ({
-  id: generateId(),
-  name: 'Новый персонаж',
-  shortName: 'Новый',
-  googleDocsHeader: '',
-  owlbearTokenId: undefined,
-  health: { current: 100, max: 100 },
-  mana: { current: 50, max: 50 },
-  stats: {
-    physicalPower: 0, dexterity: 0, vitality: 0,
-    intelligence: 0, charisma: 0, initiative: 0
-  },
-  proficiencies: {
-    swords: 0, axes: 0, hammers: 0,
-    polearms: 0, unarmed: 0, bows: 0
-  },
+  id: generateId(), name: 'Новый персонаж', shortName: 'Новый',
+  googleDocsHeader: '', owlbearTokenId: undefined,
+  health: { current: 100, max: 100 }, mana: { current: 50, max: 50 },
+  stats: { physicalPower: 0, dexterity: 0, vitality: 0, intelligence: 0, charisma: 0, initiative: 0 },
+  proficiencies: { swords: 0, axes: 0, hammers: 0, polearms: 0, unarmed: 0, bows: 0 },
   magicBonuses: {},
-  armor: {
-    slashing: 0, piercing: 0, bludgeoning: 0, chopping: 0,
-    magicBase: 0, magicOverrides: {}, undead: 0
-  },
-  damageMultipliers: {},
-  weapons: [],
-  spells: [],
-  resources: [],
-  customActions: [],
-  hasRokCards: false,
-  rokDeckResourceId: undefined,
-  hasDoubleShot: false,
-  doubleShotThreshold: 18,
-  notes: '',
-  useManaAsHp: false
+  armor: { slashing: 0, piercing: 0, bludgeoning: 0, chopping: 0, magicBase: 0, magicOverrides: {}, undead: 0 },
+  damageMultipliers: {}, weapons: [], spells: [], resources: [], customActions: [],
+  hasRokCards: false, rokDeckResourceId: undefined,
+  hasDoubleShot: false, doubleShotThreshold: 18, notes: '', useManaAsHp: false
 });
 
 const MAX_NOTIFICATIONS = 3;
 
 interface GameState {
-  units: Unit[];
-  selectedUnitId: string | null;
-  settings: Settings;
-  activeTab: string;
-  connections: ConnectionStatus;
-  notifications: Notification[];
-  combatLog: CombatLogEntry[];
-  isSyncing: boolean;
-  autoSyncIntervalId: number | null;
+  units: Unit[]; selectedUnitId: string | null; settings: Settings;
+  activeTab: string; connections: ConnectionStatus; notifications: Notification[];
+  combatLog: CombatLogEntry[]; isSyncing: boolean; autoSyncIntervalId: number | null;
   activeEffect: string | null;
 
   addUnit: (unit?: Partial<Unit>) => void;
@@ -84,401 +58,216 @@ interface GameState {
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
-      units: [],
-      selectedUnitId: null,
+      units: [], selectedUnitId: null,
       settings: {
-        googleDocsUrl: '',
-        syncHP: true,
-        syncMana: true,
-        syncResources: true,
-        autoSyncInterval: 5,
-        writeLogs: true,
-        showTokenBars: true
+        googleDocsUrl: '', syncHP: true, syncMana: true, syncResources: true,
+        autoSyncInterval: 5, writeLogs: true, showTokenBars: true
       },
       activeTab: 'combat',
       connections: { owlbear: false, docs: false, dice: 'local' },
-      notifications: [],
-      combatLog: [],
-      isSyncing: false,
-      autoSyncIntervalId: null,
-      activeEffect: null,
+      notifications: [], combatLog: [], isSyncing: false,
+      autoSyncIntervalId: null, activeEffect: null,
 
+      // ── Units ──
       addUnit: (partial) => {
-        const newUnit = { ...createDefaultUnit(), ...partial };
-        set((state) => ({
-          units: [...state.units, newUnit],
-          selectedUnitId: state.selectedUnitId ?? newUnit.id
-        }));
+        const u = { ...createDefaultUnit(), ...partial };
+        set(s => ({ units: [...s.units, u], selectedUnitId: s.selectedUnitId ?? u.id }));
       },
 
       updateUnit: (id, partial) => {
-        set((state) => ({
-          units: state.units.map(u => u.id === id ? { ...u, ...partial } : u)
-        }));
+        const old = get().units.find(u => u.id === id);
+        set(s => ({ units: s.units.map(u => u.id === id ? { ...u, ...partial } : u) }));
+        const show = get().settings.showTokenBars ?? true;
+        if (show && partial.owlbearTokenId !== undefined) {
+          if (old?.owlbearTokenId && old.owlbearTokenId !== partial.owlbearTokenId) {
+            tokenBarService.removeBars(old.owlbearTokenId).catch(console.warn);
+          }
+          if (partial.owlbearTokenId) {
+            const upd = get().units.find(u => u.id === id);
+            if (upd) tokenBarService.createBars(partial.owlbearTokenId, upd.health.current, upd.health.max, upd.mana.current, upd.mana.max, upd.useManaAsHp).catch(console.warn);
+          }
+        }
       },
 
       deleteUnit: (id) => {
-        set((state) => {
-          const newUnits = state.units.filter(u => u.id !== id);
-          const newSelectedId = state.selectedUnitId === id
-            ? (newUnits[0]?.id ?? null)
-            : state.selectedUnitId;
-          return { units: newUnits, selectedUnitId: newSelectedId };
+        const u = get().units.find(x => x.id === id);
+        if (u?.owlbearTokenId) tokenBarService.removeBars(u.owlbearTokenId).catch(console.warn);
+        set(s => {
+          const nu = s.units.filter(x => x.id !== id);
+          return { units: nu, selectedUnitId: s.selectedUnitId === id ? (nu[0]?.id ?? null) : s.selectedUnitId };
         });
       },
 
       selectUnit: (id) => set({ selectedUnitId: id }),
+      getSelectedUnit: () => { const s = get(); return s.units.find(u => u.id === s.selectedUnitId); },
 
-      getSelectedUnit: () => {
-        const state = get();
-        return state.units.find(u => u.id === state.selectedUnitId);
-      },
-
+      // ── HP ──
       setHP: async (unitId, hp) => {
-        const state = get();
-        const unit = state.units.find(u => u.id === unitId);
-        if (!unit) return;
-
-        set((s) => ({
-          units: s.units.map(u =>
-            u.id === unitId
-              ? { ...u, health: { ...u.health, current: hp } }
-              : u
-          )
-        }));
-
-        if (state.settings.syncHP && unit.googleDocsHeader && state.settings.googleDocsUrl) {
-          try {
-            await docsService.setHealth(unit.googleDocsHeader, hp, unit.health.max);
-          } catch (error) {
-            console.error('Failed to sync HP to Docs:', error);
+        const s = get(); const u = s.units.find(x => x.id === unitId);
+        if (!u) return;
+        set(st => ({ units: st.units.map(x => x.id === unitId ? { ...x, health: { ...x.health, current: hp } } : x) }));
+        if (s.settings.syncHP && u.googleDocsHeader && s.settings.googleDocsUrl) {
+          try { await docsService.setHealth(u.googleDocsHeader, hp, u.health.max); } catch (e) { console.error('HP sync:', e); }
+        }
+        if (u.owlbearTokenId) {
+          try { await updateTokenHp(u.owlbearTokenId, hp, u.health.max); } catch (e) { console.error('HP tracker:', e); }
+          if (s.settings.showTokenBars ?? true) {
+            tokenBarService.updateBars(u.owlbearTokenId, hp, u.health.max, u.mana.current, u.mana.max, u.useManaAsHp).catch(console.warn);
           }
         }
-
-        if (unit.owlbearTokenId) {
-          try {
-            await updateTokenHp(unit.owlbearTokenId, hp, unit.health.max);
-          } catch (error) {
-            console.error('Failed to sync HP to HP Tracker:', error);
-          }
-        }
-
-        get().addCombatLog(unit.shortName, 'HP изменено', `${hp}/${unit.health.max}`);
+        get().addCombatLog(u.shortName, 'HP', `${hp}/${u.health.max}`);
       },
 
       takeDamage: async (unitId, damage) => {
-        const unit = get().units.find(u => u.id === unitId);
-        if (!unit) return;
-
-        if (unit.useManaAsHp) {
-          const newMana = unit.mana.current - damage;
-          await get().setMana(unitId, newMana);
-          get().addCombatLog(unit.shortName, 'Получен урон', `-${damage} маны`);
-        } else {
-          const newHP = unit.health.current - damage;
-          await get().setHP(unitId, newHP);
-          get().addCombatLog(unit.shortName, 'Получен урон', `-${damage} HP`);
-        }
+        const u = get().units.find(x => x.id === unitId); if (!u) return;
+        if (u.useManaAsHp) { await get().setMana(unitId, u.mana.current - damage); get().addCombatLog(u.shortName, 'Урон', `-${damage} маны`); }
+        else { await get().setHP(unitId, u.health.current - damage); get().addCombatLog(u.shortName, 'Урон', `-${damage} HP`); }
       },
 
       heal: async (unitId, amount) => {
-        const unit = get().units.find(u => u.id === unitId);
-        if (!unit) return;
-
-        if (unit.useManaAsHp) {
-          const newMana = Math.min(unit.mana.max, unit.mana.current + amount);
-          await get().setMana(unitId, newMana);
-          get().addCombatLog(unit.shortName, 'Исцеление', `+${amount} маны`);
-        } else {
-          const newHP = Math.min(unit.health.max, unit.health.current + amount);
-          await get().setHP(unitId, newHP);
-          get().addCombatLog(unit.shortName, 'Исцеление', `+${amount} HP`);
-        }
+        const u = get().units.find(x => x.id === unitId); if (!u) return;
+        if (u.useManaAsHp) { await get().setMana(unitId, Math.min(u.mana.max, u.mana.current + amount)); }
+        else { await get().setHP(unitId, Math.min(u.health.max, u.health.current + amount)); }
       },
 
+      // ── Mana ──
       setMana: async (unitId, mana) => {
-        const state = get();
-        const unit = state.units.find(u => u.id === unitId);
-        if (!unit) return;
-
-        set((s) => ({
-          units: s.units.map(u =>
-            u.id === unitId
-              ? { ...u, mana: { ...u.mana, current: mana } }
-              : u
-          )
-        }));
-
-        if (state.settings.syncMana && unit.googleDocsHeader && state.settings.googleDocsUrl) {
-          try {
-            await docsService.setMana(unit.googleDocsHeader, mana, unit.mana.max);
-          } catch (error) {
-            console.error('Failed to sync Mana to Docs:', error);
-          }
+        const s = get(); const u = s.units.find(x => x.id === unitId); if (!u) return;
+        set(st => ({ units: st.units.map(x => x.id === unitId ? { ...x, mana: { ...x.mana, current: mana } } : x) }));
+        if (s.settings.syncMana && u.googleDocsHeader && s.settings.googleDocsUrl) {
+          try { await docsService.setMana(u.googleDocsHeader, mana, u.mana.max); } catch (e) { console.error('Mana sync:', e); }
+        }
+        if (u.owlbearTokenId && (s.settings.showTokenBars ?? true)) {
+          tokenBarService.updateBars(u.owlbearTokenId, u.health.current, u.health.max, mana, u.mana.max, u.useManaAsHp).catch(console.warn);
         }
       },
 
       spendMana: async (unitId, amount) => {
-        const unit = get().units.find(u => u.id === unitId);
-        if (!unit) return false;
-
-        if (unit.mana.current < amount) {
-          get().addNotification(`Недостаточно маны! Нужно ${amount}, есть ${unit.mana.current}`, 'warning');
-          return false;
-        }
-
-        const newMana = unit.mana.current - amount;
-        await get().setMana(unitId, newMana);
-        get().addCombatLog(unit.shortName, 'Мана потрачена', `-${amount} маны`);
-        return true;
+        const u = get().units.find(x => x.id === unitId); if (!u) return false;
+        if (u.mana.current < amount) { get().addNotification(`Мана: ${u.mana.current}/${amount}`, 'warning'); return false; }
+        await get().setMana(unitId, u.mana.current - amount);
+        get().addCombatLog(u.shortName, 'Мана', `-${amount}`); return true;
       },
 
       restoreMana: async (unitId, amount) => {
-        const unit = get().units.find(u => u.id === unitId);
-        if (!unit) return;
-
-        const newMana = Math.min(unit.mana.max, unit.mana.current + amount);
-        await get().setMana(unitId, newMana);
-        get().addCombatLog(unit.shortName, 'Мана восстановлена', `+${amount} маны`);
+        const u = get().units.find(x => x.id === unitId); if (!u) return;
+        await get().setMana(unitId, Math.min(u.mana.max, u.mana.current + amount));
       },
 
+      // ── Resources ──
       setResource: async (unitId, resourceId, current) => {
-        const state = get();
-        const unit = state.units.find(u => u.id === unitId);
-        if (!unit) return;
-
-        const resource = unit.resources.find(r => r.id === resourceId);
-        if (!resource) return;
-
-        set((s) => ({
-          units: s.units.map(u => {
-            if (u.id !== unitId) return u;
-            return {
-              ...u,
-              resources: u.resources.map(r =>
-                r.id === resourceId ? { ...r, current } : r
-              )
-            };
-          })
-        }));
-
-        if (resource.syncWithDocs && state.settings.syncResources && state.settings.googleDocsUrl && unit.googleDocsHeader) {
-          try {
-            await docsService.setResource(unit.googleDocsHeader, resource.name, current, resource.max);
-          } catch (error) {
-            console.error('Failed to sync resource to Docs:', error);
-          }
+        const s = get(); const u = s.units.find(x => x.id === unitId); if (!u) return;
+        const r = u.resources.find(x => x.id === resourceId); if (!r) return;
+        set(st => ({ units: st.units.map(x => x.id !== unitId ? x : { ...x, resources: x.resources.map(y => y.id === resourceId ? { ...y, current } : y) }) }));
+        if (r.syncWithDocs && s.settings.syncResources && s.settings.googleDocsUrl && u.googleDocsHeader) {
+          try { await docsService.setResource(u.googleDocsHeader, r.name, current, r.max); } catch (e) { console.error('Res sync:', e); }
         }
       },
 
       spendResource: async (unitId, resourceId, amount) => {
-        const unit = get().units.find(u => u.id === unitId);
-        if (!unit) return false;
-
-        const resource = unit.resources.find(r => r.id === resourceId);
-        if (!resource || resource.current < amount) {
-          get().addNotification(`Недостаточно ${resource?.name ?? 'ресурса'}!`, 'warning');
-          return false;
-        }
-
-        await get().setResource(unitId, resourceId, resource.current - amount);
-        return true;
+        const u = get().units.find(x => x.id === unitId); if (!u) return false;
+        const r = u.resources.find(x => x.id === resourceId);
+        if (!r || r.current < amount) { get().addNotification(`Мало ${r?.name ?? 'ресурса'}!`, 'warning'); return false; }
+        await get().setResource(unitId, resourceId, r.current - amount); return true;
       },
 
-      setNotes: (unitId, notes) => {
-        set((state) => ({
-          units: state.units.map(u =>
-            u.id === unitId ? { ...u, notes } : u
-          )
-        }));
-      },
+      // ── Notes ──
+      setNotes: (unitId, notes) => { set(s => ({ units: s.units.map(u => u.id === unitId ? { ...u, notes } : u) })); },
 
-      syncFromDocs: async (unitId, showNotifications = true) => {
-        const state = get();
-        const unit = state.units.find(u => u.id === unitId);
-
-        if (!unit || !unit.googleDocsHeader) {
-          if (showNotifications) get().addNotification('Персонаж не привязан к Google Docs', 'info');
-          return;
-        }
-
-        if (!state.settings.googleDocsUrl) {
-          if (showNotifications) get().addNotification('Настройте URL Google Docs в настройках', 'info');
-          return;
-        }
-
-        if (state.isSyncing) return;
+      // ── Sync ──
+      syncFromDocs: async (unitId, showN = true) => {
+        const s = get(); const u = s.units.find(x => x.id === unitId);
+        if (!u?.googleDocsHeader) { if (showN) get().addNotification('Нет привязки к Docs', 'info'); return; }
+        if (!s.settings.googleDocsUrl) { if (showN) get().addNotification('Нет URL Docs', 'info'); return; }
+        if (s.isSyncing) return;
         set({ isSyncing: true });
-
         try {
-          const result = await docsService.getStats(unit.googleDocsHeader);
-
-          if (result.success) {
-            const updates: Partial<Unit> = {};
-            if (result.health) updates.health = result.health;
-            if (result.mana) updates.mana = result.mana;
-
-            if (result.resources && unit.resources.length > 0) {
-              const updatedResources: Resource[] = unit.resources.map(r => {
-                if (r.syncWithDocs && result.resources?.[r.name]) {
-                  return { ...r, current: result.resources[r.name]!.current };
-                }
-                return r;
-              });
-              updates.resources = updatedResources;
+          const res = await docsService.getStats(u.googleDocsHeader);
+          if (res.success) {
+            const upd: Partial<Unit> = {};
+            if (res.health) upd.health = res.health;
+            if (res.mana) upd.mana = res.mana;
+            if (res.resources && u.resources.length) {
+              upd.resources = u.resources.map(r => r.syncWithDocs && res.resources?.[r.name] ? { ...r, current: res.resources[r.name]!.current } : r);
             }
-
-            get().updateUnit(unitId, updates);
-
-            if (unit.owlbearTokenId && result.health) {
-              await updateTokenHp(unit.owlbearTokenId, result.health.current, result.health.max);
+            get().updateUnit(unitId, upd);
+            if (u.owlbearTokenId && res.health) await updateTokenHp(u.owlbearTokenId, res.health.current, res.health.max);
+            const fresh = get().units.find(x => x.id === unitId);
+            if (fresh?.owlbearTokenId && (s.settings.showTokenBars ?? true)) {
+              tokenBarService.updateBars(fresh.owlbearTokenId, fresh.health.current, fresh.health.max, fresh.mana.current, fresh.mana.max, fresh.useManaAsHp).catch(console.warn);
             }
-
-            set((s) => ({
-              connections: { ...s.connections, docs: true, lastSyncTime: Date.now() }
-            }));
-
-            if (showNotifications) get().addNotification(`${unit.shortName}: синхронизировано!`, 'success');
+            set(st => ({ connections: { ...st.connections, docs: true, lastSyncTime: Date.now() } }));
+            if (showN) get().addNotification(`${u.shortName}: ✓`, 'success');
           } else {
-            if (showNotifications) get().addNotification(`Ошибка синхронизации: ${result.error ?? 'неизвестная ошибка'}`, 'error');
+            if (showN) get().addNotification(`Ошибка: ${res.error}`, 'error');
           }
-        } catch (error) {
-          console.error('Sync error:', error);
-          set((s) => ({ connections: { ...s.connections, docs: false } }));
-          if (showNotifications) get().addNotification('Ошибка подключения к Google Docs', 'error');
-        } finally {
-          set({ isSyncing: false });
-        }
+        } catch (e) {
+          console.error('Sync:', e);
+          set(st => ({ connections: { ...st.connections, docs: false } }));
+          if (showN) get().addNotification('Ошибка Docs', 'error');
+        } finally { set({ isSyncing: false }); }
       },
 
       syncAllFromDocs: async (silent = false) => {
-        const state = get();
-        if (state.isSyncing) return;
-        if (!state.settings.googleDocsUrl) return;
-
-        const units = state.units.filter(u => u.googleDocsHeader);
-        if (units.length === 0) return;
-
-        for (const unit of units) {
-          await get().syncFromDocs(unit.id, !silent);
-        }
-
-        if (units.length > 0) {
-          set((s) => ({ connections: { ...s.connections, lastSyncTime: Date.now() } }));
-        }
+        const s = get(); if (s.isSyncing || !s.settings.googleDocsUrl) return;
+        for (const u of s.units.filter(x => x.googleDocsHeader)) await get().syncFromDocs(u.id, !silent);
+        set(st => ({ connections: { ...st.connections, lastSyncTime: Date.now() } }));
       },
 
       startAutoSync: () => {
-        const state = get();
-        if (state.autoSyncIntervalId) clearInterval(state.autoSyncIntervalId);
-
-        const intervalMs = Math.max(1, state.settings.autoSyncInterval) * 60 * 1000;
-
-        const intervalId = window.setInterval(() => {
-          const cs = get();
-          if (!cs.settings.googleDocsUrl || cs.isSyncing) return;
-          get().syncAllFromDocs(true);
-        }, intervalMs);
-
-        set({ autoSyncIntervalId: intervalId });
+        const s = get(); if (s.autoSyncIntervalId) clearInterval(s.autoSyncIntervalId);
+        const ms = Math.max(1, s.settings.autoSyncInterval) * 60000;
+        const id = window.setInterval(() => { const c = get(); if (!c.settings.googleDocsUrl || c.isSyncing) return; get().syncAllFromDocs(true); }, ms);
+        set({ autoSyncIntervalId: id });
       },
 
-      stopAutoSync: () => {
-        const state = get();
-        if (state.autoSyncIntervalId) {
-          clearInterval(state.autoSyncIntervalId);
-          set({ autoSyncIntervalId: null });
-        }
-      },
+      stopAutoSync: () => { const s = get(); if (s.autoSyncIntervalId) { clearInterval(s.autoSyncIntervalId); set({ autoSyncIntervalId: null }); } },
 
+      // ── Settings ──
       updateSettings: (partial) => {
-        set((state) => ({
-          settings: { ...state.settings, ...partial }
-        }));
-
-        if (partial.googleDocsUrl !== undefined) {
-          docsService.setUrl(partial.googleDocsUrl);
-        }
-
-        if (partial.autoSyncInterval !== undefined) {
-          get().stopAutoSync();
-          get().startAutoSync();
+        set(s => ({ settings: { ...s.settings, ...partial } }));
+        if (partial.googleDocsUrl !== undefined) docsService.setUrl(partial.googleDocsUrl);
+        if (partial.autoSyncInterval !== undefined) { get().stopAutoSync(); get().startAutoSync(); }
+        if (partial.showTokenBars !== undefined) {
+          if (partial.showTokenBars) tokenBarService.syncAllBars(get().units).catch(console.warn);
+          else tokenBarService.removeAllBars().catch(console.warn);
         }
       },
 
+      // ── UI ──
       setActiveTab: (tab) => set({ activeTab: tab }),
 
       triggerEffect: (effect) => {
         set({ activeEffect: null });
-        requestAnimationFrame(() => {
-          set({ activeEffect: effect });
-          setTimeout(() => set({ activeEffect: null }), 700);
-        });
+        requestAnimationFrame(() => { set({ activeEffect: effect }); setTimeout(() => set({ activeEffect: null }), 700); });
       },
 
       addNotification: (message, type) => {
-        const state = get();
-        if (state.notifications.some(n => n.message === message)) return;
-
-        const notification: Notification = {
-          id: generateId(), message, type, timestamp: Date.now()
-        };
-
-        set((s) => {
-          const arr = [...s.notifications, notification];
-          return { notifications: arr.length > MAX_NOTIFICATIONS ? arr.slice(-MAX_NOTIFICATIONS) : arr };
-        });
-
-        setTimeout(() => get().clearNotification(notification.id), 5000);
+        const s = get(); if (s.notifications.some(n => n.message === message)) return;
+        const n: Notification = { id: generateId(), message, type, timestamp: Date.now() };
+        set(st => { const a = [...st.notifications, n]; return { notifications: a.length > MAX_NOTIFICATIONS ? a.slice(-MAX_NOTIFICATIONS) : a }; });
+        setTimeout(() => get().clearNotification(n.id), 5000);
       },
 
-      clearNotification: (id) => {
-        set((state) => ({
-          notifications: state.notifications.filter(n => n.id !== id)
-        }));
-      },
+      clearNotification: (id) => { set(s => ({ notifications: s.notifications.filter(n => n.id !== id) })); },
 
       addCombatLog: (unitName, action, details) => {
-        const entry: CombatLogEntry = { timestamp: Date.now(), unitName, action, details };
-
-        set((state) => ({
-          combatLog: [...state.combatLog, entry].slice(-100)
-        }));
-
-        const currentSettings = get().settings;
-        if (currentSettings.writeLogs && currentSettings.googleDocsUrl) {
-          const unit = get().units.find(u => u.shortName === unitName);
-          if (unit?.googleDocsHeader) {
-            docsService.log(unit.googleDocsHeader, `${action}: ${details}`).catch(console.error);
-          }
+        set(s => ({ combatLog: [...s.combatLog, { timestamp: Date.now(), unitName, action, details }].slice(-100) }));
+        const cs = get().settings;
+        if (cs.writeLogs && cs.googleDocsUrl) {
+          const u = get().units.find(x => x.shortName === unitName);
+          if (u?.googleDocsHeader) docsService.log(u.googleDocsHeader, `${action}: ${details}`).catch(console.error);
         }
       },
 
-      setConnection: (key, value) => {
-        set((state) => ({
-          connections: { ...state.connections, [key]: value }
-        }));
-      }
+      setConnection: (key, value) => { set(s => ({ connections: { ...s.connections, [key]: value } })); },
     }),
     {
       name: 'cursed-hearts-storage',
-      partialize: (state) => ({
-        units: state.units,
-        selectedUnitId: state.selectedUnitId,
-        settings: state.settings
-      })
+      partialize: (s) => ({ units: s.units, selectedUnitId: s.selectedUnitId, settings: s.settings })
     }
   )
 );
 
-const initStore = () => {
-  try {
-    const state = useGameStore.getState();
-    if (state.settings.googleDocsUrl) {
-      docsService.setUrl(state.settings.googleDocsUrl);
-    }
-  } catch (e) {
-    console.warn('[Store] initStore failed:', e);
-  }
-};
-initStore();
+// Init (safe)
+try { const s = useGameStore.getState(); if (s.settings.googleDocsUrl) docsService.setUrl(s.settings.googleDocsUrl); } catch {}
