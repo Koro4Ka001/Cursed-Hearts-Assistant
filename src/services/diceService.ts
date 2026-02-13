@@ -1,67 +1,74 @@
 import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult } from "../types";
+import { pushBroadcast, type BroadcastMessage } from "../components/BroadcastOverlay";
 
 export type DiceStatus = "local";
-export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-notification";
+export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-rich";
 
-interface DiceGroup { count: number; sides: number; }
+// ── Парсер ──
 
-function parseFormula(formula: string): { groups: DiceGroup[]; bonus: number } {
-  const groups: DiceGroup[] = [];
+interface DG { count: number; sides: number; }
+
+function parseFormula(f: string): { groups: DG[]; bonus: number } {
+  const groups: DG[] = [];
   let bonus = 0;
-  const tokens = formula.toLowerCase().replace(/\s/g, "").match(/[+-]?(\d*d\d+|\d+)/g) || [];
-  for (const token of tokens) {
-    const m = token.match(/([+-]?)(\d*)d(\d+)/);
+  const tokens = f.toLowerCase().replace(/\s/g, "").match(/[+-]?(\d*d\d+|\d+)/g) || [];
+  for (const t of tokens) {
+    const m = t.match(/([+-]?)(\d*)d(\d+)/);
     if (m) {
-      const sign = m[1] === "-" ? -1 : 1;
-      const count = parseInt(m[2] || "1", 10) * sign;
-      const sides = parseInt(m[3] ?? "0", 10);
-      if (sides > 0) groups.push({ count: Math.abs(count), sides });
-    } else {
-      const n = parseInt(token, 10);
-      if (!isNaN(n)) bonus += n;
-    }
+      const s = m[1] === "-" ? -1 : 1;
+      groups.push({ count: Math.abs(parseInt(m[2] || "1", 10) * s), sides: parseInt(m[3]!, 10) });
+    } else { const n = parseInt(t, 10); if (!isNaN(n)) bonus += n; }
   }
   return { groups, bonus };
 }
 
-function doubleDiceInFormula(formula: string): string {
-  return formula.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || "1", 10) * 2}d${s}`);
+function doubleDice(f: string): string {
+  return f.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || "1", 10) * 2}d${s}`);
 }
 
 function localRoll(formula: string, label?: string): DiceRollResult {
   const { groups, bonus } = parseFormula(formula);
   const rolls: number[] = [];
   let rawD20: number | undefined;
-  let hasD20 = false;
+  let has = false;
   for (const { count, sides } of groups) {
     for (let i = 0; i < count; i++) {
-      const roll = Math.floor(Math.random() * sides) + 1;
-      rolls.push(roll);
-      if (sides === 20 && !hasD20) { rawD20 = roll; hasD20 = true; }
+      const r = Math.floor(Math.random() * sides) + 1;
+      rolls.push(r);
+      if (sides === 20 && !has) { rawD20 = r; has = true; }
     }
   }
   const total = rolls.reduce((s, r) => s + r, 0) + bonus;
   return { formula, rolls, bonus, total, isCrit: rawD20 === 20, isCritFail: rawD20 === 1, rawD20, label };
 }
 
-// ── Красивое форматирование уведомлений ──
+let _idCounter = 0;
+function msgId(): string { return `bc-${Date.now()}-${++_idCounter}`; }
 
-function formatBonus(bonus: number): string {
-  if (bonus === 0) return '';
-  return bonus > 0 ? ` + ${bonus}` : ` − ${Math.abs(bonus)}`;
+// ── Отправка ВСЕМ (себе + другим) ──
+
+function showLocally(msg: BroadcastMessage) {
+  pushBroadcast(msg);
 }
 
-function critBanner(isCrit: boolean, isFail: boolean): string {
-  if (isCrit) return ' ══✨ КРИТ! ✨══';
-  if (isFail) return ' ══💀 ПРОВАЛ! 💀══';
-  return '';
+async function sendToOthers(msg: BroadcastMessage) {
+  try {
+    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+  } catch {}
+  // Фоллбэк — OBR нативное уведомление для тех у кого расширение закрыто
+  try {
+    const fallback = `${msg.icon ?? '🎲'} ${msg.unitName}: ${msg.title}${msg.total !== undefined ? ` = ${msg.total}` : ''}`;
+    await OBR.notification.show(fallback);
+  } catch {}
 }
 
-async function notifyAll(message: string): Promise<void> {
-  try { await OBR.notification.show(message); } catch { console.log("[Dice]", message); }
-  try { await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, { message }); } catch {}
+async function broadcast(msg: BroadcastMessage) {
+  showLocally(msg);
+  await sendToOthers(msg);
 }
+
+// ══════════════════════════════════════════════════════════
 
 class DiceService {
   private initialized = false;
@@ -69,75 +76,135 @@ class DiceService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
-    console.log("[DiceService] Ready — local dice + broadcast");
+    console.log("[DiceService] Ready");
   }
 
   getStatus(): DiceStatus { return "local"; }
 
+  // ── Основной бросок ──
+
   async roll(formula: string, label?: string, unitName?: string): Promise<DiceRollResult> {
     const r = localRoll(formula, label);
     if (label && unitName) {
-      const crit = critBanner(r.isCrit, r.isCritFail);
-      const msg = `🎲 ${unitName} ║ ${label}${crit}\n⟐ [${r.rolls.join(", ")}]${formatBonus(r.bonus)} = ${r.total}`;
-      await notifyAll(msg);
+      await broadcast({
+        id: msgId(), type: 'roll', unitName,
+        title: label, icon: '🎲',
+        rolls: r.rolls, total: r.total,
+        isCrit: r.isCrit, isCritFail: r.isCritFail,
+        color: r.isCrit ? 'gold' : r.isCritFail ? 'blood' : 'white',
+        timestamp: Date.now()
+      });
     }
     return r;
   }
 
   async rollWithCrit(formula: string, isCrit: boolean, label?: string, unitName?: string): Promise<DiceRollResult> {
-    const f = isCrit ? doubleDiceInFormula(formula) : formula;
+    const f = isCrit ? doubleDice(formula) : formula;
     return this.roll(f, label ? `${label}${isCrit ? ' ×2' : ''}` : undefined, unitName);
   }
 
-  // ── Анонсы ───────────────────────────────────────────
+  // ── Специальные анонсы ──
 
   async announceHit(unitName: string, weaponName: string, result: DiceRollResult): Promise<void> {
     const hit = result.total >= 11 || result.isCrit;
-    const icon = hit ? '🎯' : '❌';
-    const crit = critBanner(result.isCrit, result.isCritFail);
-    await notifyAll(`${icon} ${unitName} ║ ${weaponName}${crit}\n⟐ [${result.rawD20 ?? result.rolls[0]}]${formatBonus(result.bonus)} = ${result.total}`);
+    await broadcast({
+      id: msgId(), type: hit ? 'hit' : 'miss', unitName,
+      title: `${weaponName} — ${hit ? 'Попадание!' : 'Промах'}`,
+      icon: hit ? '🎯' : '💨',
+      rolls: result.rolls, total: result.total,
+      isCrit: result.isCrit, isCritFail: result.isCritFail,
+      color: result.isCrit ? 'gold' : hit ? 'green' : 'blood',
+      timestamp: Date.now()
+    });
   }
 
   async announceDamage(unitName: string, damage: number, typeName: string, rolls: number[], bonus: number, isCrit = false): Promise<void> {
-    const crit = isCrit ? ' ══✨ КРИТ! ✨══' : '';
-    await notifyAll(`💥 ${unitName} ║ Урон${crit}\n⟐ [${rolls.join(", ")}]${formatBonus(bonus)} = ${damage} ${typeName}`);
+    await broadcast({
+      id: msgId(), type: 'damage', unitName,
+      title: `${damage} ${typeName}`,
+      subtitle: isCrit ? 'Критический урон!' : undefined,
+      icon: '💥', rolls, total: damage,
+      isCrit, color: 'blood',
+      timestamp: Date.now()
+    });
   }
 
   async announceMiss(unitName: string, weaponName: string, result: DiceRollResult): Promise<void> {
-    await notifyAll(`💨 ${unitName} ║ Промах (${weaponName})\n⟐ [${result.rawD20 ?? result.rolls[0]}] = ${result.total}`);
+    await broadcast({
+      id: msgId(), type: 'miss', unitName,
+      title: `Промах — ${weaponName}`,
+      icon: '💨', rolls: result.rolls, total: result.total,
+      isCritFail: result.isCritFail,
+      color: result.isCritFail ? 'blood' : 'white',
+      timestamp: Date.now()
+    });
   }
 
   async announceSpellCast(unitName: string, spellName: string, success: boolean, result: DiceRollResult): Promise<void> {
-    const icon = success ? '✨' : '💨';
-    const status = success ? 'УСПЕХ' : 'провал';
-    await notifyAll(`${icon} ${unitName} ║ ${spellName} — ${status}\n⟐ [${result.rawD20}] = ${result.total}`);
+    await broadcast({
+      id: msgId(), type: 'spell', unitName,
+      title: `${spellName} — ${success ? 'Успех!' : 'Провал'}`,
+      icon: success ? '✨' : '💨',
+      rolls: result.rolls, total: result.total,
+      isCrit: result.isCrit, isCritFail: result.isCritFail,
+      color: success ? 'purple' : 'white',
+      timestamp: Date.now()
+    });
   }
 
   async announceProjectileCount(unitName: string, count: number, rolls?: number[]): Promise<void> {
-    const r = rolls?.length ? ` [${rolls.join(", ")}]` : '';
-    await notifyAll(`🔮 ${unitName} ║ Снаряды${r} = ${count}`);
+    await broadcast({
+      id: msgId(), type: 'spell', unitName,
+      title: `Снаряды: ${count}`,
+      icon: '🔮', rolls, total: count,
+      color: 'mana',
+      timestamp: Date.now()
+    });
   }
 
   async announceTakeDamage(unitName: string, damage: number, currentHP: number, maxHP: number): Promise<void> {
-    const pct = Math.floor((currentHP / maxHP) * 100);
-    const bar = pct > 60 ? '🟩' : pct > 25 ? '🟨' : '🟥';
-    const icon = currentHP <= 0 ? '💀' : '💔';
-    await notifyAll(`${icon} ${unitName} ║ −${damage} HP\n${bar} ${currentHP}/${maxHP} (${pct}%)`);
+    const dead = currentHP <= 0;
+    await broadcast({
+      id: msgId(), type: dead ? 'death' : 'damage', unitName,
+      title: `−${damage} HP`,
+      subtitle: dead ? '☠️ ПАЛИ В БОЮ' : undefined,
+      icon: dead ? '💀' : '💔',
+      color: 'blood',
+      hpBar: { current: Math.max(0, currentHP), max: maxHP },
+      timestamp: Date.now()
+    });
   }
 
   async announceHealing(unitName: string, amount: number, currentHP: number, maxHP: number): Promise<void> {
-    const pct = Math.floor((currentHP / maxHP) * 100);
-    await notifyAll(`💚 ${unitName} ║ +${amount} HP\n🟩 ${currentHP}/${maxHP} (${pct}%)`);
+    await broadcast({
+      id: msgId(), type: 'heal', unitName,
+      title: `+${amount} HP`,
+      icon: '💚', color: 'green',
+      hpBar: { current: currentHP, max: maxHP },
+      timestamp: Date.now()
+    });
   }
 
   async announceRokCard(unitName: string, cardIdx: number, isHit: boolean, effectName: string, hitRoll: number, effectRoll: number): Promise<void> {
-    const hitIcon = isHit ? '🎯 Попадание' : '💨 Промах';
-    const border = '═══════════════';
-    await notifyAll(`🃏 ${unitName} ║ Карта Рока #${cardIdx}\n${border}\n${hitIcon} [${hitRoll}]\n⟐ Эффект [${effectRoll}]: ${effectName}\n${border}`);
+    await broadcast({
+      id: msgId(), type: 'rok-card', unitName,
+      title: `Карта Рока #${cardIdx}`,
+      icon: '🃏',
+      color: isHit ? 'purple' : 'white',
+      details: [
+        `${isHit ? '🎯 Попадание' : '💨 Промах'} [${hitRoll}]`,
+        `⟐ Эффект [${effectRoll}]: ${effectName}`
+      ],
+      timestamp: Date.now()
+    });
   }
 
   async showNotification(message: string): Promise<void> {
-    await notifyAll(message);
+    await broadcast({
+      id: msgId(), type: 'custom', unitName: '',
+      title: message, icon: '📢', color: 'gold',
+      timestamp: Date.now()
+    });
   }
 }
 
