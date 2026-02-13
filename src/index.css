@@ -971,4 +971,196 @@ input[type="number"]::-webkit-outer-spin-button { opacity: 0.3; }
 .empty-state-icon {
   font-size: 48px; margin-bottom: 12px;
   opacity: 0.5; animation: float-gentle 3s ease-in-out infinite;
+
+}
+/* ══════════════════════════════════════════════════════════════
+   COMPACT MODE — Мини-виджет
+   ══════════════════════════════════════════════════════════════ */
+
+.compact-frame {
+  background: linear-gradient(180deg, #0e0e16 0%, #0a0a0f 100%);
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(200,168,78,0.05);
+  margin: 4px;
+}
+
+.compact-frame-danger {
+  border-color: rgba(204,34,34,0.4);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 12px rgba(204,34,34,0.15);
+}
+
+.compact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(200,168,78,0.04);
+  border-bottom: 1px solid rgba(200,168,78,0.1);
+}
+
+.compact-expand-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(200,168,78,0.2);
+  border-radius: 4px;
+  background: rgba(200,168,78,0.05);
+  color: var(--color-gold);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.compact-expand-btn:hover {
+  background: rgba(200,168,78,0.15);
+  box-shadow: 0 0 8px rgba(200,168,78,0.3);
+  color: var(--color-gold-bright);
+}
+
+/* Мини бары */
+.compact-bar {
+  position: relative;
+  height: 18px;
+  margin: 4px 8px;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.compact-bar-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+}
+
+.compact-bar-hp-bg {
+  background: linear-gradient(180deg, #1a0808, #2a0e0e);
+  border: 1px solid #3a1212;
+}
+
+.compact-bar-mana-bg {
+  background: linear-gradient(180deg, #0a1520, #0e1a28);
+  border: 1px solid #1a3050;
+}
+
+.compact-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 9px;
+  transition: width 0.4s ease;
+}
+
+.compact-bar-hp-fill {
+  background: linear-gradient(180deg, #cc2222, #881414);
+}
+
+.compact-bar-mana-fill {
+  background: linear-gradient(180deg, #4499dd, #2a5a8a);
+}
+
+.compact-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-cinzel);
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  z-index: 2;
+  letter-spacing: 0.5px;
+}
+
+/* Быстрые кнопки */
+.compact-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px 8px 6px;
+}
+
+.compact-btn {
+  width: 28px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-family: var(--font-cinzel);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.compact-btn:active {
+  transform: scale(0.9);
+}
+
+.compact-btn-damage {
+  background: linear-gradient(180deg, #2a0a0a, #1a0505);
+  border-color: #3a1212;
+  color: var(--color-blood-bright);
+}
+
+.compact-btn-damage:hover {
+  border-color: var(--color-blood-bright);
+  box-shadow: 0 0 6px rgba(204,34,34,0.3);
+}
+
+.compact-btn-heal {
+  background: linear-gradient(180deg, #0a2a0a, #051a05);
+  border-color: #1a3a1a;
+  color: #44cc44;
+}
+
+.compact-btn-heal:hover {
+  border-color: #44cc44;
+  box-shadow: 0 0 6px rgba(68,204,68,0.3);
+}
+
+.compact-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(200,168,78,0.15);
+  margin: 0 2px;
+}
+
+/* Кнопка свернуть (в полном режиме) */
+.compact-toggle-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 50;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(200,168,78,0.15);
+  border-radius: 4px;
+  background: rgba(10,10,15,0.8);
+  color: var(--color-gold-dark);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.compact-toggle-btn:hover {
+  background: rgba(200,168,78,0.1);
+  color: var(--color-gold);
+  box-shadow: 0 0 8px rgba(200,168,78,0.2);
+  border-color: rgba(200,168,78,0.3);
 }
