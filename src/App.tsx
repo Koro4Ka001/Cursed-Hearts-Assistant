@@ -73,6 +73,10 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   const units = useGameStore(s => s.units);
   const selectedUnitId = useGameStore(s => s.selectedUnitId);
   const selectUnit = useGameStore(s => s.selectUnit);
+  const setHP = useGameStore(s => s.setHP);
+  const setMana = useGameStore(s => s.setMana);
+  const triggerEffect = useGameStore(s => s.triggerEffect);
+
   const unit = units.find(u => u.id === selectedUnitId);
 
   if (!unit) {
@@ -98,6 +102,7 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   const maxMana = unit.mana.max || 1;
   const manaPct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
 
+  // Переключение юнитов
   const unitIdx = units.findIndex(u => u.id === selectedUnitId);
   const prevUnit = () => { if (unitIdx > 0) selectUnit(units[unitIdx - 1]!.id); };
   const nextUnit = () => { if (unitIdx < units.length - 1) selectUnit(units[unitIdx + 1]!.id); };
@@ -152,6 +157,7 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 
   return (
     <div className="large-frame">
+      {/* Шапка */}
       <div className="large-header">
         <div className="flex items-center gap-3">
           <span className="text-gold-bright font-cinzel-decorative text-sm tracking-[4px] uppercase text-glow-gold">
@@ -172,10 +178,14 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         </div>
       </div>
 
+      {/* Основной контент: 2 колонки */}
       <div className="large-body">
+        {/* Левая колонка — персонаж + статы */}
         <div className="large-sidebar">
           <UnitSelector />
           <StatBars />
+
+          {/* Мини-лог */}
           <div className="large-log">
             <div className="large-log-header">
               <span className="text-gold font-cinzel text-[10px] uppercase tracking-wider">Хроника</span>
@@ -195,7 +205,9 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
           </div>
         </div>
 
+        {/* Правая колонка — вкладки */}
         <div className="large-main">
+          {/* Вкладки */}
           <div className="large-tabs">
             {TABS.map(tab => (
               <button
@@ -212,6 +224,7 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
             ))}
           </div>
 
+          {/* Контент вкладки */}
           <div className="large-tab-content" key={activeTab}>
             <div className="tab-content-enter h-full">
               {activeTab === 'combat' && <ErrorBoundary tabName="Бой"><CombatTab /></ErrorBoundary>}
@@ -254,6 +267,7 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 
   return (
     <div className={cn('h-full flex flex-col bg-abyss text-bone overflow-hidden app-frame', effectClass)}>
+      {/* Фон */}
       <div className="bg-runes">
         {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ','ᛊ','ᛏ','ᚹ'].map((r, i) => <span key={i} className="bg-rune">{r}</span>)}
       </div>
@@ -264,6 +278,7 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
       <div className="gold-dust" />
 
       <div className="relative z-10 flex flex-col h-full">
+        {/* Кнопки режимов */}
         <div className="mode-switcher">
           <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
           <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
@@ -272,6 +287,7 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         <UnitSelector />
         <StatBars />
 
+        {/* Вкладки */}
         <div className="flex border-b border-gold-dark/30 bg-obsidian/80 shrink-0 backdrop-blur-sm">
           {TABS.map(tab => (
             <button
@@ -326,13 +342,16 @@ export function App() {
   const setConnection = useGameStore(s => s.setConnection);
   const startAutoSync = useGameStore(s => s.startAutoSync);
 
+  // Изменение размера OBR окна
   const changeMode = (mode: ViewMode) => {
     setViewMode(mode);
     const size = VIEW_SIZES[mode];
     try {
       OBR.action.setHeight(size.height);
       OBR.action.setWidth(size.width);
-    } catch {}
+    } catch {
+      // OBR может не поддерживать — игнорируем
+    }
   };
 
   useEffect(() => {
@@ -380,6 +399,7 @@ export function App() {
     };
 
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (isLoading) {
