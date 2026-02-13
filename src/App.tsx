@@ -15,6 +15,7 @@ import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
+import { BroadcastOverlay, pushBroadcast, type BroadcastMessage } from './components/BroadcastOverlay';
 import { cn } from './utils/cn';
 
 // ═══════════════════════════════════════════════════════════════
