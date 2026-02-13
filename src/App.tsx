@@ -21,66 +21,34 @@ import { cn } from './utils/cn';
 // ERROR BOUNDARY
 // ═══════════════════════════════════════════════════════════════
 
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback?: ReactNode;
-  tabName?: string;
-}
+interface EBProps { children: ReactNode; fallback?: ReactNode; tabName?: string; }
+interface EBState { hasError: boolean; error: Error | null; }
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error(`[ErrorBoundary] ${this.props.tabName ?? 'component'}:`, error, errorInfo);
-  }
-
+class ErrorBoundary extends Component<EBProps, EBState> {
+  constructor(props: EBProps) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error: Error): EBState { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: React.ErrorInfo) { console.error(`[EB] ${this.props.tabName}:`, error, info); }
   render() {
-    if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="p-4 flex flex-col items-center justify-center h-full">
-          <div className="text-4xl mb-4">⚠️</div>
-          <h3 className="heading text-blood-bright mb-2">Ошибка</h3>
-          <p className="text-faded text-sm text-center mb-4 max-w-xs">
-            {this.state.error?.message ?? 'Неизвестная ошибка'}
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            className="btn btn-gold px-4 py-2 text-sm"
-          >
-            Повторить
-          </button>
-        </div>
-      );
-    }
+    if (this.state.hasError) return (
+      <div className="p-4 flex flex-col items-center justify-center h-full">
+        <div className="text-4xl mb-4">⚠️</div>
+        <h3 className="heading text-blood-bright mb-2">Ошибка</h3>
+        <p className="text-faded text-sm text-center mb-4 max-w-xs">{this.state.error?.message ?? '?'}</p>
+        <button onClick={() => this.setState({ hasError: false, error: null })} className="btn btn-gold px-4 py-2 text-sm">Повторить</button>
+      </div>
+    );
     return this.props.children;
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TABS
+// TYPES & TABS
 // ═══════════════════════════════════════════════════════════════
 
+type ViewMode = 'compact' | 'medium' | 'large';
 type TabId = 'combat' | 'magic' | 'cards' | 'actions' | 'notes' | 'settings';
 
-interface Tab {
-  id: TabId;
-  icon: string;
-  label: string;
-}
-
-const TABS: Tab[] = [
+const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'combat', icon: '⚔️', label: 'Бой' },
   { id: 'magic', icon: '✨', label: 'Магия' },
   { id: 'cards', icon: '🃏', label: 'Карты' },
@@ -89,16 +57,24 @@ const TABS: Tab[] = [
   { id: 'settings', icon: '⚙️', label: 'Настройки' }
 ];
 
+// Размеры окна OBR для каждого режима
+const VIEW_SIZES: Record<ViewMode, { width: number; height: number }> = {
+  compact: { width: 300, height: 120 },
+  medium: { width: 400, height: 700 },
+  large: { width: 800, height: 900 }
+};
+
 // ═══════════════════════════════════════════════════════════════
-// COMPACT MODE — Мини-виджет
+// COMPACT VIEW — Только HP/Mana
 // ═══════════════════════════════════════════════════════════════
 
-function CompactView({ onExpand }: { onExpand: () => void }) {
-  const units = useGameStore((s) => s.units);
-  const selectedUnitId = useGameStore((s) => s.selectedUnitId);
-  const setHP = useGameStore((s) => s.setHP);
-  const setMana = useGameStore((s) => s.setMana);
-  const triggerEffect = useGameStore((s) => s.triggerEffect);
+function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
+  const units = useGameStore(s => s.units);
+  const selectedUnitId = useGameStore(s => s.selectedUnitId);
+  const selectUnit = useGameStore(s => s.selectUnit);
+  const setHP = useGameStore(s => s.setHP);
+  const setMana = useGameStore(s => s.setMana);
+  const triggerEffect = useGameStore(s => s.triggerEffect);
 
   const unit = units.find(u => u.id === selectedUnitId);
 
@@ -106,8 +82,11 @@ function CompactView({ onExpand }: { onExpand: () => void }) {
     return (
       <div className="compact-frame">
         <div className="compact-header">
-          <span className="text-gold font-cinzel text-xs tracking-wider">☠️ CURSED HEARTS</span>
-          <button onClick={onExpand} className="compact-expand-btn" title="Развернуть">⤢</button>
+          <span className="text-gold font-cinzel text-[10px] tracking-wider">☠️ CURSED HEARTS</span>
+          <div className="flex gap-1">
+            <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
+            <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
+          </div>
         </div>
         <div className="p-2 text-center text-faded text-xs">Нет персонажа</div>
       </div>
@@ -118,34 +97,35 @@ function CompactView({ onExpand }: { onExpand: () => void }) {
   const maxHp = unit.health.max || 1;
   const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const hpLow = hpPct < 25 && hpPct > 0;
-
   const mana = unit.mana.current;
   const maxMana = unit.mana.max || 1;
   const manaPct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
 
-  // Быстрые действия
-  const quickHeal = async (amount: number) => {
-    const newHp = Math.min(maxHp, hp + amount);
-    await setHP(unit.id, newHp);
-    triggerEffect('heal');
-  };
-
-  const quickDamage = async (amount: number) => {
-    await setHP(unit.id, hp - amount);
-    triggerEffect('shake');
-  };
+  // Переключение юнитов
+  const unitIdx = units.findIndex(u => u.id === selectedUnitId);
+  const prevUnit = () => { if (unitIdx > 0) selectUnit(units[unitIdx - 1]!.id); };
+  const nextUnit = () => { if (unitIdx < units.length - 1) selectUnit(units[unitIdx + 1]!.id); };
 
   return (
     <div className={cn('compact-frame', hpLow && 'compact-frame-danger')}>
-      {/* Заголовок */}
       <div className="compact-header">
-        <span className="text-gold font-cinzel text-[10px] tracking-wider truncate flex-1">
-          {unit.shortName || unit.name}
-        </span>
-        <button onClick={onExpand} className="compact-expand-btn" title="Развернуть">⤢</button>
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          {units.length > 1 && (
+            <button onClick={prevUnit} className="compact-nav-btn" disabled={unitIdx === 0}>◂</button>
+          )}
+          <span className="text-gold font-cinzel text-[10px] tracking-wider truncate flex-1 text-center">
+            {unit.shortName || unit.name}
+          </span>
+          {units.length > 1 && (
+            <button onClick={nextUnit} className="compact-nav-btn" disabled={unitIdx === units.length - 1}>▸</button>
+          )}
+        </div>
+        <div className="flex gap-1 ml-2">
+          <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
+          <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
+        </div>
       </div>
 
-      {/* HP мини-бар */}
       {!unit.useManaAsHp && (
         <div className="compact-bar">
           <div className="compact-bar-bg compact-bar-hp-bg" />
@@ -154,231 +134,154 @@ function CompactView({ onExpand }: { onExpand: () => void }) {
         </div>
       )}
 
-      {/* Mana мини-бар */}
       <div className="compact-bar">
         <div className="compact-bar-bg compact-bar-mana-bg" />
         <div className="compact-bar-fill compact-bar-mana-fill" style={{ width: `${manaPct}%` }} />
         <span className="compact-bar-text">💠 {mana}/{maxMana}</span>
-      </div>
-
-      {/* Быстрые кнопки */}
-      <div className="compact-actions">
-        <button onClick={() => quickDamage(5)} className="compact-btn compact-btn-damage" title="-5 HP">-5</button>
-        <button onClick={() => quickDamage(10)} className="compact-btn compact-btn-damage" title="-10 HP">-10</button>
-        <button onClick={() => quickDamage(25)} className="compact-btn compact-btn-damage" title="-25 HP">-25</button>
-        <div className="compact-divider" />
-        <button onClick={() => quickHeal(5)} className="compact-btn compact-btn-heal" title="+5 HP">+5</button>
-        <button onClick={() => quickHeal(10)} className="compact-btn compact-btn-heal" title="+10 HP">+10</button>
-        <button onClick={() => quickHeal(25)} className="compact-btn compact-btn-heal" title="+25 HP">+25</button>
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MAIN APP
+// LARGE VIEW — Полноэкранный режим
 // ═══════════════════════════════════════════════════════════════
 
-export function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCompact, setIsCompact] = useState(false);
-  const initRef = useRef(false);
-
-  const activeTab = useGameStore((s) => s.activeTab);
-  const setActiveTab = useGameStore((s) => s.setActiveTab);
-  const notifications = useGameStore((s) => s.notifications);
-  const clearNotification = useGameStore((s) => s.clearNotification);
-  const connections = useGameStore((s) => s.connections);
-  const setConnection = useGameStore((s) => s.setConnection);
-  const startAutoSync = useGameStore((s) => s.startAutoSync);
-  const activeEffect = useGameStore((s) => s.activeEffect);
-  const googleDocsUrl = useGameStore((s) => s.settings.googleDocsUrl);
-
-  // Попытка изменить размер OBR окна при переключении режима
-  useEffect(() => {
-    try {
-      if (isCompact) {
-        OBR.action.setHeight(140);
-      } else {
-        OBR.action.setHeight(700);
-      }
-    } catch {
-      // OBR может не поддерживать setHeight — игнорируем
-    }
-  }, [isCompact]);
-
-  useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
-
-    const init = async () => {
-      try {
-        // 1. OBR SDK
-        await initOBR();
-        setConnection('owlbear', true);
-        console.log('[App] OBR Ready');
-
-        // 2. Dice Service
-        await diceService.initialize();
-        setConnection('dice', diceService.getStatus());
-
-        // 3. Broadcast listener
-        try {
-          OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
-            const data = event.data as { message?: string } | undefined;
-            const message = data?.message;
-            if (message && typeof message === 'string') {
-              OBR.notification.show(message);
-            }
-          });
-        } catch (e) {
-          console.warn('[App] Broadcast:', e);
-        }
-
-        // 4. Token Bars
-        try {
-          await tokenBarService.initialize();
-          const state = useGameStore.getState();
-          if (state.settings.showTokenBars ?? true) {
-            await tokenBarService.syncAllBars(state.units);
-            console.log('[App] Token bars synced for', state.units.length, 'units');
-          }
-        } catch (e) {
-          console.warn('[App] Token bars:', e);
-        }
-
-        // 5. Google Docs
-        const currentUrl = useGameStore.getState().settings.googleDocsUrl;
-        if (currentUrl) {
-          docsService.setUrl(currentUrl);
-          try {
-            const test = await docsService.testConnection();
-            setConnection('docs', test.success);
-          } catch {
-            setConnection('docs', false);
-          }
-          startAutoSync();
-        }
-
-      } catch (error) {
-        console.error('[App] Init error:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const formatLastSync = () => {
-    if (!connections.lastSyncTime) return '—';
-    const diff = Date.now() - connections.lastSyncTime;
-    const minutes = Math.floor(diff / 60000);
-    const seconds = Math.floor((diff % 60000) / 1000);
-    if (minutes > 0) return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    return `0:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const effectClass = activeEffect
-    ? ({
-        shake: 'screen-shake',
-        heal: 'screen-heal-glow',
-        'crit-gold': 'screen-flash-gold',
-        'crit-fail': 'screen-flash-blood'
-      } as Record<string, string>)[activeEffect] ?? ''
-    : '';
-
-  // ── Loading ──────────────────────────────────────────────
-
-  if (isLoading) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <span className="loading-rune" style={{ top: '15%', left: '10%', animationDelay: '0s' }}>ᚱ</span>
-          <span className="loading-rune" style={{ top: '30%', right: '15%', animationDelay: '1s' }}>ᛟ</span>
-          <span className="loading-rune" style={{ top: '60%', left: '20%', animationDelay: '2s' }}>ᚺ</span>
-          <span className="loading-rune" style={{ top: '75%', right: '25%', animationDelay: '0.5s' }}>ᛉ</span>
-        </div>
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="ember ember-1" />
-          <div className="ember ember-2" />
-          <div className="ember ember-3" />
-        </div>
-        <LoadingSpinner className="mb-6" size="lg" />
-        <div className="text-gold font-cinzel-decorative tracking-[6px] uppercase text-sm text-glow-gold">
-          Загрузка
-        </div>
-        <div className="text-dim font-garamond text-xs mt-3 tracking-[3px] italic">
-          Гримуар пробуждается...
-        </div>
-        <div className="mt-6 w-32 h-[1px] bg-gradient-to-r from-transparent via-gold-dark to-transparent" />
-      </div>
-    );
-  }
-
-  // ── Compact Mode ─────────────────────────────────────────
-
-  if (isCompact) {
-    return (
-      <div className={cn('h-screen bg-abyss text-bone overflow-hidden', effectClass)}>
-        <CompactView onExpand={() => setIsCompact(false)} />
-        {/* Уведомления даже в компактном режиме */}
-        <div className="fixed top-1 right-1 z-[200] space-y-1 max-w-[200px] pointer-events-none">
-          {notifications.map(notification => (
-            <div key={notification.id} className="pointer-events-auto">
-              <NotificationToast
-                message={notification.message}
-                type={notification.type}
-                onClose={() => clearNotification(notification.id)}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Full Mode ────────────────────────────────────────────
+function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
+  const activeTab = useGameStore(s => s.activeTab);
+  const setActiveTab = useGameStore(s => s.setActiveTab);
+  const connections = useGameStore(s => s.connections);
+  const googleDocsUrl = useGameStore(s => s.settings.googleDocsUrl);
+  const combatLog = useGameStore(s => s.combatLog);
 
   return (
-    <div className={cn(
-      'h-screen flex flex-col bg-abyss text-bone overflow-hidden app-frame',
-      effectClass
-    )}>
-      {/* Декоративный фон */}
+    <div className="large-frame">
+      {/* Шапка */}
+      <div className="large-header">
+        <div className="flex items-center gap-3">
+          <span className="text-gold-bright font-cinzel-decorative text-sm tracking-[4px] uppercase text-glow-gold">
+            ☠️ Cursed Hearts
+          </span>
+          <div className="flex items-center gap-2 ml-4">
+            <span className={cn('status-dot text-[9px]', connections.owlbear ? 'status-online' : 'status-offline')}>
+              OBR {connections.owlbear ? '●' : '○'}
+            </span>
+            <span className={cn('status-dot text-[9px]', connections.docs ? 'status-online' : 'status-dim')}>
+              Docs {connections.docs ? '●' : (googleDocsUrl ? '○' : '—')}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
+          <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
+        </div>
+      </div>
+
+      {/* Основной контент: 2 колонки */}
+      <div className="large-body">
+        {/* Левая колонка — персонаж + статы */}
+        <div className="large-sidebar">
+          <UnitSelector />
+          <StatBars />
+
+          {/* Мини-лог */}
+          <div className="large-log">
+            <div className="large-log-header">
+              <span className="text-gold font-cinzel text-[10px] uppercase tracking-wider">Хроника</span>
+            </div>
+            <div className="large-log-body">
+              {combatLog.length === 0 ? (
+                <div className="text-dim text-xs text-center py-4 font-garamond italic">Тишина...</div>
+              ) : (
+                combatLog.slice(-15).map((entry, i) => (
+                  <div key={i} className="large-log-entry">
+                    <span className="text-gold-dark font-cinzel text-[9px]">{entry.unitName}</span>
+                    <span className="text-faded text-[10px] ml-1">{entry.action}: {entry.details}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Правая колонка — вкладки */}
+        <div className="large-main">
+          {/* Вкладки */}
+          <div className="large-tabs">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'large-tab',
+                  activeTab === tab.id ? 'large-tab-active' : 'large-tab-inactive'
+                )}
+              >
+                <span className="text-base">{tab.icon}</span>
+                <span className="text-[10px] font-cinzel uppercase tracking-wider">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Контент вкладки */}
+          <div className="large-tab-content" key={activeTab}>
+            <div className="tab-content-enter h-full">
+              {activeTab === 'combat' && <ErrorBoundary tabName="Бой"><CombatTab /></ErrorBoundary>}
+              {activeTab === 'magic' && <ErrorBoundary tabName="Магия"><MagicTab /></ErrorBoundary>}
+              {activeTab === 'cards' && <ErrorBoundary tabName="Карты"><CardsTab /></ErrorBoundary>}
+              {activeTab === 'actions' && <ErrorBoundary tabName="Действия"><ActionsTab /></ErrorBoundary>}
+              {activeTab === 'notes' && <ErrorBoundary tabName="Заметки"><NotesTab /></ErrorBoundary>}
+              {activeTab === 'settings' && <ErrorBoundary tabName="Настройки"><SettingsTab /></ErrorBoundary>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MEDIUM VIEW — Текущий стандартный
+// ═══════════════════════════════════════════════════════════════
+
+function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
+  const activeTab = useGameStore(s => s.activeTab);
+  const setActiveTab = useGameStore(s => s.setActiveTab);
+  const connections = useGameStore(s => s.connections);
+  const googleDocsUrl = useGameStore(s => s.settings.googleDocsUrl);
+  const activeEffect = useGameStore(s => s.activeEffect);
+
+  const effectClass = activeEffect
+    ? ({ shake: 'screen-shake', heal: 'screen-heal-glow', 'crit-gold': 'screen-flash-gold', 'crit-fail': 'screen-flash-blood' } as Record<string, string>)[activeEffect] ?? ''
+    : '';
+
+  const formatLastSync = () => {
+    const t = connections.lastSyncTime;
+    if (!t) return '—';
+    const d = Date.now() - t;
+    const m = Math.floor(d / 60000);
+    const s = Math.floor((d % 60000) / 1000);
+    return m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `0:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className={cn('h-full flex flex-col bg-abyss text-bone overflow-hidden app-frame', effectClass)}>
+      {/* Фон */}
       <div className="bg-runes">
-        <span className="bg-rune">ᚱ</span>
-        <span className="bg-rune">ᛟ</span>
-        <span className="bg-rune">ᚺ</span>
-        <span className="bg-rune">ᛉ</span>
-        <span className="bg-rune">ᚦ</span>
-        <span className="bg-rune">ᛊ</span>
-        <span className="bg-rune">ᛏ</span>
-        <span className="bg-rune">ᚹ</span>
+        {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ','ᛊ','ᛏ','ᚹ'].map((r, i) => <span key={i} className="bg-rune">{r}</span>)}
       </div>
-
       <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="ember ember-1" />
-        <div className="ember ember-2" />
-        <div className="ember ember-3" />
-        <div className="ember ember-4" />
-        <div className="ember ember-5" />
+        {[1,2,3,4,5].map(i => <div key={i} className={`ember ember-${i}`} />)}
       </div>
-
       <div className="app-vignette" />
       <div className="gold-dust" />
 
-      {/* Контент */}
       <div className="relative z-10 flex flex-col h-full">
-        {/* Кнопка свернуть */}
-        <button
-          onClick={() => setIsCompact(true)}
-          className="compact-toggle-btn"
-          title="Свернуть в мини-режим"
-        >
-          ⤡
-        </button>
+        {/* Кнопки режимов */}
+        <div className="mode-switcher">
+          <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
+          <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
+        </div>
 
         <UnitSelector />
         <StatBars />
@@ -395,47 +298,138 @@ export function App() {
               )}
               title={tab.label}
             >
-              <span className="relative z-10">{tab.icon}</span>
+              {tab.icon}
             </button>
           ))}
         </div>
 
-        {/* Контент вкладки */}
         <div className="flex-1 overflow-hidden" key={activeTab}>
           <div className="tab-content-enter h-full">
             {activeTab === 'combat' && <ErrorBoundary tabName="Бой"><CombatTab /></ErrorBoundary>}
             {activeTab === 'magic' && <ErrorBoundary tabName="Магия"><MagicTab /></ErrorBoundary>}
-            {activeTab === 'cards' && <ErrorBoundary tabName="Карты Рока"><CardsTab /></ErrorBoundary>}
+            {activeTab === 'cards' && <ErrorBoundary tabName="Карты"><CardsTab /></ErrorBoundary>}
             {activeTab === 'actions' && <ErrorBoundary tabName="Действия"><ActionsTab /></ErrorBoundary>}
             {activeTab === 'notes' && <ErrorBoundary tabName="Заметки"><NotesTab /></ErrorBoundary>}
             {activeTab === 'settings' && <ErrorBoundary tabName="Настройки"><SettingsTab /></ErrorBoundary>}
           </div>
         </div>
 
-        {/* Статус бар */}
         <div className="status-bar">
           <div className="flex items-center gap-3">
-            <span className={cn('status-dot', connections.owlbear ? 'status-online' : 'status-offline')}>
-              OBR {connections.owlbear ? '●' : '○'}
-            </span>
-            <span className={cn('status-dot', connections.docs ? 'status-online' : 'status-dim')}>
-              Docs {connections.docs ? '●' : (googleDocsUrl ? '○' : '—')}
-            </span>
+            <span className={cn('status-dot', connections.owlbear ? 'status-online' : 'status-offline')}>OBR {connections.owlbear ? '●' : '○'}</span>
+            <span className={cn('status-dot', connections.docs ? 'status-online' : 'status-dim')}>Docs {connections.docs ? '●' : (googleDocsUrl ? '○' : '—')}</span>
             <span className="status-dot status-dim">Dice ●</span>
           </div>
           <div className="text-dim font-medieval">⟐ {formatLastSync()}</div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Уведомления */}
+// ═══════════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════════
+
+export function App() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('medium');
+  const initRef = useRef(false);
+
+  const notifications = useGameStore(s => s.notifications);
+  const clearNotification = useGameStore(s => s.clearNotification);
+  const setConnection = useGameStore(s => s.setConnection);
+  const startAutoSync = useGameStore(s => s.startAutoSync);
+
+  // Изменение размера OBR окна
+  const changeMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    const size = VIEW_SIZES[mode];
+    try {
+      OBR.action.setHeight(size.height);
+      OBR.action.setWidth(size.width);
+    } catch {
+      // OBR может не поддерживать — игнорируем
+    }
+  };
+
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
+    const init = async () => {
+      try {
+        await initOBR();
+        setConnection('owlbear', true);
+
+        await diceService.initialize();
+        setConnection('dice', diceService.getStatus());
+
+        try {
+          OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+            const data = event.data as { message?: string } | undefined;
+            if (data?.message && typeof data.message === 'string') {
+              OBR.notification.show(data.message);
+            }
+          });
+        } catch {}
+
+        try {
+          await tokenBarService.initialize();
+          const state = useGameStore.getState();
+          if (state.settings.showTokenBars ?? true) {
+            await tokenBarService.syncAllBars(state.units);
+          }
+        } catch {}
+
+        const url = useGameStore.getState().settings.googleDocsUrl;
+        if (url) {
+          docsService.setUrl(url);
+          try { const t = await docsService.testConnection(); setConnection('docs', t.success); } catch { setConnection('docs', false); }
+          startAutoSync();
+        }
+      } catch (e) {
+        console.error('[App] Init:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ'].map((r, i) => (
+            <span key={i} className="loading-rune" style={{ top: `${15 + i * 15}%`, left: `${10 + i * 18}%`, animationDelay: `${i * 0.5}s` }}>{r}</span>
+          ))}
+        </div>
+        <div className="absolute inset-0 pointer-events-none">
+          {[1,2,3].map(i => <div key={i} className={`ember ember-${i}`} />)}
+        </div>
+        <LoadingSpinner className="mb-6" size="lg" />
+        <div className="text-gold font-cinzel-decorative tracking-[6px] uppercase text-sm text-glow-gold">Загрузка</div>
+        <div className="text-dim font-garamond text-xs mt-3 tracking-[3px] italic">Гримуар пробуждается...</div>
+        <div className="mt-6 w-32 h-[1px] bg-gradient-to-r from-transparent via-gold-dark to-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen bg-abyss text-bone overflow-hidden">
+      {/* Контент по режиму */}
+      {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
+      {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
+      {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
+
+      {/* Уведомления (всегда видны) */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
-        {notifications.map(notification => (
-          <div key={notification.id} className="pointer-events-auto">
-            <NotificationToast
-              message={notification.message}
-              type={notification.type}
-              onClose={() => clearNotification(notification.id)}
-            />
+        {notifications.map(n => (
+          <div key={n.id} className="pointer-events-auto">
+            <NotificationToast message={n.message} type={n.type} onClose={() => clearNotification(n.id)} />
           </div>
         ))}
       </div>
