@@ -366,16 +366,16 @@ export function App() {
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-       // 3. Broadcast listener — получаем от ДРУГИХ игроков
-try {
-  OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
-    const msg = event.data as BroadcastMessage | undefined;
-    if (msg && typeof msg === 'object' && msg.id && msg.unitName !== undefined) {
-      // Показываем кастомное уведомление
-      pushBroadcast(msg);
-    }
-  });
-} catch {}
+        // 3. Broadcast listener — получаем от ДРУГИХ игроков
+        try {
+          OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+            const msg = event.data as BroadcastMessage | undefined;
+            if (msg && typeof msg === 'object' && msg.id && msg.unitName !== undefined) {
+              // Показываем кастомное уведомление
+              pushBroadcast(msg);
+            }
+          });
+        } catch {}
 
         try {
           await tokenBarService.initialize();
@@ -433,11 +433,12 @@ try {
         {notifications.map(n => (
           <div key={n.id} className="pointer-events-auto">
             <NotificationToast message={n.message} type={n.type} onClose={() => clearNotification(n.id)} />
-            {/* Кастомные broadcast уведомления */}
-<BroadcastOverlay />
           </div>
         ))}
       </div>
+
+      {/* Кастомные broadcast уведомления */}
+      <BroadcastOverlay />
     </div>
   );
 }
