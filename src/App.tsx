@@ -1,3 +1,4 @@
+// src/App.tsx
 import { useEffect, useState, useRef, Component, type ReactNode } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from './stores/useGameStore';
@@ -16,7 +17,9 @@ import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
 
-// === ERROR BOUNDARY ===
+// ═══════════════════════════════════════════════════════════════
+// ERROR BOUNDARY
+// ═══════════════════════════════════════════════════════════════
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -65,7 +68,9 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-// === TABS ===
+// ═══════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════
 
 type TabId = 'combat' | 'magic' | 'cards' | 'actions' | 'notes' | 'settings';
 
@@ -83,21 +88,25 @@ const TABS: Tab[] = [
   { id: 'settings', icon: '⚙️' }
 ];
 
+// ═══════════════════════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════════════════════
+
 export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const initRef = useRef(false);
 
-  const {
-    activeTab,
-    setActiveTab,
-    notifications,
-    clearNotification,
-    connections,
-    setConnection,
-    settings,
-    startAutoSync,
-    activeEffect
-  } = useGameStore();
+  const activeTab = useGameStore((s) => s.activeTab);
+  const setActiveTab = useGameStore((s) => s.setActiveTab);
+  const notifications = useGameStore((s) => s.notifications);
+  const clearNotification = useGameStore((s) => s.clearNotification);
+  const connections = useGameStore((s) => s.connections);
+  const setConnection = useGameStore((s) => s.setConnection);
+  const startAutoSync = useGameStore((s) => s.startAutoSync);
+  const activeEffect = useGameStore((s) => s.activeEffect);
+  // Достаём settings БЕЗОПАСНО через селектор
+  const googleDocsUrl = useGameStore((s) => s.settings.googleDocsUrl);
+  const showTokenBars = useGameStore((s) => s.settings.showTokenBars);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -114,31 +123,35 @@ export function App() {
         setConnection('dice', diceService.getStatus());
 
         // 3. Broadcast listener
-        OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
-          const data = event.data as { message?: string } | undefined;
-          const message = data?.message;
-          if (message && typeof message === 'string') {
-            OBR.notification.show(message);
-          }
-        });
-        console.log('[App] Broadcast listener установлен');
+        try {
+          OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+            const data = event.data as { message?: string } | undefined;
+            const message = data?.message;
+            if (message && typeof message === 'string') {
+              OBR.notification.show(message);
+            }
+          });
+          console.log('[App] Broadcast listener установлен');
+        } catch (e) {
+          console.warn('[App] Broadcast setup failed:', e);
+        }
 
-        // 4. Token Bars
+        // 4. Token Bars — обёрнуто в отдельный try/catch
         try {
           await tokenBarService.initialize();
-          const currentSettings = useGameStore.getState().settings;
-          if (currentSettings.showTokenBars !== false) {
-            const currentUnits = useGameStore.getState().units;
-            await tokenBarService.syncAllBars(currentUnits);
+          const currentState = useGameStore.getState();
+          if (currentState.settings.showTokenBars !== false) {
+            await tokenBarService.syncAllBars(currentState.units);
           }
           console.log('[App] Token bars инициализированы');
         } catch (e) {
-          console.warn('[App] Token bars init failed:', e);
+          console.warn('[App] Token bars init failed (non-fatal):', e);
         }
 
         // 5. Google Docs
-        if (settings.googleDocsUrl) {
-          docsService.setUrl(settings.googleDocsUrl);
+        const currentUrl = useGameStore.getState().settings.googleDocsUrl;
+        if (currentUrl) {
+          docsService.setUrl(currentUrl);
           try {
             const test = await docsService.testConnection();
             setConnection('docs', test.success);
@@ -149,7 +162,7 @@ export function App() {
         }
 
       } catch (error) {
-        console.error('Initialization error:', error);
+        console.error('[App] Initialization error:', error);
       } finally {
         setIsLoading(false);
       }
@@ -158,6 +171,8 @@ export function App() {
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Форматирование времени последней синхронизации ────────────
 
   const formatLastSync = () => {
     if (!connections.lastSyncTime) return '—';
@@ -168,6 +183,8 @@ export function App() {
     return `0:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // ── CSS-класс экранного эффекта ──────────────────────────────
+
   const effectClass = activeEffect
     ? ({
         shake: 'screen-shake',
@@ -176,6 +193,8 @@ export function App() {
         'crit-fail': 'screen-flash-blood'
       } as Record<string, string>)[activeEffect] ?? ''
     : '';
+
+  // ── Loading ──────────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -195,6 +214,8 @@ export function App() {
       </div>
     );
   }
+
+  // ── Render ───────────────────────────────────────────────────
 
   return (
     <div className={cn(
@@ -274,7 +295,7 @@ export function App() {
               OBR {connections.owlbear ? '●' : '○'}
             </span>
             <span className={connections.docs ? 'text-green-500' : 'text-faded'}>
-              Docs {connections.docs ? '●' : (settings.googleDocsUrl ? '○' : '—')}
+              Docs {connections.docs ? '●' : (googleDocsUrl ? '○' : '—')}
             </span>
             <span className="text-faded">
               Dice ●
