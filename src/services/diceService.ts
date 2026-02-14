@@ -27,6 +27,24 @@ export interface BroadcastMessage {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// LOCAL EVENT EMITTER — для показа toast-ов себе
+// ═══════════════════════════════════════════════════════════════
+
+type LocalMessageListener = (msg: BroadcastMessage) => void;
+const localListeners = new Set<LocalMessageListener>();
+
+export function onLocalDiceMessage(callback: LocalMessageListener): () => void {
+  localListeners.add(callback);
+  return () => { localListeners.delete(callback); };
+}
+
+function emitLocal(msg: BroadcastMessage) {
+  localListeners.forEach(fn => {
+    try { fn(msg); } catch (e) { console.error('[DiceService] Local listener error:', e); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // DICE PARSER
 // ═══════════════════════════════════════════════════════════════
 
@@ -54,7 +72,7 @@ function doubleDice(f: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ROLL WITH MODIFIER (ADVANTAGE/DISADVANTAGE)
+// ROLL WITH MODIFIER
 // ═══════════════════════════════════════════════════════════════
 
 function rollD20WithModifier(modifier: RollModifier): { value: number; allRolls: number[] } {
@@ -78,10 +96,6 @@ function rollD20WithModifier(modifier: RollModifier): { value: number; allRolls:
 // LOCAL ROLL
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Локальный бросок с поддержкой модификатора
- * @param checkForCrits - если false, не проверяем крит/крит-провал (для бросков урона)
- */
 function localRoll(
   formula: string,
   label?: string,
@@ -96,7 +110,6 @@ function localRoll(
   
   for (const { count, sides } of groups) {
     for (let i = 0; i < count; i++) {
-      // Первый d20 учитывает модификатор (преимущество/помеха)
       if (sides === 20 && !hasD20 && modifier !== 'normal') {
         const { value, allRolls } = rollD20WithModifier(modifier);
         rolls.push(value);
@@ -115,8 +128,6 @@ function localRoll(
   }
   
   const total = rolls.reduce((s, r) => s + r, 0) + bonus;
-  
-  // Крит только если checkForCrits=true И есть d20
   const isCrit = checkForCrits && rawD20 === 20;
   const isCritFail = checkForCrits && rawD20 === 1;
   
@@ -135,7 +146,7 @@ function localRoll(
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MESSAGE ID GENERATOR
+// MESSAGE ID
 // ═══════════════════════════════════════════════════════════════
 
 let _idCounter = 0;
@@ -144,15 +155,18 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BROADCAST — Отправка ВСЕМ через OBR
+// BROADCAST — Отправка себе + другим
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage) {
-  // Отправляем через OBR broadcast — toast popover получит сообщение
+  // 1. Показываем СЕБЕ (локально)
+  emitLocal(msg);
+  
+  // 2. Отправляем ДРУГИМ через OBR broadcast
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
   } catch (e) {
-    console.warn('[DiceService] Broadcast failed:', e);
+    console.warn('[DiceService] OBR broadcast failed:', e);
   }
 }
 
@@ -174,7 +188,7 @@ class DiceService {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ОСНОВНОЙ БРОСОК (для d20 попаданий/кастов)
+  // ОСНОВНОЙ БРОСОК
   // ═══════════════════════════════════════════════════════════
 
   async roll(
@@ -186,7 +200,6 @@ class DiceService {
     const r = localRoll(formula, label, modifier, true);
     
     if (label && unitName) {
-      // Формируем subtitle для преимущества/помехи
       let subtitle: string | undefined;
       if (r.allD20Rolls && r.allD20Rolls.length > 1) {
         const modName = modifier === 'advantage' ? 'Преимущество' : 'Помеха';
@@ -212,7 +225,7 @@ class DiceService {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // БРОСОК УРОНА (БЕЗ проверки крита)
+  // БРОСОК УРОНА
   // ═══════════════════════════════════════════════════════════
 
   async rollDamage(
@@ -221,9 +234,8 @@ class DiceService {
     unitName?: string,
     isCritHit: boolean = false
   ): Promise<DiceRollResult> {
-    // При крите удваиваем кубики
     const f = isCritHit ? doubleDice(formula) : formula;
-    const r = localRoll(f, label, 'normal', false); // checkForCrits = false!
+    const r = localRoll(f, label, 'normal', false);
     
     if (label && unitName) {
       await broadcast({
@@ -235,17 +247,13 @@ class DiceService {
         icon: '💥',
         rolls: r.rolls,
         total: r.total,
-        isCrit: isCritHit, // для отображения золотого цвета
+        isCrit: isCritHit,
         color: isCritHit ? 'gold' : 'blood',
         timestamp: Date.now()
       });
     }
     return r;
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // СТАРЫЙ МЕТОД ДЛЯ СОВМЕСТИМОСТИ
-  // ═══════════════════════════════════════════════════════════
 
   async rollWithCrit(
     formula: string,
@@ -455,7 +463,7 @@ class DiceService {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// EXPORT SINGLETON
+// EXPORT
 // ═══════════════════════════════════════════════════════════════
 
 export const diceService = new DiceService();
