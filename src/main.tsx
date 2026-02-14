@@ -9,6 +9,8 @@ import './index.css';
 const params = new URLSearchParams(window.location.search);
 const mode = params.get('mode');
 
+console.log('[Main] Mode:', mode, 'URL:', window.location.href);
+
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Root element not found');
 
