@@ -1,4 +1,5 @@
-import type { DiceRollResult } from '../types';
+// src/utils/dice.ts
+import type { DiceRollResult, RollModifier } from '../types';
 
 /**
  * Парсит формулу кубиков и возвращает структуру для броска
@@ -68,13 +69,42 @@ function rollSingleDie(sides: number): number {
 }
 
 /**
- * Основная функция броска кубиков
+ * Бросает d20 с модификатором (преимущество/помеха)
+ * Возвращает выбранное значение и все броски
  */
-export function rollDice(formula: string, label?: string): DiceRollResult {
+function rollD20WithModifier(modifier: RollModifier): { value: number; allRolls: number[] } {
+  if (modifier === 'normal') {
+    const roll = rollSingleDie(20);
+    return { value: roll, allRolls: [roll] };
+  }
+  
+  const roll1 = rollSingleDie(20);
+  const roll2 = rollSingleDie(20);
+  const allRolls = [roll1, roll2];
+  
+  if (modifier === 'advantage') {
+    return { value: Math.max(roll1, roll2), allRolls };
+  } else {
+    return { value: Math.min(roll1, roll2), allRolls };
+  }
+}
+
+/**
+ * Основная функция броска кубиков
+ * @param formula - формула броска (например "d20+5", "3d6+2")
+ * @param label - описание броска
+ * @param modifier - модификатор d20 (преимущество/помеха)
+ */
+export function rollDice(
+  formula: string,
+  label?: string,
+  modifier: RollModifier = 'normal'
+): DiceRollResult {
   const { dice, flatBonus } = parseFormula(formula);
   
   const rolls: number[] = [];
   let rawD20: number | undefined;
+  let allD20Rolls: number[] | undefined;
   let hasD20 = false;
   
   for (const { count, sides } of dice) {
@@ -82,13 +112,22 @@ export function rollDice(formula: string, label?: string): DiceRollResult {
     const sign = count < 0 ? -1 : 1;
     
     for (let i = 0; i < absCount; i++) {
-      const roll = rollSingleDie(sides);
-      rolls.push(roll * sign);
-      
-      // Запоминаем первый d20
-      if (sides === 20 && !hasD20) {
-        rawD20 = roll;
+      // Первый d20 учитывает модификатор (преимущество/помеха)
+      if (sides === 20 && !hasD20 && modifier !== 'normal') {
+        const { value, allRolls } = rollD20WithModifier(modifier);
+        rolls.push(value * sign);
+        rawD20 = value;
+        allD20Rolls = allRolls;
         hasD20 = true;
+      } else {
+        const roll = rollSingleDie(sides);
+        rolls.push(roll * sign);
+        
+        // Запоминаем первый d20 (без модификатора)
+        if (sides === 20 && !hasD20) {
+          rawD20 = roll;
+          hasD20 = true;
+        }
       }
     }
   }
@@ -96,7 +135,7 @@ export function rollDice(formula: string, label?: string): DiceRollResult {
   const diceTotal = rolls.reduce((sum, r) => sum + r, 0);
   const total = diceTotal + flatBonus;
   
-  // Крит только если есть d20 и первый d20 = 20
+  // Крит только если есть d20 и выбранный d20 = 20
   const isCrit = rawD20 === 20;
   const isCritFail = rawD20 === 1;
   
@@ -108,7 +147,9 @@ export function rollDice(formula: string, label?: string): DiceRollResult {
     isCrit,
     isCritFail,
     rawD20,
-    label
+    label,
+    rollModifier: modifier !== 'normal' ? modifier : undefined,
+    allD20Rolls
   };
 }
 
@@ -116,9 +157,14 @@ export function rollDice(formula: string, label?: string): DiceRollResult {
  * Бросок с удвоением кубиков при крите
  * При крите удваивается количество КУБИКОВ, не бонусы
  */
-export function rollWithCrit(formula: string, isCrit: boolean, label?: string): DiceRollResult {
+export function rollWithCrit(
+  formula: string,
+  isCrit: boolean,
+  label?: string,
+  modifier: RollModifier = 'normal'
+): DiceRollResult {
   if (!isCrit) {
-    return rollDice(formula, label);
+    return rollDice(formula, label, modifier);
   }
   
   // Удваиваем количество кубиков в формуле
@@ -135,7 +181,7 @@ export function rollWithCrit(formula: string, isCrit: boolean, label?: string): 
     newFormula += flatBonus > 0 ? `+${flatBonus}` : `${flatBonus}`;
   }
   
-  const result = rollDice(newFormula, label);
+  const result = rollDice(newFormula, label, 'normal'); // урон без модификатора
   // Отмечаем что это был крит
   return { ...result, isCrit: true };
 }
@@ -143,16 +189,21 @@ export function rollWithCrit(formula: string, isCrit: boolean, label?: string): 
 /**
  * Простой бросок d20
  */
-export function rollD20(): number {
-  return rollSingleDie(20);
+export function rollD20(modifier: RollModifier = 'normal'): number {
+  const { value } = rollD20WithModifier(modifier);
+  return value;
 }
 
 /**
- * Бросок d20 с модификатором
+ * Бросок d20 с модификатором (бонусом к броску)
  */
-export function rollD20WithMod(modifier: number, label?: string): DiceRollResult {
-  const formula = modifier >= 0 ? `d20+${modifier}` : `d20${modifier}`;
-  return rollDice(formula, label);
+export function rollD20WithMod(
+  bonus: number,
+  label?: string,
+  modifier: RollModifier = 'normal'
+): DiceRollResult {
+  const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
+  return rollDice(formula, label, modifier);
 }
 
 /**
@@ -161,10 +212,26 @@ export function rollD20WithMod(modifier: number, label?: string): DiceRollResult
 export function formatRollResult(result: DiceRollResult): string {
   let text = '';
   
+  // Показываем модификатор если был
+  if (result.rollModifier === 'advantage') {
+    text += '🎯 Преим. ';
+  } else if (result.rollModifier === 'disadvantage') {
+    text += '💨 Помеха ';
+  }
+  
   if (result.isCrit) {
     text += '✨ КРИТ! ';
   } else if (result.isCritFail) {
     text += '💀 ПРОВАЛ! ';
+  }
+  
+  // Показываем все d20 если было преимущество/помеха
+  if (result.allD20Rolls && result.allD20Rolls.length > 1) {
+    const chosen = result.rawD20;
+    const displayRolls = result.allD20Rolls.map(r =>
+      r === chosen ? `[${r}]` : `~~${r}~~`
+    ).join(', ');
+    text += `{${displayRolls}} `;
   }
   
   text += `[${result.rolls.join(', ')}]`;
