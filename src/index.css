@@ -4016,3 +4016,356 @@ input[type="number"]::-webkit-outer-spin-button { opacity: 0.3; }
 .dt-fail .dt-progress {
   background: linear-gradient(90deg, var(--color-blood), var(--color-blood-bright));
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MINI TOASTS — Компактные уведомления о бросках
+   ══════════════════════════════════════════════════════════════ */
+
+.dice-toasts-container {
+  position: fixed;
+  bottom: 32px;
+  right: 8px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  pointer-events: none;
+  max-width: 280px;
+}
+
+/* ── Mini Toast ───────────────────────────────────────────── */
+
+.mini-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  pointer-events: auto;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  
+  box-shadow: 
+    0 4px 16px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.mini-toast:hover {
+  transform: translateX(-4px) scale(1.02);
+}
+
+.mini-toast:active {
+  transform: scale(0.98);
+}
+
+/* ── Цвета ────────────────────────────────────────────────── */
+
+.mt-gold {
+  background: linear-gradient(135deg, rgba(32,26,12,0.92) 0%, rgba(18,14,6,0.95) 100%);
+  border: 1px solid rgba(200,168,78,0.35);
+}
+
+.mt-blood {
+  background: linear-gradient(135deg, rgba(32,12,12,0.92) 0%, rgba(18,6,6,0.95) 100%);
+  border: 1px solid rgba(204,34,34,0.35);
+}
+
+.mt-mana {
+  background: linear-gradient(135deg, rgba(12,20,32,0.92) 0%, rgba(6,12,20,0.95) 100%);
+  border: 1px solid rgba(68,153,221,0.35);
+}
+
+.mt-green {
+  background: linear-gradient(135deg, rgba(12,32,12,0.92) 0%, rgba(6,18,6,0.95) 100%);
+  border: 1px solid rgba(68,204,68,0.35);
+}
+
+.mt-purple {
+  background: linear-gradient(135deg, rgba(24,12,32,0.92) 0%, rgba(14,6,18,0.95) 100%);
+  border: 1px solid rgba(150,80,220,0.35);
+}
+
+.mt-white {
+  background: linear-gradient(135deg, rgba(24,24,28,0.92) 0%, rgba(14,14,18,0.95) 100%);
+  border: 1px solid rgba(200,190,170,0.2);
+}
+
+/* ── Анимации ─────────────────────────────────────────────── */
+
+.mt-enter {
+  opacity: 0;
+  transform: translateX(100%) scale(0.8);
+}
+
+.mt-visible {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transition: 
+    opacity 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.mt-exit {
+  opacity: 0;
+  transform: translateX(60%) scale(0.9);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+/* ── Крит ─────────────────────────────────────────────────── */
+
+.mt-crit {
+  border-color: var(--color-gold) !important;
+  box-shadow: 
+    0 4px 16px rgba(0,0,0,0.4),
+    0 0 20px rgba(232,208,104,0.2) !important;
+  animation: mt-crit-pop 0.5s ease-out;
+}
+
+@keyframes mt-crit-pop {
+  0% { transform: translateX(100%) scale(0.5); filter: brightness(2); }
+  50% { transform: translateX(-8px) scale(1.1); }
+  100% { transform: translateX(0) scale(1); filter: brightness(1); }
+}
+
+/* ── Провал ───────────────────────────────────────────────── */
+
+.mt-fail {
+  border-color: var(--color-blood-bright) !important;
+  animation: mt-fail-shake 0.4s ease-out;
+}
+
+@keyframes mt-fail-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(2px); }
+}
+
+/* ── Иконка ───────────────────────────────────────────────── */
+
+.mt-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  animation: mt-icon-pop 0.3s ease-out;
+}
+
+@keyframes mt-icon-pop {
+  0% { transform: scale(0) rotate(-30deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.mt-icon-crit {
+  font-size: 22px;
+  filter: drop-shadow(0 0 6px rgba(232,208,104,0.6));
+  animation: mt-icon-crit-pop 0.5s ease-out;
+}
+
+@keyframes mt-icon-crit-pop {
+  0% { transform: scale(0) rotate(-180deg); }
+  60% { transform: scale(1.3) rotate(10deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* ── Текст ────────────────────────────────────────────────── */
+
+.mt-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.mt-unit {
+  font-family: var(--font-cinzel);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-faded);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.mt-title {
+  font-family: var(--font-cinzel);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-bone);
+}
+
+/* ── Кубики ───────────────────────────────────────────────── */
+
+.mt-rolls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.mt-die {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-family: var(--font-cinzel);
+  font-weight: 900;
+  font-size: 10px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(200,190,170,0.15);
+  color: var(--color-bone);
+}
+
+.mt-die-crit {
+  background: rgba(200,168,78,0.25) !important;
+  border-color: var(--color-gold) !important;
+  color: var(--color-gold-bright) !important;
+  box-shadow: 0 0 6px rgba(200,168,78,0.4);
+}
+
+.mt-die-fail {
+  background: rgba(204,34,34,0.25) !important;
+  border-color: var(--color-blood-bright) !important;
+  color: var(--color-blood-bright) !important;
+}
+
+.mt-die-more {
+  font-size: 9px;
+  color: var(--color-faded);
+}
+
+.mt-eq {
+  color: var(--color-dim);
+  font-size: 10px;
+}
+
+.mt-total {
+  font-family: var(--font-cinzel);
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--color-bone);
+}
+
+.mt-total-big {
+  font-family: var(--font-cinzel);
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--color-bone);
+  flex-shrink: 0;
+}
+
+.mt-total-crit {
+  color: var(--color-gold-bright) !important;
+  text-shadow: 0 0 8px rgba(232,208,104,0.5);
+}
+
+.mt-total-fail {
+  color: var(--color-blood-bright) !important;
+}
+
+/* ── HP bar ───────────────────────────────────────────────── */
+
+.mt-hp {
+  position: relative;
+  width: 50px;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.mt-hp-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 5px;
+  transition: width 0.5s ease;
+}
+
+.mt-hp-dmg {
+  background: linear-gradient(90deg, #cc2222, #881414);
+}
+
+.mt-hp-heal {
+  background: linear-gradient(90deg, #22cc44, #118822);
+}
+
+.mt-hp-txt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-cinzel);
+  font-size: 7px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+
+/* ── Badge ────────────────────────────────────────────────── */
+
+.mt-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-family: var(--font-cinzel);
+  font-size: 7px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mt-badge-crit {
+  background: var(--color-gold);
+  color: var(--color-abyss);
+  box-shadow: 0 0 8px rgba(232,208,104,0.5);
+  animation: mt-badge-pulse 0.8s ease-out;
+}
+
+.mt-badge-fail {
+  background: var(--color-blood-bright);
+  color: #fff;
+}
+
+@keyframes mt-badge-pulse {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* ── Progress ─────────────────────────────────────────────── */
+
+.mt-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold));
+  width: 100%;
+  transform-origin: left;
+  animation: mt-progress-shrink 4s linear forwards;
+  opacity: 0.5;
+}
+
+@keyframes mt-progress-shrink {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.mt-crit .mt-progress {
+  background: linear-gradient(90deg, var(--color-gold), var(--color-gold-bright));
+  opacity: 0.8;
+}
+
+.mt-fail .mt-progress {
+  background: linear-gradient(90deg, var(--color-blood), var(--color-blood-bright));
+}
