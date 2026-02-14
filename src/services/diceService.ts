@@ -1,12 +1,34 @@
 // src/services/diceService.ts
 import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult, RollModifier } from "../types";
-import { pushBroadcast, type BroadcastMessage } from "../components/BroadcastOverlay";
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-rich";
 
-// ── Парсер ──
+// ═══════════════════════════════════════════════════════════════
+// BROADCAST MESSAGE TYPE
+// ═══════════════════════════════════════════════════════════════
+
+export interface BroadcastMessage {
+  id: string;
+  type: 'roll' | 'damage' | 'hit' | 'miss' | 'spell' | 'heal' | 'death' | 'rok-card' | 'custom';
+  unitName: string;
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  rolls?: number[];
+  total?: number;
+  isCrit?: boolean;
+  isCritFail?: boolean;
+  color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white';
+  hpBar?: { current: number; max: number };
+  details?: string[];
+  timestamp: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DICE PARSER
+// ═══════════════════════════════════════════════════════════════
 
 interface DG { count: number; sides: number; }
 
@@ -31,9 +53,10 @@ function doubleDice(f: string): string {
   return f.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || "1", 10) * 2}d${s}`);
 }
 
-/**
- * Бросает d20 с модификатором (преимущество/помеха)
- */
+// ═══════════════════════════════════════════════════════════════
+// ROLL WITH MODIFIER (ADVANTAGE/DISADVANTAGE)
+// ═══════════════════════════════════════════════════════════════
+
 function rollD20WithModifier(modifier: RollModifier): { value: number; allRolls: number[] } {
   const roll1 = Math.floor(Math.random() * 20) + 1;
   
@@ -50,6 +73,10 @@ function rollD20WithModifier(modifier: RollModifier): { value: number; allRolls:
     return { value: Math.min(roll1, roll2), allRolls };
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// LOCAL ROLL
+// ═══════════════════════════════════════════════════════════════
 
 /**
  * Локальный бросок с поддержкой модификатора
@@ -107,32 +134,31 @@ function localRoll(
   };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// MESSAGE ID GENERATOR
+// ═══════════════════════════════════════════════════════════════
+
 let _idCounter = 0;
-function msgId(): string { return `bc-${Date.now()}-${++_idCounter}`; }
-
-// ── Отправка ВСЕМ (себе + другим) ──
-
-function showLocally(msg: BroadcastMessage) {
-  pushBroadcast(msg);
+function msgId(): string { 
+  return `dice-${Date.now()}-${++_idCounter}`; 
 }
 
-async function sendToOthers(msg: BroadcastMessage) {
-  try {
-    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
-  } catch {}
-  // Фоллбэк — OBR нативное уведомление для тех у кого расширение закрыто
-  try {
-    const fallback = `${msg.icon ?? '🎲'} ${msg.unitName}: ${msg.title}${msg.total !== undefined ? ` = ${msg.total}` : ''}`;
-    await OBR.notification.show(fallback);
-  } catch {}
-}
+// ═══════════════════════════════════════════════════════════════
+// BROADCAST — Отправка ВСЕМ через OBR
+// ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage) {
-  showLocally(msg);
-  await sendToOthers(msg);
+  // Отправляем через OBR broadcast — toast popover получит сообщение
+  try {
+    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+  } catch (e) {
+    console.warn('[DiceService] Broadcast failed:', e);
+  }
 }
 
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// DICE SERVICE CLASS
+// ═══════════════════════════════════════════════════════════════
 
 class DiceService {
   private initialized = false;
@@ -143,9 +169,13 @@ class DiceService {
     console.log("[DiceService] Ready");
   }
 
-  getStatus(): DiceStatus { return "local"; }
+  getStatus(): DiceStatus { 
+    return "local"; 
+  }
 
-  // ── Основной бросок (для d20 попаданий/кастов) ──
+  // ═══════════════════════════════════════════════════════════
+  // ОСНОВНОЙ БРОСОК (для d20 попаданий/кастов)
+  // ═══════════════════════════════════════════════════════════
 
   async roll(
     formula: string,
@@ -181,7 +211,9 @@ class DiceService {
     return r;
   }
 
-  // ── Бросок урона (БЕЗ проверки крита) ──
+  // ═══════════════════════════════════════════════════════════
+  // БРОСОК УРОНА (БЕЗ проверки крита)
+  // ═══════════════════════════════════════════════════════════
 
   async rollDamage(
     formula: string,
@@ -211,7 +243,9 @@ class DiceService {
     return r;
   }
 
-  // ── Старый метод для совместимости ──
+  // ═══════════════════════════════════════════════════════════
+  // СТАРЫЙ МЕТОД ДЛЯ СОВМЕСТИМОСТИ
+  // ═══════════════════════════════════════════════════════════
 
   async rollWithCrit(
     formula: string,
@@ -222,7 +256,9 @@ class DiceService {
     return this.rollDamage(formula, label, unitName, isCrit);
   }
 
-  // ── Специальные анонсы ──
+  // ═══════════════════════════════════════════════════════════
+  // СПЕЦИАЛЬНЫЕ АНОНСЫ
+  // ═══════════════════════════════════════════════════════════
 
   async announceHit(
     unitName: string,
@@ -417,5 +453,9 @@ class DiceService {
     });
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORT SINGLETON
+// ═══════════════════════════════════════════════════════════════
 
 export const diceService = new DiceService();
