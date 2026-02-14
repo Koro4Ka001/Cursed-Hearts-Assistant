@@ -3,7 +3,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult, RollModifier } from "../types";
 
 export type DiceStatus = "local";
-export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-rich";
+export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
 
 // ═══════════════════════════════════════════════════════════════
 // BROADCAST MESSAGE TYPE
@@ -27,7 +27,7 @@ export interface BroadcastMessage {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// LOCAL EVENT EMITTER — для показа toast-ов себе
+// LOCAL EVENT EMITTER — для показа toast-ов СЕБЕ
 // ═══════════════════════════════════════════════════════════════
 
 type LocalMessageListener = (msg: BroadcastMessage) => void;
@@ -151,7 +151,7 @@ function localRoll(
 
 let _idCounter = 0;
 function msgId(): string { 
-  return `dice-${Date.now()}-${++_idCounter}`; 
+  return `dice-${Date.now()}-${++_idCounter}-${Math.random().toString(36).slice(2, 6)}`; 
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -159,7 +159,7 @@ function msgId(): string {
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage) {
-  // 1. Показываем СЕБЕ (локально)
+  // 1. Показываем СЕБЕ (локально) — это главное!
   emitLocal(msg);
   
   // 2. Отправляем ДРУГИМ через OBR broadcast
