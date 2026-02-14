@@ -1,3 +1,4 @@
+// src/components/tabs/SettingsTab.tsx
 import { useState, useEffect } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from '../../stores/useGameStore';
@@ -6,11 +7,13 @@ import { generateId } from '../../utils/dice';
 import { docsService } from '../../services/docsService';
 import { selectToken } from '../../services/hpTrackerService';
 import type { 
-  Unit, Weapon, Spell, Resource, DamageType, ProficiencyType, WeaponType
+  Unit, Weapon, Spell, Resource, DamageType, ProficiencyType, WeaponType,
+  ElementAffinity, AffinityBonusType
 } from '../../types';
 import { 
   DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES, 
-  ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS 
+  ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS,
+  ELEMENT_NAMES, AFFINITY_BONUS_NAMES
 } from '../../types';
 import { MAGIC_ELEMENTS, SPELL_TYPES, ELEMENT_ICONS, DEFAULT_ELEMENT_TABLE, DEFAULT_DAMAGE_TIERS } from '../../constants/elements';
 
@@ -24,12 +27,10 @@ export function SettingsTab() {
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   
-  // Подписка на изменения игрока (для отладки)
   useEffect(() => {
     const unsub = OBR.player.onChange((player) => {
       console.log('PLAYER CHANGED:', JSON.stringify(player.metadata, null, 2));
     });
-    
     return () => { unsub(); };
   }, []);
   
@@ -171,7 +172,6 @@ export function SettingsTab() {
                   onChange={(v) => updateSettings({ writeLogs: v })}
                   label="Логировать действия"
                 />
-                {/* ★ ВОТ ПРАВИЛЬНОЕ МЕСТО для чекбокса Token Bars ★ */}
                 <Checkbox
                   checked={settings.showTokenBars ?? true}
                   onChange={(v) => updateSettings({ showTokenBars: v })}
@@ -240,7 +240,11 @@ interface UnitEditorProps {
 
 function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   const [editorTab, setEditorTab] = useState('basic');
-  const [localUnit, setLocalUnit] = useState<Unit>({ ...unit });
+  const [localUnit, setLocalUnit] = useState<Unit>({ 
+    ...unit,
+    // Миграция: добавляем elementAffinities если их нет
+    elementAffinities: unit.elementAffinities ?? []
+  });
   
   const update = (partial: Partial<Unit>) => {
     setLocalUnit(prev => ({ ...prev, ...partial }));
@@ -249,6 +253,7 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   const editorTabs = [
     { id: 'basic', label: 'Основное' },
     { id: 'stats', label: 'Статы' },
+    { id: 'affinity', label: '🔮 Предрасп.' },  // НОВАЯ ВКЛАДКА
     { id: 'armor', label: 'Броня' },
     { id: 'weapons', label: 'Оружие' },
     { id: 'spells', label: 'Заклинания' },
@@ -415,10 +420,33 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
             ))}
           </div>
           
-          <div className="text-xs text-faded uppercase mb-2 mt-4">Магические бонусы</div>
+          <div className="text-xs text-faded uppercase mb-2 mt-4">Магические бонусы (к касту)</div>
           <MagicBonusesEditor
             bonuses={localUnit.magicBonuses ?? {}}
             onChange={(magicBonuses) => update({ magicBonuses })}
+          />
+        </div>
+      )}
+      
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* НОВАЯ ВКЛАДКА: ПРЕДРАСПОЛОЖЕННОСТИ */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {editorTab === 'affinity' && (
+        <div className="space-y-3">
+          <div className="p-2 bg-obsidian rounded border border-edge-bone">
+            <div className="text-xs text-faded mb-2">
+              🔮 <strong>Предрасположенности к элементам</strong> дают бонусы при касте заклинаний с этими элементами:
+            </div>
+            <ul className="text-xs text-faded space-y-1 ml-4">
+              <li>• <span className="text-gold">+к касту/попаданию</span> — добавляется к броску d20</li>
+              <li>• <span className="text-mana-bright">−к затрате маны</span> — снижает стоимость заклинания</li>
+              <li>• <span className="text-blood-bright">+к урону</span> — добавляется к урону</li>
+            </ul>
+          </div>
+          
+          <ElementAffinitiesEditor
+            affinities={localUnit.elementAffinities ?? []}
+            onChange={(elementAffinities) => update({ elementAffinities })}
           />
         </div>
       )}
@@ -523,6 +551,167 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// НОВЫЙ КОМПОНЕНТ: РЕДАКТОР ПРЕДРАСПОЛОЖЕННОСТЕЙ
+// ═══════════════════════════════════════════════════════════════════
+
+function ElementAffinitiesEditor({
+  affinities,
+  onChange
+}: {
+  affinities: ElementAffinity[];
+  onChange: (affinities: ElementAffinity[]) => void;
+}) {
+  const [newElement, setNewElement] = useState('');
+  const [newBonusType, setNewBonusType] = useState<AffinityBonusType>('castHit');
+  const [newValue, setNewValue] = useState(1);
+  
+  const addAffinity = () => {
+    if (!newElement) return;
+    
+    const newAff: ElementAffinity = {
+      id: generateId(),
+      element: newElement,
+      bonusType: newBonusType,
+      value: newValue
+    };
+    onChange([...affinities, newAff]);
+    setNewElement('');
+    setNewValue(1);
+  };
+  
+  const updateAffinity = (id: string, updates: Partial<ElementAffinity>) => {
+    onChange(affinities.map(a => a.id === id ? { ...a, ...updates } : a));
+  };
+  
+  const deleteAffinity = (id: string) => {
+    onChange(affinities.filter(a => a.id !== id));
+  };
+  
+  // Группируем по элементам для удобства
+  const groupedByElement = affinities.reduce((acc, aff) => {
+    if (!acc[aff.element]) acc[aff.element] = [];
+    acc[aff.element]!.push(aff);
+    return acc;
+  }, {} as Record<string, ElementAffinity[]>);
+  
+  const getBonusColor = (type: AffinityBonusType): string => {
+    switch (type) {
+      case 'castHit': return 'text-gold';
+      case 'manaCost': return 'text-mana-bright';
+      case 'damage': return 'text-blood-bright';
+      default: return 'text-bone';
+    }
+  };
+  
+  const getBonusIcon = (type: AffinityBonusType): string => {
+    switch (type) {
+      case 'castHit': return '🎯';
+      case 'manaCost': return '💠';
+      case 'damage': return '💥';
+      default: return '✨';
+    }
+  };
+  
+  return (
+    <div className="space-y-3">
+      {/* Список существующих предрасположенностей */}
+      {Object.entries(groupedByElement).map(([element, affs]) => (
+        <div key={element} className="p-2 bg-obsidian rounded border border-edge-bone">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">{ELEMENT_ICONS[element] ?? '✨'}</span>
+            <span className="text-ancient font-cinzel uppercase text-sm">
+              {ELEMENT_NAMES[element] ?? element}
+            </span>
+          </div>
+          
+          <div className="space-y-2">
+            {affs.map(aff => (
+              <div key={aff.id} className="flex items-center gap-2 pl-6">
+                <span className={`text-sm ${getBonusColor(aff.bonusType)}`}>
+                  {getBonusIcon(aff.bonusType)} {AFFINITY_BONUS_NAMES[aff.bonusType]}
+                </span>
+                <NumberStepper
+                  value={aff.value}
+                  onChange={(v) => updateAffinity(aff.id, { value: v })}
+                  min={1}
+                  max={30}
+                />
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => deleteAffinity(aff.id)}
+                >
+                  ×
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      
+      {affinities.length === 0 && (
+        <div className="text-center text-faded text-sm py-4">
+          Нет предрасположенностей. Добавьте ниже.
+        </div>
+      )}
+      
+      {/* Форма добавления новой предрасположенности */}
+      <div className="p-3 bg-panel rounded border border-gold/30">
+        <div className="text-xs text-gold uppercase mb-2">+ Добавить предрасположенность</div>
+        
+        <div className="space-y-2">
+          <Select
+            label="Элемент"
+            value={newElement}
+            onChange={(e) => setNewElement(e.target.value)}
+            options={[
+              { value: '', label: '-- Выберите элемент --' },
+              ...MAGIC_ELEMENTS.map(e => ({
+                value: e,
+                label: `${ELEMENT_ICONS[e] ?? '✨'} ${ELEMENT_NAMES[e] ?? e}`
+              }))
+            ]}
+          />
+          
+          <Select
+            label="Тип бонуса"
+            value={newBonusType}
+            onChange={(e) => setNewBonusType(e.target.value as AffinityBonusType)}
+            options={[
+              { value: 'castHit', label: '🎯 +к касту/попаданию' },
+              { value: 'manaCost', label: '💠 −к затрате маны' },
+              { value: 'damage', label: '💥 +к урону' }
+            ]}
+          />
+          
+          <NumberStepper
+            label="Значение"
+            value={newValue}
+            onChange={setNewValue}
+            min={1}
+            max={30}
+          />
+          
+          <Button
+            variant="gold"
+            onClick={addAffinity}
+            disabled={!newElement}
+            className="w-full"
+          >
+            + Добавить
+          </Button>
+        </div>
+      </div>
+      
+      {/* Подсказка */}
+      <div className="text-xs text-faded">
+        💡 Можно добавить несколько бонусов на один элемент (например, +2 к касту И −3 к мане для огня)
+      </div>
+    </div>
+  );
+}
+
 // === РЕДАКТОР МАГИЧЕСКИХ БОНУСОВ ===
 
 function MagicBonusesEditor({
@@ -556,7 +745,9 @@ function MagicBonusesEditor({
     <div className="space-y-2">
       {Object.entries(bonuses).map(([element, value]) => (
         <div key={element} className="flex items-center gap-2">
-          <span className="text-ancient flex-1 capitalize">{element}</span>
+          <span className="text-ancient flex-1">
+            {ELEMENT_ICONS[element] ?? '✨'} {ELEMENT_NAMES[element] ?? element}
+          </span>
           <NumberStepper
             value={value}
             onChange={(v) => updateBonus(element, v)}
@@ -574,7 +765,10 @@ function MagicBonusesEditor({
             onChange={(e) => setNewElement(e.target.value)}
             options={[
               { value: '', label: '+ Добавить элемент' },
-              ...availableElements.map(e => ({ value: e, label: e }))
+              ...availableElements.map(e => ({
+                value: e,
+                label: `${ELEMENT_ICONS[e] ?? '✨'} ${ELEMENT_NAMES[e] ?? e}`
+              }))
             ]}
             className="flex-1"
           />
@@ -748,16 +942,16 @@ function ElementsPicker({
                   ? 'border-gold bg-gold-dark/30 text-gold'
                   : 'border-edge-bone bg-obsidian text-faded hover:border-ancient hover:text-bone'
               }`}
-              title={element}
+              title={ELEMENT_NAMES[element] ?? element}
             >
-              {icon} {element}
+              {icon}
             </button>
           );
         })}
       </div>
       {selected.length > 0 && (
         <div className="text-xs text-ancient mt-1">
-          Выбрано: {selected.map(e => `${ELEMENT_ICONS[e] ?? '✨'} ${e}`).join(', ')}
+          Выбрано: {selected.map(e => `${ELEMENT_ICONS[e] ?? '✨'} ${ELEMENT_NAMES[e] ?? e}`).join(', ')}
         </div>
       )}
     </div>
@@ -871,11 +1065,6 @@ function WeaponsEditor({
                   min={0}
                   max={10}
                 />
-                {(editingWeapon.ammoPerShot ?? editingWeapon.multishot ?? 1) !== (editingWeapon.multishot ?? 1) && (
-                  <div className="text-xs text-ancient p-2 bg-obsidian rounded border border-edge-bone">
-                    ✨ Магический эффект: летит {editingWeapon.multishot ?? 1} стрел, тратится {editingWeapon.ammoPerShot ?? editingWeapon.multishot ?? 1}
-                  </div>
-                )}
               </>
             )}
             
