@@ -15,13 +15,8 @@ import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
+import { DiceToasts } from './components/DiceToasts';
 import { cn } from './utils/cn';
-
-// ═══════════════════════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════════════════════
-
-const TOAST_POPOVER_ID = 'cursed-hearts-toast-overlay';
 
 // ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -63,7 +58,6 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'settings', icon: '⚙️', label: 'Настройки' }
 ];
 
-// Размеры окна OBR для каждого режима
 const VIEW_SIZES: Record<ViewMode, { width: number; height: number }> = {
   compact: { width: 300, height: 120 },
   medium: { width: 400, height: 700 },
@@ -71,7 +65,7 @@ const VIEW_SIZES: Record<ViewMode, { width: number; height: number }> = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// COMPACT VIEW — Только HP/Mana
+// COMPACT VIEW
 // ═══════════════════════════════════════════════════════════════
 
 function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
@@ -104,7 +98,6 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   const maxMana = unit.mana.max || 1;
   const manaPct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
 
-  // Переключение юнитов
   const unitIdx = units.findIndex(u => u.id === selectedUnitId);
   const prevUnit = () => { if (unitIdx > 0) selectUnit(units[unitIdx - 1]!.id); };
   const nextUnit = () => { if (unitIdx < units.length - 1) selectUnit(units[unitIdx + 1]!.id); };
@@ -147,7 +140,7 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
 }
 
 // ═══════════════════════════════════════════════════════════════
-// LARGE VIEW — Полноэкранный режим
+// LARGE VIEW
 // ═══════════════════════════════════════════════════════════════
 
 function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
@@ -159,7 +152,6 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 
   return (
     <div className="large-frame">
-      {/* Шапка */}
       <div className="large-header">
         <div className="flex items-center gap-3">
           <span className="text-gold-bright font-cinzel-decorative text-sm tracking-[4px] uppercase text-glow-gold">
@@ -180,14 +172,10 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         </div>
       </div>
 
-      {/* Основной контент: 2 колонки */}
       <div className="large-body">
-        {/* Левая колонка — персонаж + статы */}
         <div className="large-sidebar">
           <UnitSelector />
           <StatBars />
-
-          {/* Мини-лог */}
           <div className="large-log">
             <div className="large-log-header">
               <span className="text-gold font-cinzel text-[10px] uppercase tracking-wider">Хроника</span>
@@ -207,18 +195,13 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
           </div>
         </div>
 
-        {/* Правая колонка — вкладки */}
         <div className="large-main">
-          {/* Вкладки */}
           <div className="large-tabs">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  'large-tab',
-                  activeTab === tab.id ? 'large-tab-active' : 'large-tab-inactive'
-                )}
+                className={cn('large-tab', activeTab === tab.id ? 'large-tab-active' : 'large-tab-inactive')}
               >
                 <span className="text-base">{tab.icon}</span>
                 <span className="text-[10px] font-cinzel uppercase tracking-wider">{tab.label}</span>
@@ -226,7 +209,6 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
             ))}
           </div>
 
-          {/* Контент вкладки */}
           <div className="large-tab-content" key={activeTab}>
             <div className="tab-content-enter h-full">
               {activeTab === 'combat' && <ErrorBoundary tabName="Бой"><CombatTab /></ErrorBoundary>}
@@ -244,7 +226,7 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MEDIUM VIEW — Текущий стандартный
+// MEDIUM VIEW
 // ═══════════════════════════════════════════════════════════════
 
 function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
@@ -269,7 +251,6 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 
   return (
     <div className={cn('h-full flex flex-col bg-abyss text-bone overflow-hidden app-frame', effectClass)}>
-      {/* Фон */}
       <div className="bg-runes">
         {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ','ᛊ','ᛏ','ᚹ'].map((r, i) => <span key={i} className="bg-rune">{r}</span>)}
       </div>
@@ -280,7 +261,6 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
       <div className="gold-dust" />
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* Кнопки режимов */}
         <div className="mode-switcher">
           <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
           <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
@@ -289,7 +269,6 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         <UnitSelector />
         <StatBars />
 
-        {/* Вкладки */}
         <div className="flex border-b border-gold-dark/30 bg-obsidian/80 shrink-0 backdrop-blur-sm">
           {TABS.map(tab => (
             <button
@@ -344,16 +323,13 @@ export function App() {
   const setConnection = useGameStore(s => s.setConnection);
   const startAutoSync = useGameStore(s => s.startAutoSync);
 
-  // Изменение размера OBR окна
   const changeMode = (mode: ViewMode) => {
     setViewMode(mode);
     const size = VIEW_SIZES[mode];
     try {
       OBR.action.setHeight(size.height);
       OBR.action.setWidth(size.width);
-    } catch {
-      // OBR может не поддерживать — игнорируем
-    }
+    } catch { /* ignore */ }
   };
 
   useEffect(() => {
@@ -362,36 +338,12 @@ export function App() {
 
     const init = async () => {
       try {
-        // 1. Инициализация OBR
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. Открываем Toast Popover в правом нижнем углу экрана OBR
-        try {
-          // Закрываем если уже открыт (при перезагрузке)
-          await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
-          
-   // В App.tsx, в функции init(), измени открытие popover:
-
-await OBR.popover.open({
-  id: TOAST_POPOVER_ID,
-  url: './index.html?mode=toast',  // ← относительный путь
-  width: 360,
-  height: 500,
-  anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-  transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-  disableClickAway: true,
-});
-          console.log('[App] Toast popover opened');
-        } catch (e) {
-          console.warn('[App] Failed to open toast popover:', e);
-        }
-
-        // 3. Инициализация Dice Service
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-        // 4. Инициализация Token Bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
@@ -402,7 +354,6 @@ await OBR.popover.open({
           console.warn('[App] Token bars init failed:', e);
         }
 
-        // 5. Инициализация Google Docs
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
@@ -414,7 +365,6 @@ await OBR.popover.open({
           }
           startAutoSync();
         }
-
       } catch (e) {
         console.error('[App] Init error:', e);
       } finally {
@@ -423,10 +373,8 @@ await OBR.popover.open({
     };
 
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Loading screen
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
@@ -447,13 +395,13 @@ await OBR.popover.open({
   }
 
   return (
-    <div className="h-screen bg-abyss text-bone overflow-hidden">
+    <div className="h-screen bg-abyss text-bone overflow-hidden relative">
       {/* Контент по режиму */}
       {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
       {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
       {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
 
-      {/* Уведомления (внутренние, для action panel) */}
+      {/* Системные уведомления */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className="pointer-events-auto">
@@ -462,7 +410,8 @@ await OBR.popover.open({
         ))}
       </div>
 
-      {/* Toast overlay теперь в отдельном popover — не рендерим BroadcastOverlay здесь */}
+      {/* Dice Toasts — компактные, в углу */}
+      <DiceToasts />
     </div>
   );
 }
