@@ -4,7 +4,7 @@ import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from './stores/useGameStore';
 import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
-import { diceService, DICE_BROADCAST_CHANNEL } from './services/diceService';
+import { diceService } from './services/diceService';
 import { tokenBarService } from './services/tokenBarService';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
@@ -15,8 +15,13 @@ import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
-import { BroadcastOverlay, pushBroadcast, type BroadcastMessage } from './components/BroadcastOverlay';
 import { cn } from './utils/cn';
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+
+const TOAST_POPOVER_ID = 'cursed-hearts-toast-overlay';
 
 // ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -73,9 +78,6 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   const units = useGameStore(s => s.units);
   const selectedUnitId = useGameStore(s => s.selectedUnitId);
   const selectUnit = useGameStore(s => s.selectUnit);
-  const setHP = useGameStore(s => s.setHP);
-  const setMana = useGameStore(s => s.setMana);
-  const triggerEffect = useGameStore(s => s.triggerEffect);
 
   const unit = units.find(u => u.id === selectedUnitId);
 
@@ -360,39 +362,60 @@ export function App() {
 
     const init = async () => {
       try {
+        // 1. Инициализация OBR
         await initOBR();
         setConnection('owlbear', true);
 
+        // 2. Открываем Toast Popover в правом нижнем углу экрана OBR
+        try {
+          // Закрываем если уже открыт (при перезагрузке)
+          await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
+          
+          // Открываем toast overlay как отдельный popover
+          await OBR.popover.open({
+            id: TOAST_POPOVER_ID,
+            url: '/index.html?mode=toast',
+            width: 360,
+            height: 500,
+            anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+            transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+            disableClickAway: true,
+          });
+          console.log('[App] Toast popover opened');
+        } catch (e) {
+          console.warn('[App] Failed to open toast popover:', e);
+        }
+
+        // 3. Инициализация Dice Service
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-        // 3. Broadcast listener — получаем от ДРУГИХ игроков
-        try {
-          OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
-            const msg = event.data as BroadcastMessage | undefined;
-            if (msg && typeof msg === 'object' && msg.id && msg.unitName !== undefined) {
-              // Показываем кастомное уведомление
-              pushBroadcast(msg);
-            }
-          });
-        } catch {}
-
+        // 4. Инициализация Token Bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
           if (state.settings.showTokenBars ?? true) {
             await tokenBarService.syncAllBars(state.units);
           }
-        } catch {}
+        } catch (e) {
+          console.warn('[App] Token bars init failed:', e);
+        }
 
+        // 5. Инициализация Google Docs
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
-          try { const t = await docsService.testConnection(); setConnection('docs', t.success); } catch { setConnection('docs', false); }
+          try { 
+            const t = await docsService.testConnection(); 
+            setConnection('docs', t.success); 
+          } catch { 
+            setConnection('docs', false); 
+          }
           startAutoSync();
         }
+
       } catch (e) {
-        console.error('[App] Init:', e);
+        console.error('[App] Init error:', e);
       } finally {
         setIsLoading(false);
       }
@@ -402,6 +425,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Loading screen
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
@@ -428,7 +452,7 @@ export function App() {
       {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
       {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
 
-      {/* Уведомления (всегда видны) */}
+      {/* Уведомления (внутренние, для action panel) */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className="pointer-events-auto">
@@ -437,8 +461,7 @@ export function App() {
         ))}
       </div>
 
-      {/* Кастомные broadcast уведомления */}
-      <BroadcastOverlay />
+      {/* Toast overlay теперь в отдельном popover — не рендерим BroadcastOverlay здесь */}
     </div>
   );
 }
