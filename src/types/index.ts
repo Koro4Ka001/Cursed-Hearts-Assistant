@@ -165,12 +165,13 @@ export type StatKey = keyof Unit['stats'];
 
 export interface ActionStep {
   id: string;
-  label: string;                   // "Бросок на осмотр"
+  label: string;
   roll: {
-    dice: string;                  // "d20"
+    dice: string;
     bonuses: ActionBonus[];
   };
-  threshold?: number;              // порог успеха (>= threshold = успех)
+  threshold?: number;
+  rollModifier?: RollModifier;  // НОВОЕ: преимущество/помеха для этого шага
   onSuccess?: ActionOutcome;
   onFailure?: ActionOutcome;
 }
