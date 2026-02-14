@@ -1,10 +1,11 @@
+// src/components/tabs/ActionsTab.tsx
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, Input, NumberStepper, Modal, EmptyState, DiceResultDisplay } from '../ui';
 import { generateId } from '../../utils/dice';
 import { diceService } from '../../services/diceService';
-import type { CustomAction, ActionStep, ActionBonus, DiceRollResult, StatKey, ProficiencyType } from '../../types';
-import { STAT_NAMES, PROFICIENCY_NAMES } from '../../types';
+import type { CustomAction, ActionStep, ActionBonus, DiceRollResult, StatKey, ProficiencyType, RollModifier } from '../../types';
+import { STAT_NAMES, PROFICIENCY_NAMES, ROLL_MODIFIER_NAMES } from '../../types';
 
 export function ActionsTab() {
   const { units, selectedUnitId, updateUnit, spendMana, takeDamage, heal } = useGameStore();
@@ -53,6 +54,12 @@ export function ActionsTab() {
         
         log.push(`\n--- ${step.label} ---`);
         
+        // ═══ ПРОВЕРЯЕМ МОДИФИКАТОР БРОСКА ═══
+        const rollModifier: RollModifier = step.rollModifier ?? 'normal';
+        if (rollModifier !== 'normal') {
+          log.push(`${rollModifier === 'advantage' ? '🎯 Преимущество' : '💨 Помеха'}`);
+        }
+        
         // Вычисляем бонусы
         let totalBonus = 0;
         const bonusBreakdown: string[] = [];
@@ -87,22 +94,39 @@ export function ActionsTab() {
           }
         }
         
-        // Бросаем кубики
+        // Бросаем кубики С МОДИФИКАТОРОМ
         const diceFormula = step.roll?.dice ?? 'd20';
         const formula = totalBonus !== 0
           ? `${diceFormula}+${totalBonus}`
           : diceFormula;
         
-        const result = await diceService.roll(formula, step.label);
+        const result = await diceService.roll(
+          formula, 
+          step.label,
+          unit.shortName ?? unit.name,
+          rollModifier  // ← ИСПОЛЬЗУЕМ МОДИФИКАТОР
+        );
         results.push(result);
         
         if (bonusBreakdown.length > 0) {
           log.push(`Бонусы: ${bonusBreakdown.join(', ')}`);
         }
-        log.push(`🎲 [${(result.rolls ?? []).join(', ')}] + ${result.bonus ?? 0} = ${result.total}`);
         
+        // Показываем результат с учётом преимущества/помехи
+        if (result.allD20Rolls && result.allD20Rolls.length > 1) {
+          const chosen = result.rawD20;
+          const displayRolls = result.allD20Rolls.map(r =>
+            r === chosen ? `[${r}]` : `~~${r}~~`
+          ).join(', ');
+          log.push(`🎲 {${displayRolls}} + ${result.bonus ?? 0} = ${result.total}`);
+        } else {
+          log.push(`🎲 [${(result.rolls ?? []).join(', ')}] + ${result.bonus ?? 0} = ${result.total}`);
+        }
+        
+        // Уведомление
+        const modIcon = rollModifier === 'advantage' ? '🎯' : rollModifier === 'disadvantage' ? '💨' : '';
         await diceService.showNotification(
-          `🎲 ${unit.shortName}: ${step.label} — [${result.rawD20 ?? result.rolls?.[0] ?? 0}] + ${result.bonus ?? 0} = ${result.total}`
+          `🎲 ${unit.shortName}: ${step.label} ${modIcon} — [${result.rawD20 ?? result.rolls?.[0] ?? 0}] + ${result.bonus ?? 0} = ${result.total}`
         );
         
         // Проверяем порог
@@ -192,7 +216,8 @@ export function ActionsTab() {
         id: generateId(),
         label: 'Шаг 1',
         roll: { dice: 'd20', bonuses: [] },
-        threshold: 11
+        threshold: 11,
+        rollModifier: 'normal'  // ← ДОБАВЛЯЕМ ПО УМОЛЧАНИЮ
       }]
     };
     setEditingAction(newAction);
@@ -307,17 +332,27 @@ export function ActionsTab() {
           <p className="text-faded text-sm mb-2">Нет настроенных действий</p>
         ) : (
           <div className="grid grid-cols-2 gap-2 mb-3">
-            {customActions.map(action => (
-              <Button
-                key={action.id}
-                variant="secondary"
-                onClick={() => executeAction(action)}
-                loading={isExecuting}
-                className="text-left"
-              >
-                {action.icon} {action.name}
-              </Button>
-            ))}
+            {customActions.map(action => {
+              // Показываем иконку если есть шаг с модификатором
+              const hasModifier = action.steps?.some(s => s.rollModifier && s.rollModifier !== 'normal');
+              const modIcon = hasModifier 
+                ? action.steps?.find(s => s.rollModifier === 'advantage') ? '🎯' 
+                : action.steps?.find(s => s.rollModifier === 'disadvantage') ? '💨' 
+                : ''
+                : '';
+              
+              return (
+                <Button
+                  key={action.id}
+                  variant="secondary"
+                  onClick={() => executeAction(action)}
+                  loading={isExecuting}
+                  className="text-left"
+                >
+                  {action.icon} {action.name} {modIcon}
+                </Button>
+              );
+            })}
           </div>
         )}
         
@@ -395,7 +430,10 @@ export function ActionsTab() {
   );
 }
 
-// Компонент редактора действия
+// ═══════════════════════════════════════════════════════════════════
+// КОМПОНЕНТ РЕДАКТОРА ДЕЙСТВИЯ
+// ═══════════════════════════════════════════════════════════════════
+
 interface ActionEditorProps {
   action: CustomAction;
   onSave: (action: CustomAction) => void;
@@ -413,7 +451,8 @@ function ActionEditor({ action, onSave, onCancel, iconOptions }: ActionEditorPro
       id: generateId(),
       label: `Шаг ${steps.length + 1}`,
       roll: { dice: 'd20', bonuses: [] },
-      threshold: 11
+      threshold: 11,
+      rollModifier: 'normal'  // ← ПО УМОЛЧАНИЮ
     }]);
   };
   
@@ -447,6 +486,15 @@ function ActionEditor({ action, onSave, onCancel, iconOptions }: ActionEditorPro
       if (newBonuses[bonusIndex]) {
         newBonuses[bonusIndex] = { ...newBonuses[bonusIndex]!, ...updates };
       }
+      return { ...s, roll: { ...roll, bonuses: newBonuses } };
+    }));
+  };
+  
+  const removeBonus = (stepId: string, bonusIndex: number) => {
+    setSteps(steps.map(s => {
+      if (s.id !== stepId) return s;
+      const roll = s.roll ?? { dice: 'd20', bonuses: [] };
+      const newBonuses = (roll.bonuses ?? []).filter((_, i) => i !== bonusIndex);
       return { ...s, roll: { ...roll, bonuses: newBonuses } };
     }));
   };
@@ -504,6 +552,33 @@ function ActionEditor({ action, onSave, onCancel, iconOptions }: ActionEditorPro
             />
           </div>
           
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* НОВОЕ: ВЫБОР ПРЕИМУЩЕСТВА / ПОМЕХИ */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+          <Select
+            label="🎲 Модификатор броска"
+            value={step.rollModifier ?? 'normal'}
+            onChange={(e) => updateStep(step.id, { rollModifier: e.target.value as RollModifier })}
+            options={[
+              { value: 'normal', label: '— Обычный бросок' },
+              { value: 'advantage', label: '🎯 Преимущество (2d20, лучший)' },
+              { value: 'disadvantage', label: '💨 Помеха (2d20, худший)' }
+            ]}
+          />
+          
+          {step.rollModifier && step.rollModifier !== 'normal' && (
+            <div className={`text-xs p-2 rounded ${
+              step.rollModifier === 'advantage' 
+                ? 'bg-gold-dark/20 text-gold border border-gold/30' 
+                : 'bg-blood/20 text-blood-bright border border-blood/30'
+            }`}>
+              {step.rollModifier === 'advantage' 
+                ? '🎯 Этот шаг всегда бросается с преимуществом — берётся лучший из 2d20'
+                : '💨 Этот шаг всегда бросается с помехой — берётся худший из 2d20'
+              }
+            </div>
+          )}
+          
           <div className="space-y-1">
             <div className="text-xs text-faded">Бонусы:</div>
             {(step.roll?.bonuses ?? []).map((bonus, bIdx) => (
@@ -542,6 +617,13 @@ function ActionEditor({ action, onSave, onCancel, iconOptions }: ActionEditorPro
                     className="w-16 bg-dark border border-edge-bone text-bone rounded px-2 py-1"
                   />
                 )}
+                <Button 
+                  variant="danger" 
+                  size="sm" 
+                  onClick={() => removeBonus(step.id, bIdx)}
+                >
+                  ×
+                </Button>
               </div>
             ))}
             <Button variant="secondary" size="sm" onClick={() => addBonus(step.id)}>
