@@ -1,98 +1,100 @@
 // src/components/BroadcastOverlay.tsx
 import { useState, useEffect, useCallback, useRef } from 'react';
+import OBR from '@owlbear-rodeo/sdk';
+import { onLocalDiceMessage, DICE_BROADCAST_CHANNEL, type BroadcastMessage } from '../services/diceService';
 import { cn } from '../utils/cn';
 
 // ═══════════════════════════════════════════════════════════════
-// ТИПЫ
+// TYPES
 // ═══════════════════════════════════════════════════════════════
-
-export interface BroadcastMessage {
-  id: string;
-  type: 'roll' | 'damage' | 'hit' | 'miss' | 'spell' | 'heal' | 'death' | 'rok-card' | 'custom';
-  unitName: string;
-  title: string;
-  subtitle?: string;
-  icon?: string;
-  rolls?: number[];
-  total?: number;
-  isCrit?: boolean;
-  isCritFail?: boolean;
-  color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white';
-  hpBar?: { current: number; max: number };
-  details?: string[];
-  timestamp: number;
-}
 
 interface ToastState extends BroadcastMessage {
   phase: 'enter' | 'visible' | 'exit';
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ГЛОБАЛЬНЫЙ СТЕЙТ
+// CONSTANTS
 // ═══════════════════════════════════════════════════════════════
 
-type Listener = (messages: BroadcastMessage[]) => void;
-const listeners = new Set<Listener>();
-let messageQueue: BroadcastMessage[] = [];
-
-export function pushBroadcast(msg: BroadcastMessage) {
-  messageQueue = [...messageQueue, msg].slice(-8); // Максимум 8 в очереди
-  listeners.forEach(fn => fn(messageQueue));
-}
-
-function subscribe(fn: Listener) {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
+const TOAST_DURATION = 5000;
+const TOAST_EXIT_DURATION = 500;
+const MAX_VISIBLE = 5;
 
 // ═══════════════════════════════════════════════════════════════
-// КОМПОНЕНТ OVERLAY
+// MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
-
-const TOAST_DURATION = 4000;      // Время показа
-const TOAST_EXIT_DURATION = 500;  // Время исчезновения
-const MAX_VISIBLE = 5;            // Максимум видимых toast-ов
 
 export function BroadcastOverlay() {
   const [toasts, setToasts] = useState<ToastState[]>([]);
   const processedIds = useRef(new Set<string>());
 
-  // Подписка на новые сообщения
-  useEffect(() => {
-    return subscribe((messages) => {
-      const newMessages = messages.filter(m => !processedIds.current.has(m.id));
-      
-      newMessages.forEach(msg => {
-        processedIds.current.add(msg.id);
-        
-        // Добавляем новый toast
-        setToasts(prev => {
-          const newToast: ToastState = { ...msg, phase: 'enter' };
-          const updated = [...prev, newToast].slice(-MAX_VISIBLE);
-          return updated;
-        });
-        
-        // Переход в visible фазу
-        setTimeout(() => {
-          setToasts(prev => prev.map(t => 
-            t.id === msg.id ? { ...t, phase: 'visible' } : t
-          ));
-        }, 50);
-        
-        // Начало выхода
-        setTimeout(() => {
-          setToasts(prev => prev.map(t => 
-            t.id === msg.id ? { ...t, phase: 'exit' } : t
-          ));
-        }, TOAST_DURATION);
-        
-        // Удаление
-        setTimeout(() => {
-          setToasts(prev => prev.filter(t => t.id !== msg.id));
-        }, TOAST_DURATION + TOAST_EXIT_DURATION);
-      });
+  // Обработка нового сообщения
+  const handleMessage = useCallback((msg: BroadcastMessage) => {
+    // Дедупликация
+    if (processedIds.current.has(msg.id)) return;
+    processedIds.current.add(msg.id);
+
+    // Очистка старых ID (держим последние 100)
+    if (processedIds.current.size > 100) {
+      const arr = Array.from(processedIds.current);
+      processedIds.current = new Set(arr.slice(-50));
+    }
+
+    // Добавляем toast
+    setToasts(prev => {
+      const newToast: ToastState = { ...msg, phase: 'enter' };
+      return [...prev, newToast].slice(-MAX_VISIBLE);
     });
+
+    // Enter → Visible
+    setTimeout(() => {
+      setToasts(prev => prev.map(t => 
+        t.id === msg.id ? { ...t, phase: 'visible' } : t
+      ));
+    }, 50);
+
+    // Visible → Exit
+    setTimeout(() => {
+      setToasts(prev => prev.map(t => 
+        t.id === msg.id ? { ...t, phase: 'exit' } : t
+      ));
+    }, TOAST_DURATION);
+
+    // Remove
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== msg.id));
+    }, TOAST_DURATION + TOAST_EXIT_DURATION);
   }, []);
+
+  // Подписка на ЛОКАЛЬНЫЕ сообщения (от себя)
+  useEffect(() => {
+    const unsubLocal = onLocalDiceMessage(handleMessage);
+    return unsubLocal;
+  }, [handleMessage]);
+
+  // Подписка на BROADCAST сообщения (от других игроков)
+  useEffect(() => {
+    let unsubBroadcast: (() => void) | undefined;
+
+    const setup = async () => {
+      try {
+        unsubBroadcast = OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+          const data = event.data as BroadcastMessage;
+          if (data && data.id) {
+            handleMessage(data);
+          }
+        });
+      } catch (e) {
+        console.warn('[BroadcastOverlay] Failed to subscribe to broadcast:', e);
+      }
+    };
+
+    setup();
+
+    return () => {
+      if (unsubBroadcast) unsubBroadcast();
+    };
+  }, [handleMessage]);
 
   // Ручное закрытие
   const dismissToast = useCallback((id: string) => {
@@ -108,11 +110,10 @@ export function BroadcastOverlay() {
 
   return (
     <div className="dice-toast-container">
-      {toasts.map((toast, index) => (
+      {toasts.map((toast) => (
         <DiceToast 
           key={toast.id} 
           toast={toast} 
-          index={index}
           onDismiss={() => dismissToast(toast.id)}
         />
       ))}
@@ -121,16 +122,15 @@ export function BroadcastOverlay() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// КОМПОНЕНТ TOAST
+// TOAST COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
 interface DiceToastProps {
   toast: ToastState;
-  index: number;
   onDismiss: () => void;
 }
 
-function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
+function DiceToast({ toast, onDismiss }: DiceToastProps) {
   const {
     type, unitName, title, subtitle, icon, rolls, total,
     isCrit, isCritFail, color, hpBar, details, phase
@@ -153,8 +153,9 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
     exit: 'toast-exit',
   }[phase];
 
-  // Определяем иконку
+  // Иконка
   const displayIcon = icon ?? getDefaultIcon(type);
+  const critIcon = isCrit ? '✨' : isCritFail ? '💀' : displayIcon;
 
   return (
     <div 
@@ -165,33 +166,36 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
         isCrit && 'toast-crit',
         isCritFail && 'toast-fail'
       )}
-      style={{ '--toast-index': index } as React.CSSProperties}
       onClick={onDismiss}
     >
-      {/* Декоративные элементы */}
+      {/* Glow */}
       <div className="toast-glow" />
+      
+      {/* Crit rays */}
       {isCrit && <div className="toast-crit-rays" />}
+      
+      {/* Fail cracks */}
       {isCritFail && <div className="toast-fail-cracks" />}
       
-      {/* Основной контент */}
+      {/* Content */}
       <div className="toast-content">
-        {/* Иконка */}
+        {/* Icon */}
         <div className={cn(
           'toast-icon',
           isCrit && 'toast-icon-crit',
           isCritFail && 'toast-icon-fail'
         )}>
-          {displayIcon}
+          {critIcon}
         </div>
         
-        {/* Текст */}
+        {/* Body */}
         <div className="toast-body">
-          {/* Имя персонажа */}
+          {/* Unit name */}
           {unitName && (
             <div className="toast-unit">{unitName}</div>
           )}
           
-          {/* Заголовок */}
+          {/* Title */}
           <div className={cn(
             'toast-title',
             isCrit && 'toast-title-crit',
@@ -200,13 +204,13 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
             {title}
           </div>
           
-          {/* Подзаголовок */}
+          {/* Subtitle */}
           {subtitle && (
             <div className="toast-subtitle">{subtitle}</div>
           )}
           
-          {/* Кубики + результат */}
-          {(rolls && rolls.length > 0) && (
+          {/* Dice rolls */}
+          {rolls && rolls.length > 0 && (
             <div className="toast-rolls">
               {rolls.slice(0, 6).map((roll, i) => (
                 <span 
@@ -239,7 +243,7 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
             </div>
           )}
           
-          {/* HP бар */}
+          {/* HP bar */}
           {hpBar && (
             <div className="toast-hp">
               <div 
@@ -255,7 +259,7 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
             </div>
           )}
           
-          {/* Детали */}
+          {/* Details */}
           {details && details.length > 0 && (
             <div className="toast-details">
               {details.map((line, i) => (
@@ -265,8 +269,8 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
           )}
         </div>
         
-        {/* Результат справа (большой) */}
-        {total !== undefined && !rolls?.length && (
+        {/* Big result (when no rolls) */}
+        {total !== undefined && (!rolls || rolls.length === 0) && (
           <div className={cn(
             'toast-result',
             isCrit && 'toast-result-crit',
@@ -277,19 +281,21 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
         )}
       </div>
       
-      {/* Баннер крита/провала */}
+      {/* Crit banner */}
       {isCrit && (
         <div className="toast-banner toast-banner-crit">
           ✨ КРИТИЧЕСКИЙ УСПЕХ ✨
         </div>
       )}
+      
+      {/* Fail banner */}
       {isCritFail && (
         <div className="toast-banner toast-banner-fail">
           💀 КРИТИЧЕСКИЙ ПРОВАЛ
         </div>
       )}
       
-      {/* Прогресс-бар автозакрытия */}
+      {/* Progress bar */}
       <div className="toast-progress" />
     </div>
   );
@@ -309,6 +315,7 @@ function getDefaultIcon(type: BroadcastMessage['type']): string {
     case 'heal': return '💚';
     case 'death': return '💀';
     case 'rok-card': return '🃏';
-    default: return '📜';
+    case 'custom': return '📜';
+    default: return '🎲';
   }
 }
