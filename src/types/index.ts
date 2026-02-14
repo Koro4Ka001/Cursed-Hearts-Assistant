@@ -1,23 +1,10 @@
-// === src/types/index.ts ===
+// src/types/index.ts
 
-// === НОВЫЕ ТИПЫ: ПРЕДРАСПОЛОЖЕННОСТЬ И МОДИФИКАТОРЫ ===
-
-export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
-
-export interface ElementAffinity {
-  id: string;
-  element: string;           // элемент магии (fire, water, etc.)
-  bonusType: AffinityBonusType; // тип бонуса
-  value: number;             // числовое значение
-}
+// ═══════════════════════════════════════════════════════════════
+// ROLL MODIFIER — Преимущество / Помеха
+// ═══════════════════════════════════════════════════════════════
 
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
-
-export const AFFINITY_BONUS_NAMES: Record<AffinityBonusType, string> = {
-  castHit: '+к касту/попаданию',
-  manaCost: '-к затрате маны',
-  damage: '+к урону'
-};
 
 export const ROLL_MODIFIER_NAMES: Record<RollModifier, string> = {
   normal: 'Обычный',
@@ -25,69 +12,56 @@ export const ROLL_MODIFIER_NAMES: Record<RollModifier, string> = {
   disadvantage: 'Помеха'
 };
 
-// === ОСНОВНЫЕ ТИПЫ ===
+// ═══════════════════════════════════════════════════════════════
+// UNIT
+// ═══════════════════════════════════════════════════════════════
 
 export interface Unit {
   id: string;
-  name: string;                    // "Кассиан"
-  shortName: string;               // "Касс"
-  googleDocsHeader: string;        // "КАССИАН|КАРТОЧНЫЙ ДИЛЕР" — для поиска в Docs
-  owlbearTokenId?: string;         // ID токена на карте OBR
-  
+  name: string;
+  shortName: string;
+  googleDocsHeader: string;
+  owlbearTokenId?: string;
   health: { current: number; max: number };
   mana: { current: number; max: number };
-  
   stats: {
-    physicalPower: number;   // +5 к физ урону за единицу
-    dexterity: number;       // +3 к урону луков за единицу
-    vitality: number;        // +5 к макс ХП за единицу (информативно)
-    intelligence: number;    // +3 к маг урону за единицу
-    charisma: number;        // информативно
-    initiative: number;      // информативно
+    physicalPower: number;
+    dexterity: number;
+    vitality: number;
+    intelligence: number;
+    charisma: number;
+    initiative: number;
   };
-  
   proficiencies: {
-    swords: number;     // бонус к d20 на попадание мечами
-    axes: number;       // бонус к d20 на попадание топорами
-    hammers: number;    // бонус к d20 на попадание молотами
-    polearms: number;   // бонус к d20 на попадание древковым
-    unarmed: number;    // бонус к d20 на попадание рукопашный
-    bows: number;       // бонус к d20 на попадание луками
+    swords: number;
+    axes: number;
+    hammers: number;
+    polearms: number;
+    unarmed: number;
+    bows: number;
   };
-  
   magicBonuses: Record<string, number>;
-  // Пример: { "электричество": 3, "воздух": 2, "природа": 3, "жизнь": 3, "скверна": 3 }
-  // При касте берётся МАКСИМАЛЬНЫЙ бонус из элементов заклинания
-  
-  // НОВОЕ: предрасположенности к элементам
-  elementAffinities: ElementAffinity[];
-  
+  elementAffinities: string[];
   armor: {
-    slashing: number;      // от режущего
-    piercing: number;      // от колющего
-    bludgeoning: number;   // от дробящего
-    chopping: number;      // от рубящего
-    magicBase: number;     // базовая маг защита
-    magicOverrides: Record<string, number>; // { "огонь": 15, "свет": 0 }
-    undead: number;        // защита от нежити
+    slashing: number;
+    piercing: number;
+    bludgeoning: number;
+    chopping: number;
+    magicBase: number;
+    magicOverrides: Record<string, number>;
+    undead: number;
   };
-  
   damageMultipliers: Record<string, number>;
-  // { "колющий": 0.5, "свет": 2.0 } — множитель урона ДО вычета брони
-  // если не указан — 1.0
-  
   weapons: Weapon[];
   spells: Spell[];
   resources: Resource[];
   customActions: CustomAction[];
-  
-  hasRokCards: boolean;        // только для Кассиана
-  rokDeckResourceId?: string;  // ID ресурса, используемого как колода Рока
-  hasDoubleShot: boolean;      // способность ДаблШот (только для Кассиана)
-  doubleShotThreshold: number; // порог для ДаблШот (18)
-  
-  notes: string;               // Заметки персонажа (только локально)
-  useManaAsHp: boolean;        // Урон снимает ману вместо HP (HP бар скрыт)
+  hasRokCards: boolean;
+  rokDeckResourceId?: string;
+  hasDoubleShot: boolean;
+  doubleShotThreshold: number;
+  notes: string;
+  useManaAsHp: boolean;
 }
 
 export type WeaponType = 'melee' | 'ranged';
@@ -95,50 +69,41 @@ export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unar
 
 export interface Weapon {
   id: string;
-  name: string;                    // "Фамильная сабля"
-  type: WeaponType;                // melee / ranged
-  damageFormula: string;           // "5d20" или "6d10" — для melee, пустой для ranged
-  damageType: DamageType;          // "chopping" / "piercing" / etc
+  name: string;
+  type: WeaponType;
+  damageFormula: string;
+  damageType: DamageType;
   proficiencyType: ProficiencyType;
   statBonus: 'physicalPower' | 'dexterity' | 'none';
-  // physicalPower = стат × 5 к урону, dexterity = стат × 3 к урону
-  hitBonus: number;                // доп бонус к попаданию (напр. +3 от лука)
-  multishot: number;               // кол-во стрел/снарядов ЛЕТЯЩИХ за выстрел (для ranged, по умолчанию 1)
-  ammoPerShot?: number;            // кол-во боеприпасов ТРАТЯЩИХСЯ за выстрел (по умолчанию = multishot)
-                                   // Пример: multishot=2, ammoPerShot=1 → летит 2 стрелы, тратится 1
-  extraDamageFormula?: string;     // доп урон (напр. стрелы с рунами)
+  hitBonus: number;
+  multishot: number;
+  ammoPerShot?: number;
+  extraDamageFormula?: string;
   extraDamageType?: DamageType;
-  notes?: string;                  // "все стрелы разделяются на две"
+  notes?: string;
 }
 
 export type SpellCostType = 'mana' | 'health';
 
 export interface Spell {
   id: string;
-  name: string;                    // "Винтовая молния"
-  manaCost: number;                // стоимость маны (или HP если costType='health')
-  costType: SpellCostType;         // 'mana' (по умолчанию) или 'health'
-  elements: string[];              // ["электричество"] или ["земля", "тьма"]
+  name: string;
+  manaCost: number;
+  costType: SpellCostType;
+  elements: string[];
   type: 'targeted' | 'aoe' | 'self' | 'summon';
-  projectiles: string;             // кол-во снарядов — число "3" или формула "d4", "2d6+1"
-  damageFormula?: string;          // "d20+d4" — формула урона ЗА ОДИН СНАРЯД
+  projectiles: string;
+  damageFormula?: string;
   damageType?: DamageType;
-  description?: string;            // текстовое описание эффекта
-  equipmentBonus?: number;         // доп бонус от экипировки (напр. +10 от посоха)
-  
-  // === Многошаговая механика ===
-  isMultiStep?: boolean;           // включает многошаговый режим (d20 попадание → d12 элемент → d20 сила → урон по tier)
-  
-  // Таблица d12 → элемент (12 записей, настраиваемая)
+  description?: string;
+  equipmentBonus?: number;
+  isMultiStep?: boolean;
   elementTable?: Record<number, DamageType>;
-  // Пример: { 1: "fire", 2: "water", 3: "earth", ... 12: "corruption" }
-  
-  // Таблица tier'ов урона: диапазон d20 → формула урона
   damageTiers?: Array<{
-    minRoll: number;    // минимальное значение d20 (включительно)
-    maxRoll: number;    // максимальное значение d20 (включительно)
-    formula: string;    // формула урона, например "d6" или "4d12+2d10"
-    label?: string;     // отображаемое название tier'а
+    minRoll: number;
+    maxRoll: number;
+    formula: string;
+    label?: string;
   }>;
 }
 
@@ -146,22 +111,23 @@ export type ResourceType = 'generic' | 'ammo';
 
 export interface Resource {
   id: string;
-  name: string;           // "Колода Рока" или "Стрелы с рунами Пустоты"
-  icon: string;           // "🃏" или "🏹"
-  current: number;        // текущее количество
-  max: number;            // максимум
-  resourceType: ResourceType;  // 'generic' или 'ammo'
-  // Поля для ammo:
-  damageFormula?: string;      // "6d10" — урон за стрелу
-  damageType?: DamageType;     // "piercing" — тип урона стрелы
-  extraDamageFormula?: string; // доп урон (например от рун)
+  name: string;
+  icon: string;
+  current: number;
+  max: number;
+  resourceType: ResourceType;
+  damageFormula?: string;
+  damageType?: DamageType;
+  extraDamageFormula?: string;
   extraDamageType?: DamageType;
-  syncWithDocs: boolean;       // синхронизировать с Google Docs
+  syncWithDocs: boolean;
 }
 
-// === КАСТОМНЫЕ ДЕЙСТВИЯ ===
-
 export type StatKey = keyof Unit['stats'];
+
+// ═══════════════════════════════════════════════════════════════
+// CUSTOM ACTIONS
+// ═══════════════════════════════════════════════════════════════
 
 export interface ActionStep {
   id: string;
@@ -171,7 +137,7 @@ export interface ActionStep {
     bonuses: ActionBonus[];
   };
   threshold?: number;
-  rollModifier?: RollModifier;  // НОВОЕ: преимущество/помеха для этого шага
+  rollModifier?: RollModifier;
   onSuccess?: ActionOutcome;
   onFailure?: ActionOutcome;
 }
@@ -181,7 +147,7 @@ export interface ActionBonus {
   stat?: StatKey;
   proficiency?: ProficiencyType;
   flatValue?: number;
-  label?: string;                  // для отображения
+  label?: string;
 }
 
 export interface ActionOutcome {
@@ -191,17 +157,19 @@ export interface ActionOutcome {
   damageFormula?: string;
   damageType?: DamageType;
   healFormula?: string;
-  amount?: number;                 // для mana_cost / health_cost
+  amount?: number;
 }
 
 export interface CustomAction {
   id: string;
-  name: string;                    // "Осмотр"
-  icon: string;                    // "🔍"
+  name: string;
+  icon: string;
   steps: ActionStep[];
 }
 
-// === ТИПЫ УРОНА ===
+// ═══════════════════════════════════════════════════════════════
+// DAMAGE TYPES
+// ═══════════════════════════════════════════════════════════════
 
 export type PhysicalDamageType = 'slashing' | 'piercing' | 'bludgeoning' | 'chopping';
 export type MagicalDamageType = 'fire' | 'water' | 'earth' | 'air' | 'light' | 'space' |
@@ -210,47 +178,40 @@ export type MagicalDamageType = 'fire' | 'water' | 'earth' | 'air' | 'light' | '
 export type DamageType = PhysicalDamageType | MagicalDamageType | 'pure';
 export type DamageCategory = 'physical' | 'magical' | 'pure';
 
-// === РЕЗУЛЬТАТ БРОСКА ===
+// ═══════════════════════════════════════════════════════════════
+// DICE ROLL RESULT
+// ═══════════════════════════════════════════════════════════════
 
 export interface DiceRollResult {
-  formula: string;       // "3d20+5"
-  rolls: number[];       // [14, 7, 19]
-  bonus: number;         // 5
-  total: number;         // 45
-  isCrit: boolean;       // d20 == 20
-  isCritFail: boolean;   // d20 == 1
-  rawD20?: number;       // значение d20 если бросался d20
-  label?: string;        // "Попадание мечом"
-  // НОВОЕ: для отображения преимущества/помехи
+  formula: string;
+  rolls: number[];
+  bonus: number;
+  total: number;
+  isCrit: boolean;
+  isCritFail: boolean;
+  rawD20?: number;
+  label?: string;
   rollModifier?: RollModifier;
-  allD20Rolls?: number[]; // все броски d20 при преимуществе/помехе
+  allD20Rolls?: number[];
 }
 
-// === DICE OVERLAY (визуальный оверлей броска) ===
-
-export interface DiceOverlayData {
-  id: string;            // уникальный ID броска
-  playerName: string;    // имя персонажа
-  label: string;         // описание броска
-  rolls: number[];       // значения кубиков
-  total: number;         // итого
-  isCrit: boolean;       // крит 20
-  isCritFail: boolean;   // провал 1
-}
-
-// === КАРТЫ РОКА ===
+// ═══════════════════════════════════════════════════════════════
+// ROK CARDS
+// ═══════════════════════════════════════════════════════════════
 
 export interface RokCardResult {
   cardIndex: number;
-  hitRoll: number;        // d20 на попадание
-  isHit: boolean;         // hitRoll >= 11
-  effectRoll: number;     // d20 на эффект (1-20)
+  hitRoll: number;
+  isHit: boolean;
+  effectRoll: number;
   effectDescription: string;
-  additionalRolls: DiceRollResult[];  // доп броски от эффекта
-  subEffects?: string[];   // под-эффекты (например аура д4)
+  additionalRolls: DiceRollResult[];
+  subEffects?: string[];
 }
 
-// === НАСТРОЙКИ ===
+// ═══════════════════════════════════════════════════════════════
+// SETTINGS & STATE
+// ═══════════════════════════════════════════════════════════════
 
 export interface Settings {
   googleDocsUrl: string;
@@ -269,8 +230,6 @@ export interface ConnectionStatus {
   lastSyncTime?: number;
 }
 
-// === ВСПОМОГАТЕЛЬНЫЕ ТИПЫ ===
-
 export interface Notification {
   id: string;
   message: string;
@@ -285,7 +244,10 @@ export interface CombatLogEntry {
   details: string;
 }
 
-// Маппинг русских названий типов урона
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+
 export const DAMAGE_TYPE_NAMES: Record<DamageType, string> = {
   slashing: 'Режущий',
   piercing: 'Колющий',
@@ -329,7 +291,6 @@ export const STAT_NAMES: Record<StatKey, string> = {
   initiative: 'Инициатива'
 };
 
-// Опции для множителей урона
 export const MULTIPLIER_OPTIONS = [
   { value: 0, label: '×0 (Иммунитет)' },
   { value: 0.25, label: '×0.25' },
@@ -341,37 +302,9 @@ export const MULTIPLIER_OPTIONS = [
   { value: 3, label: '×3' }
 ];
 
-// Все типы урона для выбора
 export const ALL_DAMAGE_TYPES: DamageType[] = [
   'slashing', 'piercing', 'bludgeoning', 'chopping',
   'fire', 'water', 'earth', 'air', 'light', 'darkness',
   'electricity', 'frost', 'nature', 'corruption', 'life', 'death',
   'blood', 'void', 'astral', 'space', 'transcendence', 'pure'
 ];
-
-// НОВОЕ: все элементы магии для выбора предрасположенности
-export const MAGIC_ELEMENTS: string[] = [
-  'fire', 'water', 'earth', 'air', 'light', 'darkness',
-  'electricity', 'frost', 'nature', 'corruption', 'life', 'death',
-  'blood', 'void', 'astral', 'space', 'transcendence'
-];
-
-export const ELEMENT_NAMES: Record<string, string> = {
-  fire: 'Огонь',
-  water: 'Вода',
-  earth: 'Земля',
-  air: 'Воздух',
-  light: 'Свет',
-  darkness: 'Тьма',
-  electricity: 'Электричество',
-  frost: 'Мороз',
-  nature: 'Природа',
-  corruption: 'Скверна',
-  life: 'Жизнь',
-  death: 'Смерть',
-  blood: 'Кровь',
-  void: 'Пустота',
-  astral: 'Астрал',
-  space: 'Пространство',
-  transcendence: 'Трансцендентность'
-};
