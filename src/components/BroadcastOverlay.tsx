@@ -1,13 +1,14 @@
 // src/components/BroadcastOverlay.tsx
-// Кастомные анимированные уведомления видимые ВСЕМ игрокам
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '../utils/cn';
 
-// ── Типы ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// ТИПЫ
+// ═══════════════════════════════════════════════════════════════
 
 export interface BroadcastMessage {
   id: string;
-  type: 'roll' | 'hit' | 'miss' | 'damage' | 'heal' | 'spell' | 'rok-card' | 'mana' | 'death' | 'custom';
+  type: 'roll' | 'damage' | 'hit' | 'miss' | 'spell' | 'heal' | 'death' | 'rok-card' | 'custom';
   unitName: string;
   title: string;
   subtitle?: string;
@@ -17,178 +18,297 @@ export interface BroadcastMessage {
   isCrit?: boolean;
   isCritFail?: boolean;
   color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white';
-  details?: string[];
   hpBar?: { current: number; max: number };
+  details?: string[];
   timestamp: number;
 }
 
-// ── Глобальная очередь (чтобы App и diceService могли добавлять) ─
+interface ToastState extends BroadcastMessage {
+  phase: 'enter' | 'visible' | 'exit';
+}
 
-type Listener = (msg: BroadcastMessage) => void;
-const listeners: Set<Listener> = new Set();
+// ═══════════════════════════════════════════════════════════════
+// ГЛОБАЛЬНЫЙ СТЕЙТ
+// ═══════════════════════════════════════════════════════════════
+
+type Listener = (messages: BroadcastMessage[]) => void;
+const listeners = new Set<Listener>();
+let messageQueue: BroadcastMessage[] = [];
 
 export function pushBroadcast(msg: BroadcastMessage) {
-  listeners.forEach(fn => fn(msg));
+  messageQueue = [...messageQueue, msg].slice(-8); // Максимум 8 в очереди
+  listeners.forEach(fn => fn(messageQueue));
 }
 
-// ── Компонент одного уведомления ────────────────────────
-
-function BroadcastCard({ msg, onDone }: { msg: BroadcastMessage; onDone: () => void }) {
-  const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase('visible'), 50);
-    const t2 = setTimeout(() => setPhase('exit'), 4500);
-    const t3 = setTimeout(onDone, 5200);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [onDone]);
-
-  const colorMap: Record<string, string> = {
-    gold: 'bc-gold',
-    blood: 'bc-blood',
-    mana: 'bc-mana',
-    green: 'bc-green',
-    purple: 'bc-purple',
-    white: 'bc-white',
-  };
-
-  const colorClass = colorMap[msg.color ?? 'gold'] ?? 'bc-gold';
-
-  // Иконка по типу
-  const icon = msg.icon ?? ({
-    roll: '🎲', hit: '🎯', miss: '💨', damage: '💥',
-    heal: '💚', spell: '✨', 'rok-card': '🃏', mana: '💠',
-    death: '💀', custom: '⟐'
-  }[msg.type] ?? '⟐');
-
-  return (
-    <div className={cn(
-      'bc-card',
-      colorClass,
-      msg.isCrit && 'bc-crit',
-      msg.isCritFail && 'bc-fail',
-      phase === 'enter' && 'bc-enter',
-      phase === 'visible' && 'bc-visible',
-      phase === 'exit' && 'bc-exit'
-    )}>
-      {/* Крит-лучи */}
-      {msg.isCrit && <div className="bc-crit-rays" />}
-
-      {/* Фейл-трещины */}
-      {msg.isCritFail && <div className="bc-fail-crack" />}
-
-      {/* Декоративные уголки */}
-      <span className="bc-corner bc-corner-tl" />
-      <span className="bc-corner bc-corner-tr" />
-      <span className="bc-corner bc-corner-bl" />
-      <span className="bc-corner bc-corner-br" />
-
-      {/* Контент */}
-      <div className="bc-body">
-        {/* Иконка */}
-        <div className={cn('bc-icon', msg.isCrit && 'bc-icon-crit')}>
-          {icon}
-        </div>
-
-        {/* Текст */}
-        <div className="bc-text">
-          {/* Имя персонажа */}
-          <div className="bc-unit-name">{msg.unitName}</div>
-
-          {/* Заголовок */}
-          <div className={cn('bc-title', msg.isCrit && 'bc-title-crit', msg.isCritFail && 'bc-title-fail')}>
-            {msg.title}
-          </div>
-
-          {/* Кубики */}
-          {msg.rolls && msg.rolls.length > 0 && (
-            <div className="bc-rolls">
-              {msg.rolls.map((r, i) => (
-                <span key={i} className={cn(
-                  'bc-die',
-                  i === 0 && r === 20 && 'bc-die-crit',
-                  i === 0 && r === 1 && 'bc-die-fail'
-                )}>
-                  {r}
-                </span>
-              ))}
-              {msg.total !== undefined && (
-                <span className="bc-total">= {msg.total}</span>
-              )}
-            </div>
-          )}
-
-          {/* Подзаголовок */}
-          {msg.subtitle && (
-            <div className="bc-subtitle">{msg.subtitle}</div>
-          )}
-
-          {/* Детали */}
-          {msg.details && msg.details.length > 0 && (
-            <div className="bc-details">
-              {msg.details.map((d, i) => (
-                <div key={i} className="bc-detail-line">{d}</div>
-              ))}
-            </div>
-          )}
-
-          {/* HP бар */}
-          {msg.hpBar && (
-            <div className="bc-hp-bar">
-              <div
-                className={cn('bc-hp-fill', msg.type === 'heal' ? 'bc-hp-heal' : 'bc-hp-damage')}
-                style={{ width: `${Math.max(0, Math.min(100, (msg.hpBar.current / msg.hpBar.max) * 100))}%` }}
-              />
-              <span className="bc-hp-text">{msg.hpBar.current}/{msg.hpBar.max}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Крит/Провал баннер */}
-      {msg.isCrit && (
-        <div className="bc-banner bc-banner-crit">✨ КРИТИЧЕСКОЕ ПОПАДАНИЕ ✨</div>
-      )}
-      {msg.isCritFail && (
-        <div className="bc-banner bc-banner-fail">💀 КРИТИЧЕСКИЙ ПРОВАЛ 💀</div>
-      )}
-    </div>
-  );
+function subscribe(fn: Listener) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
-// ── Основной оверлей ────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// КОМПОНЕНТ OVERLAY
+// ═══════════════════════════════════════════════════════════════
+
+const TOAST_DURATION = 4000;      // Время показа
+const TOAST_EXIT_DURATION = 500;  // Время исчезновения
+const MAX_VISIBLE = 5;            // Максимум видимых toast-ов
 
 export function BroadcastOverlay() {
-  const [messages, setMessages] = useState<BroadcastMessage[]>([]);
+  const [toasts, setToasts] = useState<ToastState[]>([]);
+  const processedIds = useRef(new Set<string>());
 
-  const addMessage = useCallback((msg: BroadcastMessage) => {
-    setMessages(prev => {
-      const next = [...prev, msg];
-      // Максимум 5 одновременно
-      return next.length > 5 ? next.slice(-5) : next;
+  // Подписка на новые сообщения
+  useEffect(() => {
+    return subscribe((messages) => {
+      const newMessages = messages.filter(m => !processedIds.current.has(m.id));
+      
+      newMessages.forEach(msg => {
+        processedIds.current.add(msg.id);
+        
+        // Добавляем новый toast
+        setToasts(prev => {
+          const newToast: ToastState = { ...msg, phase: 'enter' };
+          const updated = [...prev, newToast].slice(-MAX_VISIBLE);
+          return updated;
+        });
+        
+        // Переход в visible фазу
+        setTimeout(() => {
+          setToasts(prev => prev.map(t => 
+            t.id === msg.id ? { ...t, phase: 'visible' } : t
+          ));
+        }, 50);
+        
+        // Начало выхода
+        setTimeout(() => {
+          setToasts(prev => prev.map(t => 
+            t.id === msg.id ? { ...t, phase: 'exit' } : t
+          ));
+        }, TOAST_DURATION);
+        
+        // Удаление
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== msg.id));
+        }, TOAST_DURATION + TOAST_EXIT_DURATION);
+      });
     });
   }, []);
 
-  const removeMessage = useCallback((id: string) => {
-    setMessages(prev => prev.filter(m => m.id !== id));
+  // Ручное закрытие
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.map(t => 
+      t.id === id ? { ...t, phase: 'exit' } : t
+    ));
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, TOAST_EXIT_DURATION);
   }, []);
 
-  useEffect(() => {
-    listeners.add(addMessage);
-    return () => { listeners.delete(addMessage); };
-  }, [addMessage]);
-
-  if (messages.length === 0) return null;
+  if (toasts.length === 0) return null;
 
   return (
-    <div className="bc-overlay">
-      {messages.map(msg => (
-        <BroadcastCard
-          key={msg.id}
-          msg={msg}
-          onDone={() => removeMessage(msg.id)}
+    <div className="dice-toast-container">
+      {toasts.map((toast, index) => (
+        <DiceToast 
+          key={toast.id} 
+          toast={toast} 
+          index={index}
+          onDismiss={() => dismissToast(toast.id)}
         />
       ))}
     </div>
   );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// КОМПОНЕНТ TOAST
+// ═══════════════════════════════════════════════════════════════
+
+interface DiceToastProps {
+  toast: ToastState;
+  index: number;
+  onDismiss: () => void;
+}
+
+function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
+  const {
+    type, unitName, title, subtitle, icon, rolls, total,
+    isCrit, isCritFail, color, hpBar, details, phase
+  } = toast;
+
+  // Цвет фона
+  const colorClass = {
+    gold: 'toast-color-gold',
+    blood: 'toast-color-blood',
+    mana: 'toast-color-mana',
+    green: 'toast-color-green',
+    purple: 'toast-color-purple',
+    white: 'toast-color-white',
+  }[color ?? 'white'];
+
+  // Фаза анимации
+  const phaseClass = {
+    enter: 'toast-enter',
+    visible: 'toast-visible',
+    exit: 'toast-exit',
+  }[phase];
+
+  // Определяем иконку
+  const displayIcon = icon ?? getDefaultIcon(type);
+
+  return (
+    <div 
+      className={cn(
+        'dice-toast',
+        colorClass,
+        phaseClass,
+        isCrit && 'toast-crit',
+        isCritFail && 'toast-fail'
+      )}
+      style={{ '--toast-index': index } as React.CSSProperties}
+      onClick={onDismiss}
+    >
+      {/* Декоративные элементы */}
+      <div className="toast-glow" />
+      {isCrit && <div className="toast-crit-rays" />}
+      {isCritFail && <div className="toast-fail-cracks" />}
+      
+      {/* Основной контент */}
+      <div className="toast-content">
+        {/* Иконка */}
+        <div className={cn(
+          'toast-icon',
+          isCrit && 'toast-icon-crit',
+          isCritFail && 'toast-icon-fail'
+        )}>
+          {displayIcon}
+        </div>
+        
+        {/* Текст */}
+        <div className="toast-body">
+          {/* Имя персонажа */}
+          {unitName && (
+            <div className="toast-unit">{unitName}</div>
+          )}
+          
+          {/* Заголовок */}
+          <div className={cn(
+            'toast-title',
+            isCrit && 'toast-title-crit',
+            isCritFail && 'toast-title-fail'
+          )}>
+            {title}
+          </div>
+          
+          {/* Подзаголовок */}
+          {subtitle && (
+            <div className="toast-subtitle">{subtitle}</div>
+          )}
+          
+          {/* Кубики + результат */}
+          {(rolls && rolls.length > 0) && (
+            <div className="toast-rolls">
+              {rolls.slice(0, 6).map((roll, i) => (
+                <span 
+                  key={i} 
+                  className={cn(
+                    'toast-die',
+                    i === 0 && roll === 20 && 'toast-die-crit',
+                    i === 0 && roll === 1 && 'toast-die-fail'
+                  )}
+                  style={{ '--die-delay': `${i * 50}ms` } as React.CSSProperties}
+                >
+                  {roll}
+                </span>
+              ))}
+              {rolls.length > 6 && (
+                <span className="toast-die-more">+{rolls.length - 6}</span>
+              )}
+              {total !== undefined && (
+                <>
+                  <span className="toast-equals">=</span>
+                  <span className={cn(
+                    'toast-total',
+                    isCrit && 'toast-total-crit',
+                    isCritFail && 'toast-total-fail'
+                  )}>
+                    {total}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          
+          {/* HP бар */}
+          {hpBar && (
+            <div className="toast-hp">
+              <div 
+                className={cn(
+                  'toast-hp-fill',
+                  type === 'heal' ? 'toast-hp-heal' : 'toast-hp-damage'
+                )}
+                style={{ width: `${Math.max(0, Math.min(100, (hpBar.current / hpBar.max) * 100))}%` }}
+              />
+              <span className="toast-hp-text">
+                {hpBar.current}/{hpBar.max}
+              </span>
+            </div>
+          )}
+          
+          {/* Детали */}
+          {details && details.length > 0 && (
+            <div className="toast-details">
+              {details.map((line, i) => (
+                <div key={i} className="toast-detail-line">{line}</div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* Результат справа (большой) */}
+        {total !== undefined && !rolls?.length && (
+          <div className={cn(
+            'toast-result',
+            isCrit && 'toast-result-crit',
+            isCritFail && 'toast-result-fail'
+          )}>
+            {total}
+          </div>
+        )}
+      </div>
+      
+      {/* Баннер крита/провала */}
+      {isCrit && (
+        <div className="toast-banner toast-banner-crit">
+          ✨ КРИТИЧЕСКИЙ УСПЕХ ✨
+        </div>
+      )}
+      {isCritFail && (
+        <div className="toast-banner toast-banner-fail">
+          💀 КРИТИЧЕСКИЙ ПРОВАЛ
+        </div>
+      )}
+      
+      {/* Прогресс-бар автозакрытия */}
+      <div className="toast-progress" />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function getDefaultIcon(type: BroadcastMessage['type']): string {
+  switch (type) {
+    case 'roll': return '🎲';
+    case 'damage': return '💥';
+    case 'hit': return '🎯';
+    case 'miss': return '💨';
+    case 'spell': return '✨';
+    case 'heal': return '💚';
+    case 'death': return '💀';
+    case 'rok-card': return '🃏';
+    default: return '📜';
+  }
 }
