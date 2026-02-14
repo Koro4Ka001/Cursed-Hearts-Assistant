@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { cn } from '../utils/cn';
-import { DICE_BROADCAST_CHANNEL, type BroadcastMessage } from '../services/diceService';
+import { DICE_BROADCAST_CHANNEL, type BroadcastMessage, onLocalDiceMessage } from '../services/diceService';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -27,6 +27,12 @@ export function DiceToasts() {
 
   // Добавление toast
   const addToast = useCallback((msg: BroadcastMessage) => {
+    // Проверяем дубликаты
+    if (processedIds.current.has(msg.id)) return;
+    processedIds.current.add(msg.id);
+    
+    console.log('[DiceToasts] Adding toast:', msg.title);
+    
     const newToast: ToastState = { ...msg, phase: 'enter' };
     
     setToasts(prev => [...prev, newToast].slice(-MAX_VISIBLE));
@@ -53,16 +59,21 @@ export function DiceToasts() {
     }, TOAST_DURATION + TOAST_EXIT_DURATION);
   }, []);
 
-  // Подписка на broadcast
+  // Подписка на ЛОКАЛЬНЫЕ сообщения (от себя)
+  useEffect(() => {
+    console.log('[DiceToasts] Subscribing to local messages');
+    const unsubscribe = onLocalDiceMessage(addToast);
+    return () => { unsubscribe(); };
+  }, [addToast]);
+
+  // Подписка на BROADCAST (от других игроков)
   useEffect(() => {
     if (!isObrReady) return;
 
+    console.log('[DiceToasts] Subscribing to OBR broadcast');
     const unsubscribe = OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
       const msg = event.data as BroadcastMessage | undefined;
       if (!msg || typeof msg !== 'object' || !msg.id) return;
-      if (processedIds.current.has(msg.id)) return;
-      
-      processedIds.current.add(msg.id);
       addToast(msg);
     });
 
@@ -71,7 +82,10 @@ export function DiceToasts() {
 
   // OBR ready
   useEffect(() => {
-    OBR.onReady(() => setIsObrReady(true));
+    OBR.onReady(() => {
+      console.log('[DiceToasts] OBR Ready');
+      setIsObrReady(true);
+    });
   }, []);
 
   // Ручное закрытие
@@ -100,7 +114,7 @@ export function DiceToasts() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MINI TOAST — Компактный toast
+// MINI TOAST
 // ═══════════════════════════════════════════════════════════════
 
 interface MiniToastProps {
