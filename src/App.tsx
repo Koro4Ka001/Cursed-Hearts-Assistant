@@ -371,16 +371,17 @@ export function App() {
           // Закрываем если уже открыт (при перезагрузке)
           await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
           
-          // Открываем toast overlay как отдельный popover
-          await OBR.popover.open({
-            id: TOAST_POPOVER_ID,
-            url: '/index.html?mode=toast',
-            width: 360,
-            height: 500,
-            anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-            transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-            disableClickAway: true,
-          });
+   // В App.tsx, в функции init(), измени открытие popover:
+
+await OBR.popover.open({
+  id: TOAST_POPOVER_ID,
+  url: './index.html?mode=toast',  // ← относительный путь
+  width: 360,
+  height: 500,
+  anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+  transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+  disableClickAway: true,
+});
           console.log('[App] Toast popover opened');
         } catch (e) {
           console.warn('[App] Failed to open toast popover:', e);
