@@ -1,3 +1,30 @@
+// === src/types/index.ts ===
+
+// === НОВЫЕ ТИПЫ: ПРЕДРАСПОЛОЖЕННОСТЬ И МОДИФИКАТОРЫ ===
+
+export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
+
+export interface ElementAffinity {
+  id: string;
+  element: string;           // элемент магии (fire, water, etc.)
+  bonusType: AffinityBonusType; // тип бонуса
+  value: number;             // числовое значение
+}
+
+export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
+
+export const AFFINITY_BONUS_NAMES: Record<AffinityBonusType, string> = {
+  castHit: '+к касту/попаданию',
+  manaCost: '-к затрате маны',
+  damage: '+к урону'
+};
+
+export const ROLL_MODIFIER_NAMES: Record<RollModifier, string> = {
+  normal: 'Обычный',
+  advantage: 'Преимущество',
+  disadvantage: 'Помеха'
+};
+
 // === ОСНОВНЫЕ ТИПЫ ===
 
 export interface Unit {
@@ -31,6 +58,9 @@ export interface Unit {
   magicBonuses: Record<string, number>;
   // Пример: { "электричество": 3, "воздух": 2, "природа": 3, "жизнь": 3, "скверна": 3 }
   // При касте берётся МАКСИМАЛЬНЫЙ бонус из элементов заклинания
+  
+  // НОВОЕ: предрасположенности к элементам
+  elementAffinities: ElementAffinity[];
   
   armor: {
     slashing: number;      // от режущего
@@ -190,6 +220,9 @@ export interface DiceRollResult {
   isCritFail: boolean;   // d20 == 1
   rawD20?: number;       // значение d20 если бросался d20
   label?: string;        // "Попадание мечом"
+  // НОВОЕ: для отображения преимущества/помехи
+  rollModifier?: RollModifier;
+  allD20Rolls?: number[]; // все броски d20 при преимуществе/помехе
 }
 
 // === DICE OVERLAY (визуальный оверлей броска) ===
@@ -225,7 +258,7 @@ export interface Settings {
   syncResources: boolean;
   autoSyncInterval: number;
   writeLogs: boolean;
-  showTokenBars: boolean;    // ← ДОБАВЬ ЭТУ СТРОКУ
+  showTokenBars: boolean;
 }
 
 export interface ConnectionStatus {
@@ -314,3 +347,30 @@ export const ALL_DAMAGE_TYPES: DamageType[] = [
   'electricity', 'frost', 'nature', 'corruption', 'life', 'death',
   'blood', 'void', 'astral', 'space', 'transcendence', 'pure'
 ];
+
+// НОВОЕ: все элементы магии для выбора предрасположенности
+export const MAGIC_ELEMENTS: string[] = [
+  'fire', 'water', 'earth', 'air', 'light', 'darkness',
+  'electricity', 'frost', 'nature', 'corruption', 'life', 'death',
+  'blood', 'void', 'astral', 'space', 'transcendence'
+];
+
+export const ELEMENT_NAMES: Record<string, string> = {
+  fire: 'Огонь',
+  water: 'Вода',
+  earth: 'Земля',
+  air: 'Воздух',
+  light: 'Свет',
+  darkness: 'Тьма',
+  electricity: 'Электричество',
+  frost: 'Мороз',
+  nature: 'Природа',
+  corruption: 'Скверна',
+  life: 'Жизнь',
+  death: 'Смерть',
+  blood: 'Кровь',
+  void: 'Пустота',
+  astral: 'Астрал',
+  space: 'Пространство',
+  transcendence: 'Трансцендентность'
+};
