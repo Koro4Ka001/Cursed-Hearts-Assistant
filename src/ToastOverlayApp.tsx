@@ -2,8 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { cn } from './utils/cn';
-import { DICE_BROADCAST_CHANNEL } from './services/diceService';
-import type { BroadcastMessage } from './components/BroadcastOverlay';
+import { DICE_BROADCAST_CHANNEL, type BroadcastMessage } from './services/diceService';
 
 // ═══════════════════════════════════════════════════════════════
 // TOAST STATE
@@ -24,36 +23,12 @@ const MAX_VISIBLE = 6;
 export function ToastOverlayApp() {
   const [toasts, setToasts] = useState<ToastState[]>([]);
   const [isReady, setIsReady] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('Ожидание OBR...');
   const processedIds = useRef(new Set<string>());
-
-  // Инициализация OBR
-  useEffect(() => {
-    OBR.onReady(() => {
-      setIsReady(true);
-      console.log('[ToastOverlay] OBR Ready');
-    });
-  }, []);
-
-  // Подписка на broadcast
-  useEffect(() => {
-    if (!isReady) return;
-
-    const unsubscribe = OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
-      const msg = event.data as BroadcastMessage | undefined;
-      if (!msg || typeof msg !== 'object' || !msg.id) return;
-      if (processedIds.current.has(msg.id)) return;
-      
-      processedIds.current.add(msg.id);
-      addToast(msg);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [isReady]);
 
   // Добавление toast
   const addToast = useCallback((msg: BroadcastMessage) => {
+    console.log('[Toast] Adding:', msg);
     const newToast: ToastState = { ...msg, phase: 'enter' };
     
     setToasts(prev => [...prev, newToast].slice(-MAX_VISIBLE));
@@ -78,6 +53,43 @@ export function ToastOverlayApp() {
     }, TOAST_DURATION + TOAST_EXIT_DURATION);
   }, []);
 
+  // Инициализация OBR
+  useEffect(() => {
+    console.log('[ToastOverlay] Starting...');
+    
+    OBR.onReady(async () => {
+      console.log('[ToastOverlay] OBR Ready!');
+      setIsReady(true);
+      setDebugInfo('OBR готов, слушаю broadcast...');
+
+      // Подписка на broadcast
+      try {
+        OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+          console.log('[ToastOverlay] Received broadcast:', event);
+          const msg = event.data as BroadcastMessage | undefined;
+          
+          if (!msg || typeof msg !== 'object' || !msg.id) {
+            console.warn('[ToastOverlay] Invalid message:', event.data);
+            return;
+          }
+          
+          if (processedIds.current.has(msg.id)) {
+            console.log('[ToastOverlay] Duplicate, skipping:', msg.id);
+            return;
+          }
+          
+          processedIds.current.add(msg.id);
+          setDebugInfo(`Получено: ${msg.title}`);
+          addToast(msg);
+        });
+        console.log('[ToastOverlay] Subscribed to:', DICE_BROADCAST_CHANNEL);
+      } catch (e) {
+        console.error('[ToastOverlay] Failed to subscribe:', e);
+        setDebugInfo(`Ошибка: ${e}`);
+      }
+    });
+  }, [addToast]);
+
   // Ручное закрытие
   const dismissToast = useCallback((id: string) => {
     setToasts(prev => prev.map(t => 
@@ -90,6 +102,16 @@ export function ToastOverlayApp() {
 
   return (
     <div className="toast-overlay-root">
+      {/* Debug info (можно убрать после отладки) */}
+      {toasts.length === 0 && (
+        <div className="toast-debug">
+          <div className="toast-debug-status">
+            {isReady ? '🟢' : '🟡'} {debugInfo}
+          </div>
+        </div>
+      )}
+      
+      {/* Toasts */}
       {toasts.map((toast, index) => (
         <DiceToast 
           key={toast.id} 
@@ -112,7 +134,7 @@ interface DiceToastProps {
   onDismiss: () => void;
 }
 
-function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
+function DiceToast({ toast, onDismiss }: DiceToastProps) {
   const {
     type, unitName, title, subtitle, icon, rolls, total,
     isCrit, isCritFail, color, hpBar, details, phase
@@ -144,7 +166,6 @@ function DiceToast({ toast, index, onDismiss }: DiceToastProps) {
         isCrit && 'dt-crit',
         isCritFail && 'dt-fail'
       )}
-      style={{ '--dt-index': index } as React.CSSProperties}
       onClick={onDismiss}
     >
       {/* Glow effect */}
