@@ -15,8 +15,13 @@ import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
-import { DiceToasts } from './components/DiceToasts';
 import { cn } from './utils/cn';
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+
+const TOAST_POPOVER_ID = 'cursed-hearts-toast-overlay';
 
 // ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -338,12 +343,35 @@ export function App() {
 
     const init = async () => {
       try {
+        // 1. Инициализация OBR
         await initOBR();
         setConnection('owlbear', true);
 
+        // 2. Открываем Toast Popover в правом нижнем углу
+        try {
+          // Закрываем если уже был открыт
+          await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
+          
+          // Открываем toast overlay
+          await OBR.popover.open({
+            id: TOAST_POPOVER_ID,
+            url: './toast.html',
+            width: 360,
+            height: 450,
+            anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+            transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+            disableClickAway: true,
+          });
+          console.log('[App] Toast popover opened');
+        } catch (e) {
+          console.warn('[App] Toast popover failed:', e);
+        }
+
+        // 3. Инициализация Dice Service
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
+        // 4. Инициализация Token Bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
@@ -354,17 +382,19 @@ export function App() {
           console.warn('[App] Token bars init failed:', e);
         }
 
+        // 5. Инициализация Google Docs
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
-          try { 
-            const t = await docsService.testConnection(); 
-            setConnection('docs', t.success); 
-          } catch { 
-            setConnection('docs', false); 
+          try {
+            const t = await docsService.testConnection();
+            setConnection('docs', t.success);
+          } catch {
+            setConnection('docs', false);
           }
           startAutoSync();
         }
+
       } catch (e) {
         console.error('[App] Init error:', e);
       } finally {
@@ -373,8 +403,10 @@ export function App() {
     };
 
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Loading screen
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
@@ -401,7 +433,7 @@ export function App() {
       {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
       {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
 
-      {/* Системные уведомления */}
+      {/* Системные уведомления (внутренние) */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className="pointer-events-auto">
@@ -409,9 +441,6 @@ export function App() {
           </div>
         ))}
       </div>
-
-      {/* Dice Toasts — компактные, в углу */}
-      <DiceToasts />
     </div>
   );
 }
