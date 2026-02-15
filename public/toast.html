@@ -18,25 +18,50 @@
       --bone: #d4c8a8;
       --faded: #8a7e66;
       --dim: #5a5040;
+      --bg: #0a0a0f;
     }
     
     html, body {
       height: 100%;
-      background: transparent !important;
+      background: var(--bg);
       overflow: hidden;
       font-family: 'EB Garamond', serif;
     }
     
+    /* Красивая рамка вместо серой */
+    body {
+      border: 1px solid rgba(200,168,78,0.3);
+      border-radius: 8px;
+      box-shadow: 
+        inset 0 0 30px rgba(0,0,0,0.8),
+        0 0 20px rgba(0,0,0,0.5);
+      background: 
+        radial-gradient(ellipse at top right, rgba(200,168,78,0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at bottom left, rgba(139,26,26,0.03) 0%, transparent 50%),
+        var(--bg);
+    }
+    
+    /* Декоративные уголки */
+    body::before, body::after {
+      content: '◆';
+      position: absolute;
+      font-size: 8px;
+      color: var(--gold-dark);
+      opacity: 0.5;
+    }
+    body::before { top: 6px; left: 8px; }
+    body::after { bottom: 6px; right: 8px; }
+    
     #container {
-      position: fixed;
-      bottom: 4px;
-      right: 4px;
-      left: 4px;
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      left: 8px;
+      top: 8px;
       display: flex;
       flex-direction: column-reverse;
       gap: 6px;
       pointer-events: none;
-      max-height: calc(100% - 8px);
       overflow: hidden;
     }
     
@@ -46,12 +71,11 @@
       align-items: flex-start;
       gap: 10px;
       padding: 10px 14px;
-      border-radius: 10px;
+      border-radius: 8px;
       pointer-events: auto;
       cursor: pointer;
       position: relative;
       overflow: hidden;
-      backdrop-filter: blur(12px);
       transform-origin: right bottom;
       opacity: 0;
       transform: translateX(100%) scale(0.8);
@@ -75,45 +99,45 @@
     
     /* ═══ Colors ═══ */
     .toast-gold {
-      background: linear-gradient(145deg, rgba(40,32,14,0.95), rgba(24,20,10,0.97));
+      background: linear-gradient(145deg, rgba(40,32,14,0.98), rgba(24,20,10,0.99));
       border: 1px solid rgba(200,168,78,0.5);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 25px rgba(200,168,78,0.15);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 20px rgba(200,168,78,0.1);
     }
     
     .toast-blood {
-      background: linear-gradient(145deg, rgba(40,14,14,0.95), rgba(24,10,10,0.97));
+      background: linear-gradient(145deg, rgba(40,14,14,0.98), rgba(24,10,10,0.99));
       border: 1px solid rgba(204,34,34,0.5);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 15px rgba(204,34,34,0.15);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 15px rgba(204,34,34,0.1);
     }
     
     .toast-mana {
-      background: linear-gradient(145deg, rgba(14,24,40,0.95), rgba(10,18,28,0.97));
+      background: linear-gradient(145deg, rgba(14,24,40,0.98), rgba(10,18,28,0.99));
       border: 1px solid rgba(68,153,221,0.5);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 15px rgba(68,153,221,0.15);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 15px rgba(68,153,221,0.1);
     }
     
     .toast-green {
-      background: linear-gradient(145deg, rgba(14,40,14,0.95), rgba(10,24,10,0.97));
+      background: linear-gradient(145deg, rgba(14,40,14,0.98), rgba(10,24,10,0.99));
       border: 1px solid rgba(68,204,68,0.5);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 15px rgba(68,204,68,0.15);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 15px rgba(68,204,68,0.1);
     }
     
     .toast-purple {
-      background: linear-gradient(145deg, rgba(32,14,40,0.95), rgba(20,10,26,0.97));
+      background: linear-gradient(145deg, rgba(32,14,40,0.98), rgba(20,10,26,0.99));
       border: 1px solid rgba(150,80,220,0.5);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 15px rgba(150,80,220,0.15);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 15px rgba(150,80,220,0.1);
     }
     
     .toast-white {
-      background: linear-gradient(145deg, rgba(32,32,36,0.95), rgba(20,20,24,0.97));
+      background: linear-gradient(145deg, rgba(32,32,36,0.98), rgba(20,20,24,0.99));
       border: 1px solid rgba(200,190,170,0.3);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
     }
     
     /* ═══ Crit Effects ═══ */
     .toast-crit {
       border-color: var(--gold) !important;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 40px rgba(232,208,104,0.3) !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 30px rgba(232,208,104,0.25) !important;
       animation: crit-entrance 0.6s ease-out;
     }
     
@@ -150,7 +174,7 @@
     
     /* ═══ Icon ═══ */
     .toast-icon {
-      font-size: 26px;
+      font-size: 24px;
       flex-shrink: 0;
       line-height: 1;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
@@ -163,8 +187,8 @@
     }
     
     .toast-crit .toast-icon {
-      font-size: 30px;
-      filter: drop-shadow(0 0 12px rgba(232,208,104,0.8));
+      font-size: 28px;
+      filter: drop-shadow(0 0 10px rgba(232,208,104,0.8));
     }
     
     /* ═══ Body ═══ */
@@ -182,7 +206,7 @@
     
     .toast-title {
       font-family: 'Cinzel', serif;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--bone);
       line-height: 1.2;
@@ -190,8 +214,8 @@
     
     .toast-crit .toast-title {
       color: var(--gold-bright);
-      text-shadow: 0 0 12px rgba(232,208,104,0.6);
-      font-size: 14px;
+      text-shadow: 0 0 10px rgba(232,208,104,0.6);
+      font-size: 13px;
     }
     
     .toast-fail .toast-title {
@@ -212,15 +236,15 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 4px;
-      margin-top: 6px;
+      margin-top: 5px;
     }
     
     .toast-die {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 24px;
-      height: 24px;
+      min-width: 22px;
+      height: 22px;
       padding: 0 4px;
       border-radius: 4px;
       font-family: 'Cinzel', serif;
@@ -246,7 +270,7 @@
       background: linear-gradient(135deg, rgba(200,168,78,0.4), rgba(200,168,78,0.2)) !important;
       border-color: var(--gold) !important;
       color: var(--gold-bright) !important;
-      box-shadow: 0 0 10px rgba(200,168,78,0.5);
+      box-shadow: 0 0 8px rgba(200,168,78,0.5);
     }
     
     .toast-die-fail {
@@ -263,7 +287,7 @@
     
     .toast-total {
       font-family: 'Cinzel', serif;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 900;
       color: var(--bone);
       text-shadow: 0 2px 4px rgba(0,0,0,0.6);
@@ -278,8 +302,8 @@
     
     .toast-crit .toast-total {
       color: var(--gold-bright) !important;
-      text-shadow: 0 0 15px rgba(232,208,104,0.7);
-      font-size: 22px;
+      text-shadow: 0 0 12px rgba(232,208,104,0.7);
+      font-size: 20px;
     }
     
     .toast-fail .toast-total {
@@ -289,10 +313,10 @@
     /* ═══ HP Bar ═══ */
     .toast-hp {
       position: relative;
-      height: 12px;
-      border-radius: 6px;
+      height: 10px;
+      border-radius: 5px;
       overflow: hidden;
-      margin-top: 8px;
+      margin-top: 6px;
       background: rgba(0,0,0,0.4);
       border: 1px solid rgba(255,255,255,0.1);
     }
@@ -300,7 +324,7 @@
     .toast-hp-fill {
       position: absolute;
       left: 0; top: 0; bottom: 0;
-      border-radius: 6px;
+      border-radius: 5px;
       transition: width 0.5s ease;
     }
     
@@ -314,7 +338,7 @@
       align-items: center;
       justify-content: center;
       font-family: 'Cinzel', serif;
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 700;
       color: #fff;
       text-shadow: 0 1px 2px rgba(0,0,0,0.9);
@@ -324,18 +348,18 @@
     .toast-banner {
       text-align: center;
       font-family: 'Cinzel', serif;
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 700;
-      letter-spacing: 0.15em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      padding: 6px 0 2px;
-      margin-top: 8px;
+      padding: 5px 0 2px;
+      margin-top: 6px;
       border-top: 1px solid rgba(255,255,255,0.1);
     }
     
     .toast-banner-crit {
       color: var(--gold-bright);
-      text-shadow: 0 0 12px rgba(232,208,104,0.7);
+      text-shadow: 0 0 10px rgba(232,208,104,0.7);
     }
     
     .toast-banner-fail {
@@ -367,23 +391,82 @@
     .toast-fail .toast-progress {
       background: linear-gradient(90deg, var(--blood), var(--blood-bright));
     }
+    
+    /* ═══ Empty State ═══ */
+    #empty {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: var(--dim);
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      opacity: 0.5;
+    }
+    
+    #empty.show {
+      display: flex;
+    }
+    
+    #empty span {
+      font-size: 24px;
+      margin-bottom: 8px;
+      opacity: 0.3;
+    }
   </style>
 </head>
 <body>
   <div id="container"></div>
+  <div id="empty"><span>🎲</span>Ожидание бросков...</div>
   
   <script src="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/dist/owlbear-rodeo-sdk.umd.min.js"></script>
   <script>
     const CHANNEL = 'cursed-hearts/dice-roll';
+    const CLOSE_CHANNEL = 'cursed-hearts/close-toast';
+    const POPOVER_ID = 'cursed-hearts-dice-toast';
     const container = document.getElementById('container');
+    const emptyState = document.getElementById('empty');
     const DURATION = 4000;
+    const CLOSE_DELAY = 2000; // Закрыть через 2 сек после последнего toast
     const MAX_TOASTS = 4;
     const processedIds = new Set();
+    let closeTimer = null;
     
     const ICONS = {
       roll: '🎲', damage: '💥', hit: '🎯', miss: '💨',
       spell: '✨', heal: '💚', death: '☠️', 'rok-card': '🃏', custom: '📢'
     };
+    
+    function updateEmptyState() {
+      if (container.children.length === 0) {
+        emptyState.classList.add('show');
+        scheduleClose();
+      } else {
+        emptyState.classList.remove('show');
+        cancelClose();
+      }
+    }
+    
+    function scheduleClose() {
+      cancelClose();
+      closeTimer = setTimeout(() => {
+        // Отправляем сигнал закрыть popover
+        OBR.broadcast.sendMessage(CLOSE_CHANNEL, { close: true }).catch(() => {});
+        // Также пробуем закрыть напрямую
+        OBR.popover.close(POPOVER_ID).catch(() => {});
+      }, CLOSE_DELAY);
+    }
+    
+    function cancelClose() {
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+      }
+    }
     
     function createToast(msg) {
       if (processedIds.has(msg.id)) return;
@@ -461,6 +544,7 @@
       
       el.innerHTML = html;
       container.insertBefore(el, container.firstChild);
+      updateEmptyState();
       
       requestAnimationFrame(() => {
         setTimeout(() => el.classList.add('visible'), 10);
@@ -474,7 +558,10 @@
       if (!el || el.classList.contains('exit')) return;
       el.classList.remove('visible');
       el.classList.add('exit');
-      setTimeout(() => { if (el.parentNode) el.remove(); }, 350);
+      setTimeout(() => {
+        if (el.parentNode) el.remove();
+        updateEmptyState();
+      }, 350);
     }
     
     function esc(s) {
@@ -482,9 +569,14 @@
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
     
+    // Init
+    updateEmptyState();
+    
     OBR.onReady(() => {
-      console.log('[Toast] Ready');
+      console.log('[Toast] Ready, listening to:', CHANNEL);
+      
       OBR.broadcast.onMessage(CHANNEL, (e) => {
+        console.log('[Toast] Received:', e.data);
         if (e.data && e.data.id) createToast(e.data);
       });
     });
