@@ -1,7 +1,6 @@
 // src/services/diceService.ts
 import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult, RollModifier } from "../types";
-import { toastOnMapService } from './toastOnMapService';
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
@@ -156,17 +155,73 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BROADCAST — Показывает уведомление на карте
+// FORMAT MESSAGE FOR NOTIFICATION
+// ═══════════════════════════════════════════════════════════════
+
+function formatNotification(msg: BroadcastMessage): string {
+  let text = '';
+  
+  // Иконка и имя юнита
+  if (msg.icon) text += msg.icon + ' ';
+  if (msg.unitName) text += `[${msg.unitName}] `;
+  
+  // Заголовок
+  text += msg.title;
+  
+  // Подзаголовок
+  if (msg.subtitle) {
+    text += '\n' + msg.subtitle;
+  }
+  
+  // Броски
+  if (msg.rolls && msg.rolls.length > 0) {
+    const showRolls = msg.rolls.slice(0, 8).join(', ');
+    const more = msg.rolls.length > 8 ? ` ...+${msg.rolls.length - 8}` : '';
+    text += `\n[${showRolls}${more}]`;
+    
+    if (msg.total !== undefined) {
+      text += ` = ${msg.total}`;
+    }
+  }
+  
+  // Критические метки
+  if (msg.isCrit) {
+    text += '\n✨ КРИТИЧЕСКИЙ УСПЕХ! ✨';
+  } else if (msg.isCritFail) {
+    text += '\n💀 КРИТИЧЕСКИЙ ПРОВАЛ! 💀';
+  }
+  
+  // HP бар
+  if (msg.hpBar) {
+    text += `\nHP: ${msg.hpBar.current}/${msg.hpBar.max}`;
+  }
+  
+  // Детали
+  if (msg.details && msg.details.length > 0) {
+    text += '\n' + msg.details.join('\n');
+  }
+  
+  return text;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BROADCAST — Использует встроенные уведомления OBR
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] Broadcasting:', msg.title);
   
-  // Эмитим локально (для внутренних слушателей если есть)
+  // Эмитим локально
   emitLocal(msg);
   
-  // Показываем на карте
-  await toastOnMapService.showToast(msg);
+  // Показываем встроенное уведомление OBR
+  const notificationText = formatNotification(msg);
+  
+  try {
+    await OBR.notification.show(notificationText);
+  } catch (e) {
+    console.warn('[DiceService] Failed to show notification:', e);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -179,9 +234,6 @@ class DiceService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
-    
-    await toastOnMapService.initialize();
-    
     console.log("[DiceService] Ready");
   }
 
@@ -452,15 +504,7 @@ class DiceService {
   }
 
   async showNotification(message: string): Promise<void> {
-    await broadcast({
-      id: msgId(),
-      type: 'custom',
-      unitName: '',
-      title: message,
-      icon: '📢',
-      color: 'gold',
-      timestamp: Date.now()
-    });
+    await OBR.notification.show(message);
   }
 }
 
