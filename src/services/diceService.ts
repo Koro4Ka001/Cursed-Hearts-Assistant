@@ -1,6 +1,7 @@
 // src/services/diceService.ts
 import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult, RollModifier } from "../types";
+import { toastOnMapService } from './toastOnMapService';
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
