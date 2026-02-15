@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import OBR from "@owlbear-rodeo/sdk";
 import "./index.css";
 import App from "./App.tsx";
-import { obrService } from "./services/obrService";
 import { docsService } from "./services/docsService";
 import { hpTrackerService } from "./services/hpTrackerService";
 import { diceService } from "./services/diceService";
@@ -18,7 +17,6 @@ OBR.onReady(async () => {
   
   try {
     // Инициализируем сервисы
-    await obrService.initialize();
     await hpTrackerService.initialize();
     await diceService.initialize();
     await tokenBarService.initialize();
