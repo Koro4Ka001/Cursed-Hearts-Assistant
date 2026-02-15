@@ -56,7 +56,7 @@ root.render(
 );
 setTimeout(async () => {
   try {
-    const testTokenId = "a8d8ce72-f81e-420a-8495-aa68f0ea7636"; // Замени на реальный ID токена!
+    const testTokenId = "8fccc7ac-7b1d-4f97-921f-6a4a9a057ee1"; // Замени на реальный ID токена!
     await tokenBarService.createBars(testTokenId, 50, 100, 30, 50, false);
     console.log("TEST BARS CREATED!");
   } catch (e) {
