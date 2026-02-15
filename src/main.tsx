@@ -3,7 +3,7 @@ import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import OBR from "@owlbear-rodeo/sdk";
 import "./index.css";
-import App from "./App.tsx";
+import { App } from "./App";  // <-- Изменено: named import вместо default
 import { docsService } from "./services/docsService";
 import { diceService } from "./services/diceService";
 import { tokenBarService } from "./services/tokenBarService";
