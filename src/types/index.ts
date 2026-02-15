@@ -13,6 +13,35 @@ export const ROLL_MODIFIER_NAMES: Record<RollModifier, string> = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// ELEMENT AFFINITY — Сродство со стихиями
+// ═══════════════════════════════════════════════════════════════
+
+export interface ElementAffinity {
+  element: string;
+  bonus: number;
+}
+
+export const ELEMENT_NAMES: Record<string, string> = {
+  fire: 'Огонь',
+  water: 'Вода',
+  earth: 'Земля',
+  air: 'Воздух',
+  light: 'Свет',
+  darkness: 'Тьма',
+  electricity: 'Электричество',
+  frost: 'Мороз',
+  nature: 'Природа',
+  corruption: 'Скверна',
+  life: 'Жизнь',
+  death: 'Смерть',
+  blood: 'Кровь',
+  void: 'Пустота',
+  astral: 'Астрал',
+  space: 'Пространство',
+  transcendence: 'Трансцендентность'
+};
+
+// ═══════════════════════════════════════════════════════════════
 // UNIT
 // ═══════════════════════════════════════════════════════════════
 
@@ -41,7 +70,7 @@ export interface Unit {
     bows: number;
   };
   magicBonuses: Record<string, number>;
-  elementAffinities: string[];
+  elementAffinities: ElementAffinity[];
   armor: {
     slashing: number;
     piercing: number;
