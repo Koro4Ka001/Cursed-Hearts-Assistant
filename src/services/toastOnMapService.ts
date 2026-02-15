@@ -47,7 +47,6 @@ class ToastOnMapService {
         .fillColor(bgColor)
         .strokeColor(msg.isCrit ? "#e8d068" : msg.isCritFail ? "#cc2222" : "#666666")
         .strokeWidth(2)
-        .fillOpacity(0.9)
         .layer("POPOVER")
         .disableHit(true)
         .locked(true)
