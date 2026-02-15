@@ -29,13 +29,16 @@
     
     #container {
       position: fixed;
-      bottom: 8px;
-      right: 8px;
+      bottom: 0;
+      left: 0;
+      right: 0;
       display: flex;
       flex-direction: column-reverse;
       gap: 8px;
+      padding: 8px;
       pointer-events: none;
-      max-width: 320px;
+      max-height: 100%;
+      overflow: hidden;
     }
     
     /* ═══ Toast Card ═══ */
@@ -50,9 +53,9 @@
       position: relative;
       overflow: hidden;
       backdrop-filter: blur(16px);
-      transform-origin: right bottom;
+      transform-origin: left bottom;
       opacity: 0;
-      transform: translateX(120%) scale(0.8) rotate(5deg);
+      transform: translateX(-120%) scale(0.8) rotate(-5deg);
       transition: opacity 0.4s, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     
@@ -63,12 +66,12 @@
     
     .toast.exit {
       opacity: 0;
-      transform: translateX(80%) scale(0.9);
+      transform: translateX(-80%) scale(0.9);
       transition: opacity 0.3s, transform 0.3s ease-out;
     }
     
     .toast:hover {
-      transform: translateX(-4px) scale(1.02) !important;
+      transform: translateX(4px) scale(1.02) !important;
     }
     
     /* ═══ Colors ═══ */
@@ -116,8 +119,8 @@
     }
     
     @keyframes crit-entrance {
-      0% { transform: translateX(150%) scale(0.4) rotate(15deg); filter: brightness(2.5); }
-      50% { transform: translateX(-10px) scale(1.1) rotate(-3deg); filter: brightness(1.5); }
+      0% { transform: translateX(-150%) scale(0.4) rotate(-15deg); filter: brightness(2.5); }
+      50% { transform: translateX(10px) scale(1.1) rotate(3deg); filter: brightness(1.5); }
       100% { transform: translateX(0) scale(1) rotate(0); filter: brightness(1); }
     }
     
@@ -344,6 +347,19 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.9);
     }
     
+    /* ═══ Details ═══ */
+    .toast-details {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .toast-detail-line {
+      font-size: 11px;
+      color: var(--faded);
+      line-height: 1.4;
+    }
+    
     /* ═══ Banner ═══ */
     .toast-banner {
       text-align: center;
@@ -383,7 +399,7 @@
       background: linear-gradient(90deg, var(--gold-dark), var(--gold));
       width: 100%;
       transform-origin: left;
-      animation: progress-shrink 4s linear forwards;
+      animation: progress-shrink 5s linear forwards;
       opacity: 0.6;
     }
     
@@ -421,9 +437,10 @@
   
   <script src="https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/dist/owlbear-rodeo-sdk.umd.min.js"></script>
   <script>
-    const CHANNEL = 'cursed-hearts/dice-rich';
+    const CHANNEL = 'cursed-hearts/dice-roll';
     const container = document.getElementById('container');
-    const DURATION = 4000;
+    const DURATION = 5000;
+    const MAX_TOASTS = 6;
     const processedIds = new Set();
     
     const ICONS = {
@@ -434,8 +451,21 @@
     const RUNES = ['ᚱ', 'ᛟ', 'ᚺ', 'ᛉ', 'ᚦ', 'ᛊ', 'ᛏ', 'ᚹ'];
     
     function createToast(msg) {
+      // Дедупликация
       if (processedIds.has(msg.id)) return;
       processedIds.add(msg.id);
+      
+      // Очистка старых ID
+      if (processedIds.size > 50) {
+        const arr = Array.from(processedIds);
+        processedIds.clear();
+        arr.slice(-25).forEach(id => processedIds.add(id));
+      }
+      
+      // Ограничение количества toast'ов
+      while (container.children.length >= MAX_TOASTS) {
+        container.removeChild(container.lastChild);
+      }
       
       const colorClass = 'toast-' + (msg.color || 'white');
       const isCrit = msg.isCrit;
@@ -453,13 +483,13 @@
       html += '<div class="toast-body">';
       
       if (msg.unitName) {
-        html += '<div class="toast-unit">' + msg.unitName + '</div>';
+        html += '<div class="toast-unit">' + escapeHtml(msg.unitName) + '</div>';
       }
       
-      html += '<div class="toast-title">' + msg.title + '</div>';
+      html += '<div class="toast-title">' + escapeHtml(msg.title) + '</div>';
       
       if (msg.subtitle) {
-        html += '<div class="toast-subtitle">' + msg.subtitle + '</div>';
+        html += '<div class="toast-subtitle">' + escapeHtml(msg.subtitle) + '</div>';
       }
       
       // Dice rolls
@@ -493,6 +523,15 @@
         html += '</div>';
       }
       
+      // Details
+      if (msg.details && msg.details.length > 0) {
+        html += '<div class="toast-details">';
+        for (const line of msg.details) {
+          html += '<div class="toast-detail-line">' + escapeHtml(line) + '</div>';
+        }
+        html += '</div>';
+      }
+      
       html += '</div>'; // .toast-body
       
       // Crit/Fail banner
@@ -507,7 +546,7 @@
       html += '<div class="toast-progress"></div>';
       
       el.innerHTML = html;
-      container.appendChild(el);
+      container.insertBefore(el, container.firstChild);
       
       // Add floating runes for spells/crits
       if (msg.type === 'spell' || isCrit) {
@@ -527,10 +566,12 @@
     }
     
     function removeToast(el) {
-      if (el.classList.contains('exit')) return;
+      if (!el || el.classList.contains('exit')) return;
       el.classList.remove('visible');
       el.classList.add('exit');
-      setTimeout(() => el.remove(), 400);
+      setTimeout(() => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 400);
     }
     
     function addFloatingRunes(el) {
@@ -543,9 +584,18 @@
           rune.style.top = (60 + Math.random() * 20) + '%';
           rune.style.animationDelay = (Math.random() * 0.3) + 's';
           el.appendChild(rune);
-          setTimeout(() => rune.remove(), 2000);
+          setTimeout(() => { if (rune.parentNode) rune.parentNode.removeChild(rune); }, 2000);
         }, i * 200);
       }
+    }
+    
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
     
     // Initialize OBR
