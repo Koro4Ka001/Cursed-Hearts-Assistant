@@ -235,15 +235,12 @@ function msgId(): string {
 async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] Broadcasting:', msg.title);
   
-  // Эмитим локально (для внутренних слушателей если есть)
+  // Эмитим локально
   emitLocal(msg);
   
-  // Если popover не открыт — открываем и кладём сообщение в очередь
-  if (!popoverOpen) {
-    pendingMessages.push(msg);
-    await openToastPopover();
-    return;
-  }
+  // Показываем на карте
+  await toastOnMapService.showToast(msg);
+}
   
   // Если popover открыт но не готов — в очередь
   if (!popoverReady) {
