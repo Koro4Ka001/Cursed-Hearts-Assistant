@@ -63,13 +63,13 @@ async function openToastPopover(): Promise<void> {
     await OBR.popover.open({
       id: TOAST_POPOVER_ID,
       url: '/toast.html',
-      width: 360,  // чуть шире
-      height: 400, // чуть выше
+      width: 360,
+      height: 450,
       anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
       transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
       disableClickAway: true,
-      offsetX: -16, // отступ от края
-      offsetY: -16  // отступ от края
+      offsetX: -16,
+      offsetY: -16
     });
     
     popoverOpen = true;
@@ -79,6 +79,7 @@ async function openToastPopover(): Promise<void> {
     console.warn('[DiceService] Failed to open popover:', e);
   }
 }
+
 async function closeToastPopover(): Promise<void> {
   if (!popoverOpen) return;
   try {
