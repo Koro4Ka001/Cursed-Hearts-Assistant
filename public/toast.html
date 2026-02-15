@@ -6,11 +6,11 @@
   <title>Dice Toast</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@700&family=EB+Garamond:ital,wght@0,400;0,700;1,400&family=MedievalSharp&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=EB+Garamond:ital,wght@0,400&display=swap" rel="stylesheet">
   <style>
+    /* Базовые переменные и сброс */
     :root {
       --color-abyss: #0a0a0f;
-      --color-dark: #111118;
       --color-obsidian: #1a1a24;
       --color-bone: #d4c8a8;
       --color-faded: #8a7e66;
@@ -26,183 +26,493 @@
       --font-garamond: 'EB Garamond', serif;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
       margin: 0;
-      padding: 0;
       font-family: var(--font-garamond);
       background: transparent;
       color: var(--color-bone);
       overflow: hidden;
     }
 
-    /* Контейнер для всех toast */
-    .toast-overlay-root {
+    /* Контейнер */
+    .toast-container {
       position: fixed;
       inset: 0;
       display: flex;
       flex-direction: column-reverse;
       align-items: flex-end;
-      justify-content: flex-start;
       padding: 8px;
       gap: 8px;
       pointer-events: none;
-      overflow: hidden;
-      background: transparent !important;
     }
 
-    /* Вставляем все стили для dice-toast из CSS */
-    /* ... копируем стили .dice-toast-card, .dt-*, анимации ... */
-    
-    /* Я вставлю только критичные стили, остальные возьмём из основного CSS */
-    .dice-toast-card {
+    /* Toast карточка */
+    .toast {
       width: 100%;
-      max-width: 340px;
-      border-radius: 14px;
+      max-width: 320px;
+      border-radius: 12px;
       padding: 12px 16px;
       position: relative;
       overflow: hidden;
       pointer-events: auto;
       cursor: pointer;
       backdrop-filter: blur(20px);
-      transform-origin: right bottom;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
       transition: transform 0.2s;
     }
 
-    .dice-toast-card:hover {
-      transform: scale(1.02) translateX(-4px);
+    .toast:hover { transform: scale(1.02) translateX(-4px); }
+    
+    /* Анимации */
+    .toast-enter {
+      opacity: 0;
+      transform: translateX(120%) scale(0.7);
+    }
+    
+    .toast-visible {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+      transition: opacity 0.5s ease-out, transform 0.6s ease-out;
+    }
+    
+    .toast-exit {
+      opacity: 0;
+      transform: translateX(80%) scale(0.85);
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out;
     }
 
-    /* ... остальные стили из CSS файла ... */
+    /* Цвета */
+    .toast-gold {
+      background: linear-gradient(135deg, rgba(36,28,12,0.96) 0%, rgba(22,18,8,0.98) 100%);
+      border: 1px solid rgba(200,168,78,0.4);
+    }
+    
+    .toast-blood {
+      background: linear-gradient(135deg, rgba(36,12,12,0.96) 0%, rgba(22,8,8,0.98) 100%);
+      border: 1px solid rgba(204,34,34,0.4);
+    }
+    
+    .toast-mana {
+      background: linear-gradient(135deg, rgba(12,22,36,0.96) 0%, rgba(8,16,26,0.98) 100%);
+      border: 1px solid rgba(68,153,221,0.4);
+    }
+    
+    .toast-green {
+      background: linear-gradient(135deg, rgba(12,36,12,0.96) 0%, rgba(8,22,8,0.98) 100%);
+      border: 1px solid rgba(68,204,68,0.4);
+    }
+    
+    .toast-purple {
+      background: linear-gradient(135deg, rgba(28,12,36,0.96) 0%, rgba(18,8,22,0.98) 100%);
+      border: 1px solid rgba(150,80,220,0.4);
+    }
+    
+    .toast-white {
+      background: linear-gradient(135deg, rgba(28,28,32,0.96) 0%, rgba(18,18,22,0.98) 100%);
+      border: 1px solid rgba(200,190,170,0.25);
+    }
+
+    /* Крит */
+    .toast-crit {
+      border-color: var(--color-gold) !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 40px rgba(232,208,104,0.3), inset 0 0 30px rgba(232,208,104,0.08) !important;
+      animation: crit-entrance 0.7s ease-out;
+    }
+    
+    @keyframes crit-entrance {
+      0% { transform: translateX(150%) scale(0.4); filter: brightness(2.5); }
+      40% { transform: translateX(-15px) scale(1.15); filter: brightness(1.8); }
+      70% { transform: translateX(8px) scale(1.05); filter: brightness(1.2); }
+      100% { transform: translateX(0) scale(1); filter: brightness(1); }
+    }
+
+    /* Провал */
+    .toast-fail {
+      border-color: var(--color-blood-bright) !important;
+      animation: fail-entrance 0.5s ease-out;
+    }
+    
+    @keyframes fail-entrance {
+      0%, 100% { transform: translateX(0); }
+      15% { transform: translateX(-8px); }
+      30% { transform: translateX(6px); }
+      45% { transform: translateX(-4px); }
+      60% { transform: translateX(3px); }
+      75% { transform: translateX(-1px); }
+    }
+
+    /* Крит лучи */
+    .crit-rays {
+      position: absolute;
+      inset: -300%;
+      background: conic-gradient(from 0deg,
+        transparent 0deg, rgba(232,208,104,0.1) 5deg, transparent 10deg,
+        transparent 18deg, rgba(232,208,104,0.08) 23deg, transparent 28deg);
+      animation: spin 10s linear infinite;
+      pointer-events: none;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Контент */
+    .toast-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Иконка */
+    .toast-icon {
+      font-size: 28px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+      animation: icon-pop 0.5s ease-out;
+    }
+    
+    @keyframes icon-pop {
+      0% { transform: scale(0) rotate(-60deg); opacity: 0; }
+      60% { transform: scale(1.2) rotate(10deg); }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+    
+    .icon-crit {
+      font-size: 34px;
+      filter: drop-shadow(0 0 12px rgba(232,208,104,0.7));
+      animation: icon-crit-pop 0.7s ease-out;
+    }
+    
+    @keyframes icon-crit-pop {
+      0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+      40% { transform: scale(1.4) rotate(25deg); }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* Тело */
+    .toast-body { flex: 1; min-width: 0; }
+    
+    .toast-unit {
+      font-family: var(--font-cinzel);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--color-faded);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 2px;
+    }
+    
+    .toast-title {
+      font-family: var(--font-cinzel);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-bone);
+      line-height: 1.25;
+    }
+    
+    .title-crit {
+      color: var(--color-gold-bright) !important;
+      text-shadow: 0 0 12px rgba(232,208,104,0.6);
+      font-size: 16px;
+    }
+    
+    .title-fail {
+      color: var(--color-blood-bright) !important;
+      text-shadow: 0 0 10px rgba(204,34,34,0.5);
+    }
+    
+    .toast-subtitle {
+      font-size: 12px;
+      color: var(--color-ancient);
+      font-style: italic;
+      margin-top: 3px;
+    }
+
+    /* Кубики */
+    .toast-rolls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    
+    .die {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 26px;
+      height: 26px;
+      padding: 0 5px;
+      border-radius: 5px;
+      font-family: var(--font-cinzel);
+      font-weight: 900;
+      font-size: 12px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(200,190,170,0.2);
+      color: var(--color-bone);
+      animation: die-pop 0.35s ease-out forwards;
+      animation-delay: calc(0.2s + var(--i, 0) * 0.06s);
+      opacity: 0;
+    }
+    
+    @keyframes die-pop {
+      0% { opacity: 0; transform: scale(0) rotate(-30deg); }
+      70% { transform: scale(1.15) rotate(5deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0); }
+    }
+    
+    .die-crit {
+      background: linear-gradient(135deg, rgba(200,168,78,0.4) 0%, rgba(200,168,78,0.2) 100%) !important;
+      border-color: var(--color-gold) !important;
+      color: var(--color-gold-bright) !important;
+      box-shadow: 0 0 12px rgba(200,168,78,0.5);
+    }
+    
+    .die-fail {
+      background: rgba(204,34,34,0.3) !important;
+      border-color: var(--color-blood-bright) !important;
+      color: var(--color-blood-bright) !important;
+    }
+    
+    .die-more {
+      font-size: 11px;
+      color: var(--color-faded);
+      margin-left: 3px;
+    }
+    
+    .total {
+      font-family: var(--font-cinzel);
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--color-bone);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+      margin-left: 8px;
+    }
+    
+    .total-crit {
+      color: var(--color-gold-bright) !important;
+      text-shadow: 0 0 20px rgba(232,208,104,0.7);
+      font-size: 24px;
+    }
+    
+    .total-fail {
+      color: var(--color-blood-bright) !important;
+      text-shadow: 0 0 12px rgba(204,34,34,0.6);
+    }
+
+    /* Результат справа */
+    .toast-result {
+      font-family: var(--font-cinzel);
+      font-size: 32px;
+      font-weight: 900;
+      color: var(--color-bone);
+      text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+      flex-shrink: 0;
+      animation: result-pop 0.6s ease-out;
+    }
+    
+    @keyframes result-pop {
+      0% { opacity: 0; transform: scale(0.2) rotate(-15deg); }
+      40% { transform: scale(1.3) rotate(8deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0); }
+    }
+    
+    .result-crit {
+      color: var(--color-gold-bright) !important;
+      text-shadow: 0 0 25px rgba(232,208,104,0.7);
+      font-size: 38px;
+    }
+
+    /* HP бар */
+    .hp-bar {
+      position: relative;
+      height: 14px;
+      border-radius: 7px;
+      overflow: hidden;
+      margin-top: 10px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .hp-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      border-radius: 7px;
+      transition: width 0.7s ease;
+    }
+    
+    .hp-damage { background: linear-gradient(90deg, #cc2222, #881414); }
+    .hp-heal { background: linear-gradient(90deg, #22cc44, #118822); }
+    
+    .hp-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-cinzel);
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+    }
+
+    /* Детали */
+    .toast-details {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    
+    .detail-line {
+      font-size: 11px;
+      color: var(--color-faded);
+      line-height: 1.45;
+    }
+
+    /* Баннер */
+    .toast-banner {
+      text-align: center;
+      font-family: var(--font-cinzel);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding: 8px 0 3px;
+      margin-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .banner-crit {
+      color: var(--color-gold-bright);
+      text-shadow: 0 0 15px rgba(232,208,104,0.6);
+      animation: banner-flash 1s ease-out;
+    }
+    
+    @keyframes banner-flash {
+      0% { opacity: 0; letter-spacing: 0.5em; }
+      100% { opacity: 1; letter-spacing: 0.18em; }
+    }
+    
+    .banner-fail {
+      color: var(--color-blood-bright);
+      text-shadow: 0 0 10px rgba(204,34,34,0.6);
+    }
+
+    /* Прогресс */
+    .toast-progress {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--color-gold-dark), var(--color-gold));
+      width: 100%;
+      transform-origin: left;
+      animation: progress-shrink 5s linear forwards;
+      opacity: 0.6;
+    }
+    
+    @keyframes progress-shrink {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
+    }
   </style>
 </head>
 <body>
-  <div class="toast-overlay-root" id="toast-container"></div>
+  <div class="toast-container" id="container"></div>
 
   <script type="module">
     import OBR from "https://unpkg.com/@owlbear-rodeo/sdk@3.1.0/lib/index.js";
 
-    const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
-    const AUTO_CLOSE_DELAY = 5000;
+    const CHANNEL = "cursed-hearts/dice-roll";
+    const AUTO_CLOSE = 5000;
     const MAX_TOASTS = 5;
 
-    let toasts = new Map(); // id -> {element, timeoutId}
+    let toasts = new Map();
 
-    // Создание toast элемента
     function createToast(msg) {
       const toast = document.createElement('div');
-      toast.className = 'dice-toast-card dt-enter';
+      toast.className = `toast toast-enter toast-${msg.color || 'white'}`;
       
-      // Цвет
-      const colorClass = `dt-${msg.color || 'white'}`;
-      toast.classList.add(colorClass);
-      
-      // Крит/фейл
       if (msg.isCrit) {
-        toast.classList.add('dt-crit');
-        // Крит лучи
+        toast.classList.add('toast-crit');
         const rays = document.createElement('div');
-        rays.className = 'dt-crit-rays';
+        rays.className = 'crit-rays';
         toast.appendChild(rays);
       }
-      if (msg.isCritFail) {
-        toast.classList.add('dt-fail');
-        // Трещины
-        const cracks = document.createElement('div');
-        cracks.className = 'dt-fail-cracks';
-        toast.appendChild(cracks);
-      }
       
-      // Свечение
-      const glow = document.createElement('div');
-      glow.className = 'dt-glow';
-      toast.appendChild(glow);
+      if (msg.isCritFail) toast.classList.add('toast-fail');
       
       // Контент
       const content = document.createElement('div');
-      content.className = 'dt-content';
+      content.className = 'toast-content';
       
       // Иконка
       const icon = document.createElement('div');
-      icon.className = 'dt-icon';
-      if (msg.isCrit) icon.classList.add('dt-icon-crit');
-      if (msg.isCritFail) icon.classList.add('dt-icon-fail');
+      icon.className = 'toast-icon';
+      if (msg.isCrit) icon.classList.add('icon-crit');
       icon.textContent = msg.icon || '🎲';
       content.appendChild(icon);
       
       // Тело
       const body = document.createElement('div');
-      body.className = 'dt-body';
+      body.className = 'toast-body';
       
-      // Имя юнита
       if (msg.unitName) {
         const unit = document.createElement('div');
-        unit.className = 'dt-unit';
+        unit.className = 'toast-unit';
         unit.textContent = msg.unitName;
         body.appendChild(unit);
       }
       
-      // Заголовок
       const title = document.createElement('div');
-      title.className = 'dt-title';
-      if (msg.isCrit) title.classList.add('dt-title-crit');
-      if (msg.isCritFail) title.classList.add('dt-title-fail');
+      title.className = 'toast-title';
+      if (msg.isCrit) title.classList.add('title-crit');
+      if (msg.isCritFail) title.classList.add('title-fail');
       title.textContent = msg.title;
       body.appendChild(title);
       
-      // Подзаголовок
       if (msg.subtitle) {
-        const subtitle = document.createElement('div');
-        subtitle.className = 'dt-subtitle';
-        subtitle.textContent = msg.subtitle;
-        body.appendChild(subtitle);
+        const sub = document.createElement('div');
+        sub.className = 'toast-subtitle';
+        sub.textContent = msg.subtitle;
+        body.appendChild(sub);
       }
       
       // Кубики
       if (msg.rolls && msg.rolls.length > 0) {
         const rollsDiv = document.createElement('div');
-        rollsDiv.className = 'dt-rolls';
+        rollsDiv.className = 'toast-rolls';
         
-        // Показываем до 6 кубиков
-        const showRolls = msg.rolls.slice(0, 6);
-        const hasMore = msg.rolls.length > 6;
-        
-        showRolls.forEach((roll, i) => {
+        const show = msg.rolls.slice(0, 6);
+        show.forEach((roll, i) => {
           const die = document.createElement('span');
-          die.className = 'dt-die';
-          die.style.setProperty('--die-i', i);
-          
-          if (roll === 20) die.classList.add('dt-die-crit');
-          else if (roll === 1) die.classList.add('dt-die-fail');
-          
+          die.className = 'die';
+          die.style.setProperty('--i', i);
+          if (roll === 20) die.classList.add('die-crit');
+          else if (roll === 1) die.classList.add('die-fail');
           die.textContent = roll;
           rollsDiv.appendChild(die);
         });
         
-        if (hasMore) {
+        if (msg.rolls.length > 6) {
           const more = document.createElement('span');
-          more.className = 'dt-die-more';
+          more.className = 'die-more';
           more.textContent = `+${msg.rolls.length - 6}`;
           rollsDiv.appendChild(more);
         }
         
         if (msg.total !== undefined) {
-          const eq = document.createElement('span');
-          eq.className = 'dt-eq';
-          eq.textContent = '=';
-          rollsDiv.appendChild(eq);
-          
           const total = document.createElement('span');
-          total.className = 'dt-total';
-          if (msg.isCrit) total.classList.add('dt-total-crit');
-          if (msg.isCritFail) total.classList.add('dt-total-fail');
-          total.textContent = msg.total;
+          total.className = 'total';
+          if (msg.isCrit) total.classList.add('total-crit');
+          if (msg.isCritFail) total.classList.add('total-fail');
+          total.textContent = `= ${msg.total}`;
           rollsDiv.appendChild(total);
         }
         
@@ -211,12 +521,11 @@
       
       content.appendChild(body);
       
-      // Результат справа (большой)
-      if (msg.total !== undefined && msg.type === 'damage') {
+      // Большой результат справа для урона
+      if (msg.type === 'damage' && msg.total !== undefined) {
         const result = document.createElement('div');
-        result.className = 'dt-result';
-        if (msg.isCrit) result.classList.add('dt-result-crit');
-        if (msg.isCritFail) result.classList.add('dt-result-fail');
+        result.className = 'toast-result';
+        if (msg.isCrit) result.classList.add('result-crit');
         result.textContent = msg.total;
         content.appendChild(result);
       }
@@ -226,17 +535,15 @@
       // HP бар
       if (msg.hpBar) {
         const hp = document.createElement('div');
-        hp.className = 'dt-hp';
+        hp.className = 'hp-bar';
         
         const fill = document.createElement('div');
-        fill.className = 'dt-hp-fill';
-        fill.classList.add(msg.type === 'heal' ? 'dt-hp-heal' : 'dt-hp-dmg');
-        const percent = Math.max(0, Math.min(100, (msg.hpBar.current / msg.hpBar.max) * 100));
-        fill.style.width = `${percent}%`;
+        fill.className = `hp-fill ${msg.type === 'heal' ? 'hp-heal' : 'hp-damage'}`;
+        fill.style.width = `${Math.max(0, Math.min(100, (msg.hpBar.current / msg.hpBar.max) * 100))}%`;
         hp.appendChild(fill);
         
         const text = document.createElement('div');
-        text.className = 'dt-hp-txt';
+        text.className = 'hp-text';
         text.textContent = `${msg.hpBar.current}/${msg.hpBar.max}`;
         hp.appendChild(text);
         
@@ -246,84 +553,64 @@
       // Детали
       if (msg.details && msg.details.length > 0) {
         const details = document.createElement('div');
-        details.className = 'dt-details';
-        
-        msg.details.forEach((line, i) => {
-          const detailLine = document.createElement('div');
-          detailLine.className = 'dt-detail-line';
-          detailLine.style.setProperty('--line-index', i);
-          detailLine.textContent = line;
-          details.appendChild(detailLine);
+        details.className = 'toast-details';
+        msg.details.forEach(line => {
+          const p = document.createElement('div');
+          p.className = 'detail-line';
+          p.textContent = line;
+          details.appendChild(p);
         });
-        
         toast.appendChild(details);
       }
       
-      // Баннер (крит/фейл)
+      // Баннер
       if (msg.isCrit || msg.isCritFail) {
         const banner = document.createElement('div');
-        banner.className = 'dt-banner';
-        banner.classList.add(msg.isCrit ? 'dt-banner-crit' : 'dt-banner-fail');
+        banner.className = `toast-banner ${msg.isCrit ? 'banner-crit' : 'banner-fail'}`;
         banner.textContent = msg.isCrit ? '✨ КРИТИЧЕСКИЙ УСПЕХ! ✨' : '💀 КРИТИЧЕСКИЙ ПРОВАЛ! 💀';
         toast.appendChild(banner);
       }
       
-      // Прогресс-бар
+      // Прогресс
       const progress = document.createElement('div');
-      progress.className = 'dt-progress';
+      progress.className = 'toast-progress';
       toast.appendChild(progress);
       
-      // Клик закрывает
-      toast.addEventListener('click', () => {
-        removeToast(msg.id);
-      });
+      toast.addEventListener('click', () => removeToast(msg.id));
       
       return toast;
     }
 
-    // Добавление toast
     function addToast(msg) {
-      // Проверяем лимит
       if (toasts.size >= MAX_TOASTS) {
-        // Удаляем самый старый
-        const oldestId = toasts.keys().next().value;
-        if (oldestId) removeToast(oldestId);
+        const oldest = toasts.keys().next().value;
+        if (oldest) removeToast(oldest);
       }
       
       const element = createToast(msg);
-      const container = document.getElementById('toast-container');
-      container.appendChild(element);
+      document.getElementById('container').appendChild(element);
       
-      // Анимация появления
       requestAnimationFrame(() => {
-        element.classList.remove('dt-enter');
-        element.classList.add('dt-visible');
+        element.classList.remove('toast-enter');
+        element.classList.add('toast-visible');
       });
       
-      // Автозакрытие
-      const timeoutId = setTimeout(() => {
-        removeToast(msg.id);
-      }, AUTO_CLOSE_DELAY);
-      
+      const timeoutId = setTimeout(() => removeToast(msg.id), AUTO_CLOSE);
       toasts.set(msg.id, { element, timeoutId });
     }
 
-    // Удаление toast
     function removeToast(id) {
       const toast = toasts.get(id);
       if (!toast) return;
       
       clearTimeout(toast.timeoutId);
-      
-      // Анимация исчезновения
-      toast.element.classList.remove('dt-visible');
-      toast.element.classList.add('dt-exit');
+      toast.element.classList.remove('toast-visible');
+      toast.element.classList.add('toast-exit');
       
       setTimeout(() => {
         toast.element.remove();
         toasts.delete(id);
         
-        // Если нет больше сообщений - закрываем popover
         if (toasts.size === 0) {
           setTimeout(() => {
             if (toasts.size === 0) {
@@ -334,18 +621,16 @@
       }, 500);
     }
 
-    // Инициализация
     OBR.onReady(() => {
-      console.log('[Toast] Ready to receive messages');
+      console.log('[Toast] Ready!');
       
       // Сообщаем что готовы
       OBR.broadcast.sendMessage('cursed-hearts/toast-ready', {});
       
       // Слушаем сообщения
-      OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, (event) => {
+      OBR.broadcast.onMessage(CHANNEL, (event) => {
         const msg = event.data;
         if (!msg || !msg.id) return;
-        
         console.log('[Toast] Received:', msg.title);
         addToast(msg);
       });
