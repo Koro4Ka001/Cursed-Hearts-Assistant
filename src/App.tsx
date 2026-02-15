@@ -8,7 +8,6 @@ import { diceService } from './services/diceService';
 import { tokenBarService } from './services/tokenBarService';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
-import { BroadcastOverlay } from './components/BroadcastOverlay';
 import { CombatTab } from './components/tabs/CombatTab';
 import { MagicTab } from './components/tabs/MagicTab';
 import { CardsTab } from './components/tabs/CardsTab';
@@ -17,6 +16,12 @@ import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST POPOVER ID
+// ═══════════════════════════════════════════════════════════════
+
+const TOAST_POPOVER_ID = 'cursed-hearts-dice-toast';
 
 // ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -310,6 +315,38 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// OPEN TOAST POPOVER — Открывает toast overlay в ЛЕВОМ НИЖНЕМ углу
+// ═══════════════════════════════════════════════════════════════
+
+async function openToastPopover() {
+  try {
+    // Сначала закрываем если уже открыт
+    await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
+    
+    // Открываем в ЛЕВОМ НИЖНЕМ углу экрана OBR
+    await OBR.popover.open({
+      id: TOAST_POPOVER_ID,
+      url: '/toast.html',
+      width: 380,
+      height: 500,
+      anchorOrigin: {
+        vertical: 'BOTTOM',
+        horizontal: 'LEFT'
+      },
+      transformOrigin: {
+        vertical: 'BOTTOM',
+        horizontal: 'LEFT'
+      },
+      disableClickAway: true,  // Не закрывается по клику мимо
+    });
+    
+    console.log('[App] Toast popover opened in bottom-left corner');
+  } catch (e) {
+    console.warn('[App] Failed to open toast popover:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════
 
@@ -342,11 +379,14 @@ export function App() {
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. Инициализация Dice Service
+        // 2. ОТКРЫВАЕМ TOAST POPOVER В ЛЕВОМ НИЖНЕМ УГЛУ
+        await openToastPopover();
+
+        // 3. Инициализация Dice Service
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-        // 3. Инициализация Token Bars
+        // 4. Инициализация Token Bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
@@ -357,7 +397,7 @@ export function App() {
           console.warn('[App] Token bars init failed:', e);
         }
 
-        // 4. Инициализация Google Docs
+        // 5. Инициализация Google Docs
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
@@ -407,11 +447,6 @@ export function App() {
       {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
       {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
       {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
-
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* DICE TOAST OVERLAY — Красивые уведомления о бросках */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      <BroadcastOverlay />
 
       {/* Системные уведомления (внутренние) */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
