@@ -18,7 +18,7 @@ import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
 
 // ═══════════════════════════════════════════════════════════════
-// TOAST POPOVER ID
+// TOAST POPOVER CONFIG
 // ═══════════════════════════════════════════════════════════════
 
 const TOAST_POPOVER_ID = 'cursed-hearts-dice-toast';
@@ -30,11 +30,11 @@ async function openToastPopover() {
     await OBR.popover.open({
       id: TOAST_POPOVER_ID,
       url: '/toast.html',
-      width: 300,       // Компактная ширина
-      height: 280,      // Компактная высота
+      width: 300,
+      height: 280,
       anchorOrigin: {
         vertical: 'BOTTOM',
-        horizontal: 'RIGHT'  // ПРАВЫЙ нижний угол
+        horizontal: 'RIGHT'
       },
       transformOrigin: {
         vertical: 'BOTTOM',
@@ -341,38 +341,6 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// OPEN TOAST POPOVER — Открывает toast overlay в ЛЕВОМ НИЖНЕМ углу
-// ═══════════════════════════════════════════════════════════════
-
-async function openToastPopover() {
-  try {
-    // Сначала закрываем если уже открыт
-    await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
-    
-    // Открываем в ЛЕВОМ НИЖНЕМ углу экрана OBR
-    await OBR.popover.open({
-      id: TOAST_POPOVER_ID,
-      url: '/toast.html',
-      width: 380,
-      height: 500,
-      anchorOrigin: {
-        vertical: 'BOTTOM',
-        horizontal: 'LEFT'
-      },
-      transformOrigin: {
-        vertical: 'BOTTOM',
-        horizontal: 'LEFT'
-      },
-      disableClickAway: true,  // Не закрывается по клику мимо
-    });
-    
-    console.log('[App] Toast popover opened in bottom-left corner');
-  } catch (e) {
-    console.warn('[App] Failed to open toast popover:', e);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════
 
@@ -405,7 +373,7 @@ export function App() {
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. ОТКРЫВАЕМ TOAST POPOVER В ЛЕВОМ НИЖНЕМ УГЛУ
+        // 2. Открываем Toast Popover в ПРАВОМ нижнем углу
         await openToastPopover();
 
         // 3. Инициализация Dice Service
