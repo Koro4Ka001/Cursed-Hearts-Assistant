@@ -13,44 +13,20 @@ const MANA_HEIGHT = 8;
 const Y_OFFSET_HP = 60;
 const Y_OFFSET_MANA = 75;
 
-// Глобальные интервалы для анимаций
-const animationIntervals = new Map<string, NodeJS.Timeout[]>();
-
-function clearAnimations(tokenId: string) {
-  const intervals = animationIntervals.get(tokenId);
-  if (intervals) {
-    intervals.forEach(clearInterval);
-    animationIntervals.delete(tokenId);
-  }
-}
-
-async function isSceneReady(): Promise<boolean> {
-  try {
-    return await OBR.scene.isReady();
-  } catch {
-    return false;
-  }
-}
-
 export class TokenBarService {
   private ready = false;
 
   async initialize(): Promise<void> {
     if (this.ready) return;
-    this.ready = await isSceneReady();
-  }
-
-  private async safeUpdateItems(ids: string[], updater: (items: any[]) => void) {
-    if (!(await isSceneReady())) return;
     try {
-      await OBR.scene.items.updateItems(ids, updater);
-    } catch (e) {
-      console.warn("[TokenBars] Update error:", e);
+      this.ready = await OBR.scene.isReady();
+    } catch {
+      this.ready = false;
     }
   }
 
   private async safeAddItems(items: any[]) {
-    if (!(await isSceneReady())) return;
+    if (!this.ready) return;
     try {
       await OBR.scene.items.addItems(items);
     } catch (e) {
@@ -59,7 +35,7 @@ export class TokenBarService {
   }
 
   private async safeDeleteItems(ids: string[]) {
-    if (!(await isSceneReady())) return;
+    if (!this.ready) return;
     try {
       await OBR.scene.items.deleteItems(ids);
     } catch (e) {
@@ -73,23 +49,19 @@ export class TokenBarService {
       `${tokenId}-hp-fill`,
       `${tokenId}-hp-border`,
       `${tokenId}-hp-text`,
-      `${tokenId}-mana-bg-top`,
-      `${tokenId}-mana-bg-right`,
-      `${tokenId}-mana-bg-bottom`,
-      `${tokenId}-mana-bg-left`,
+      `${tokenId}-mana-bg`,
       `${tokenId}-mana-fill`,
       `${tokenId}-mana-text`,
     ];
   }
 
   async removeBars(tokenId: string): Promise<void> {
-    clearAnimations(tokenId);
     const ids = this.getBarIds(tokenId);
     await this.safeDeleteItems(ids);
   }
 
   async removeAllBars(): Promise<void> {
-    if (!(await isSceneReady())) return;
+    if (!this.ready) return;
     try {
       const items = await OBR.scene.items.getItems();
       const barItems = items.filter(item =>
@@ -112,7 +84,7 @@ export class TokenBarService {
     manaMax: number,
     useManaAsHp?: boolean
   ): Promise<void> {
-    if (!(await isSceneReady())) return;
+    if (!this.ready) return;
 
     // Удаляем старые бары
     await this.removeBars(tokenId);
@@ -209,42 +181,36 @@ export class TokenBarService {
         .build()
     );
 
-    // === MANA BG (ромб) ===
-    const points = [
-      { x: 0, y: Y_OFFSET_MANA },
-      { x: BAR_WIDTH / 2, y: Y_OFFSET_MANA + MANA_HEIGHT / 2 },
-      { x: 0, y: Y_OFFSET_MANA + MANA_HEIGHT },
-      { x: -BAR_WIDTH / 2, y: Y_OFFSET_MANA + MANA_HEIGHT / 2 },
-    ];
-    for (let i = 0; i < 4; i++) {
-      items.push(
-        buildShape()
-          .shapeType("LINE")
-          .start(points[i])
-          .end(points[(i + 1) % 4])
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .zIndex(1)
-          .name(`${tokenId}-mana-bg-${['top','right','bottom','left'][i]}`)
-          .strokeColor("#1a3a5a")
-          .strokeWidth(1)
-          .metadata({ [`${META_PREFIX}-mana-bg`]: true })
-          .build()
-      );
-    }
+    // === MANA BG (прямоугольник вместо ромба - LINE не работает стабильно) ===
+    items.push(
+      buildShape()
+        .shapeType("RECTANGLE")
+        .width(BAR_WIDTH)
+        .height(MANA_HEIGHT)
+        .position({ x: -BAR_WIDTH / 2, y: Y_OFFSET_MANA })
+        .attachedTo(tokenId)
+        .layer("ATTACHMENT")
+        .locked(true)
+        .disableHit(true)
+        .visible(true)
+        .zIndex(1)
+        .name(`${tokenId}-mana-bg`)
+        .fillColor("#0e1a28")
+        .strokeColor("#1a3a5a")
+        .strokeWidth(1)
+        .metadata({ [`${META_PREFIX}-mana-bg`]: true })
+        .build()
+    );
 
     // === MANA FILL ===
     if (manaRatio > 0) {
-      const fillHeight = MANA_HEIGHT * manaRatio;
+      const fillWidth = BAR_WIDTH * manaRatio;
       items.push(
         buildShape()
           .shapeType("RECTANGLE")
-          .width(BAR_WIDTH - 10)
-          .height(fillHeight)
-          .position({ x: -BAR_WIDTH / 2 + 5, y: Y_OFFSET_MANA + MANA_HEIGHT - fillHeight })
+          .width(fillWidth)
+          .height(MANA_HEIGHT)
+          .position({ x: -BAR_WIDTH / 2, y: Y_OFFSET_MANA })
           .attachedTo(tokenId)
           .layer("ATTACHMENT")
           .locked(true)
@@ -294,7 +260,6 @@ export class TokenBarService {
     manaMax: number,
     useManaAsHp?: boolean
   ): Promise<void> {
-    // Проще пересоздать бары
     await this.createBars(tokenId, hpCurrent, hpMax, manaCurrent, manaMax, useManaAsHp);
   }
 
