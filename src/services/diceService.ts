@@ -5,7 +5,6 @@ import { toastOnMapService } from './toastOnMapService';
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
-const TOAST_POPOVER_ID = 'cursed-hearts-dice-toast';
 
 // ═══════════════════════════════════════════════════════════════
 // BROADCAST MESSAGE TYPE
@@ -43,78 +42,6 @@ export function onLocalDiceMessage(callback: LocalMessageListener): () => void {
 function emitLocal(msg: BroadcastMessage) {
   localListeners.forEach(fn => {
     try { fn(msg); } catch (e) { console.error('[DiceService] Local listener error:', e); }
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TOAST POPOVER MANAGEMENT
-// ═══════════════════════════════════════════════════════════════
-
-let popoverOpen = false;
-let popoverReady = false;
-let pendingMessages: BroadcastMessage[] = [];
-
-async function openToastPopover(): Promise<void> {
-  if (popoverOpen) return;
-  
-  try {
-    // Сначала закроем если вдруг завис
-    await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
-    
-    await OBR.popover.open({
-      id: TOAST_POPOVER_ID,
-      url: '/toast.html',
-      width: 360,
-      height: 450,
-      anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-      transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-      disableClickAway: true,
-      offsetX: -16,
-      offsetY: -16
-    });
-    
-    popoverOpen = true;
-    popoverReady = false;
-    console.log('[DiceService] Toast popover opened, waiting for ready signal...');
-  } catch (e) {
-    console.warn('[DiceService] Failed to open popover:', e);
-  }
-}
-
-async function closeToastPopover(): Promise<void> {
-  if (!popoverOpen) return;
-  try {
-    await OBR.popover.close(TOAST_POPOVER_ID);
-    popoverOpen = false;
-    popoverReady = false;
-    console.log('[DiceService] Toast popover closed');
-  } catch (e) {
-    console.warn('[DiceService] Failed to close popover:', e);
-    popoverOpen = false;
-    popoverReady = false;
-  }
-}
-
-// Отправка сообщения с гарантией доставки
-async function sendToToast(msg: BroadcastMessage): Promise<void> {
-  try {
-    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
-    console.log('[DiceService] Message sent:', msg.title);
-  } catch (e) {
-    console.warn('[DiceService] Broadcast failed:', e);
-  }
-}
-
-// Flush pending messages когда toast готов
-function flushPendingMessages(): void {
-  if (pendingMessages.length === 0) return;
-  console.log('[DiceService] Flushing', pendingMessages.length, 'pending messages');
-  
-  const messages = [...pendingMessages];
-  pendingMessages = [];
-  
-  messages.forEach((msg, i) => {
-    setTimeout(() => sendToToast(msg), i * 100);
   });
 }
 
@@ -229,27 +156,17 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BROADCAST — Открывает popover, ждёт готовности, отправляет
+// BROADCAST — Показывает уведомление на карте
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] Broadcasting:', msg.title);
   
-  // Эмитим локально
+  // Эмитим локально (для внутренних слушателей если есть)
   emitLocal(msg);
   
   // Показываем на карте
   await toastOnMapService.showToast(msg);
-}
-  
-  // Если popover открыт но не готов — в очередь
-  if (!popoverReady) {
-    pendingMessages.push(msg);
-    return;
-  }
-  
-  // Popover готов — отправляем
-  await sendToToast(msg);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -263,22 +180,7 @@ class DiceService {
     if (this.initialized) return;
     this.initialized = true;
     
-    try {
-      // Слушаем сигнал "toast готов"
-      OBR.broadcast.onMessage('cursed-hearts/toast-ready', () => {
-        console.log('[DiceService] Toast is ready!');
-        popoverReady = true;
-        flushPendingMessages();
-      });
-      
-      // Слушаем команду закрыть popover
-      OBR.broadcast.onMessage('cursed-hearts/close-toast', () => {
-        console.log('[DiceService] Received close signal');
-        closeToastPopover();
-      });
-    } catch (e) {
-      console.warn('[DiceService] Failed to setup broadcast listeners:', e);
-    }
+    await toastOnMapService.initialize();
     
     console.log("[DiceService] Ready");
   }
