@@ -166,7 +166,7 @@ export class TokenBarService {
         .plainText(`${hpCurrent}/${hpMax}`)
         .fontSize(8)
         .fontFamily("Arial")
-        .textAlignHorizontal("CENTER")
+        .textAlign("CENTER")  // ← ПРАВИЛЬНО: textAlign, не textAlignHorizontal!
         .fillColor("#ffffff")
         .strokeColor("#000000")
         .strokeWidth(2)
@@ -233,7 +233,7 @@ export class TokenBarService {
         .plainText(`${manaCurrent}/${manaMax}`)
         .fontSize(7)
         .fontFamily("Arial")
-        .textAlignHorizontal("CENTER")
+        .textAlign("CENTER")  // ← ПРАВИЛЬНО: textAlign, не textAlignHorizontal!
         .fillColor("#aaccff")
         .strokeColor("#000000")
         .strokeWidth(2)
