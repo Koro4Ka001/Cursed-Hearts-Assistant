@@ -3,7 +3,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Unit, Settings, ConnectionStatus, Notification, CombatLogEntry, RollModifier } from '../types';
 import { docsService } from '../services/docsService';
-import { updateTokenHp } from '../services/hpTrackerService';
 import { tokenBarService } from '../services/tokenBarService';
 import { generateId } from '../utils/dice';
 
@@ -18,7 +17,7 @@ const createDefaultUnit = (): Unit => ({
   stats: { physicalPower: 0, dexterity: 0, vitality: 0, intelligence: 0, charisma: 0, initiative: 0 },
   proficiencies: { swords: 0, axes: 0, hammers: 0, polearms: 0, unarmed: 0, bows: 0 },
   magicBonuses: {},
-  elementAffinities: [],  // НОВОЕ
+  elementAffinities: [],
   armor: { slashing: 0, piercing: 0, bludgeoning: 0, chopping: 0, magicBase: 0, magicOverrides: {}, undead: 0 },
   damageMultipliers: {},
   weapons: [],
@@ -109,7 +108,7 @@ export const useGameStore = create<GameState>()(
       isSyncing: false,
       autoSyncIntervalId: null,
       activeEffect: null,
-      nextRollModifier: 'normal',  // НОВОЕ
+      nextRollModifier: 'normal',
 
       // ── Units ──
       addUnit: (partial) => {
@@ -160,15 +159,17 @@ export const useGameStore = create<GameState>()(
         const u = s.units.find(x => x.id === unitId);
         if (!u) return;
         set(st => ({ units: st.units.map(x => x.id === unitId ? { ...x, health: { ...x.health, current: hp } } : x) }));
+        
+        // Синхронизация с Google Docs
         if (s.settings.syncHP && u.googleDocsHeader && s.settings.googleDocsUrl) {
           try { await docsService.setHealth(u.googleDocsHeader, hp, u.health.max); } catch (e) { console.error('HP sync:', e); }
         }
-        if (u.owlbearTokenId) {
-          try { await updateTokenHp(u.owlbearTokenId, hp, u.health.max); } catch (e) { console.error('HP tracker:', e); }
-          if (s.settings.showTokenBars ?? true) {
-            tokenBarService.updateBars(u.owlbearTokenId, hp, u.health.max, u.mana.current, u.mana.max, u.useManaAsHp).catch(console.warn);
-          }
+        
+        // Обновляем только наши красивые бары
+        if (u.owlbearTokenId && (s.settings.showTokenBars ?? true)) {
+          tokenBarService.updateBars(u.owlbearTokenId, hp, u.health.max, u.mana.current, u.mana.max, u.useManaAsHp).catch(console.warn);
         }
+        
         get().addCombatLog(u.shortName, 'HP', `${hp}/${u.health.max}`);
       },
 
@@ -289,9 +290,7 @@ export const useGameStore = create<GameState>()(
               );
             }
             get().updateUnit(unitId, upd);
-            if (u.owlbearTokenId && res.health) {
-              await updateTokenHp(u.owlbearTokenId, res.health.current, res.health.max);
-            }
+            
             const fresh = get().units.find(x => x.id === unitId);
             if (fresh?.owlbearTokenId && (s.settings.showTokenBars ?? true)) {
               tokenBarService.updateBars(
