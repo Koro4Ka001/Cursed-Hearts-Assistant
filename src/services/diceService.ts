@@ -46,49 +46,73 @@ function emitLocal(msg: BroadcastMessage) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TOAST POPOVER — Открывается при броске, закрывается когда пусто
+// TOAST POPOVER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════
 
 let popoverOpen = false;
-let popoverOpenPromise: Promise<void> | null = null;
+let popoverReady = false;
+let pendingMessages: BroadcastMessage[] = [];
 
-async function ensureToastPopoverOpen(): Promise<void> {
+async function openToastPopover(): Promise<void> {
   if (popoverOpen) return;
-  if (popoverOpenPromise) return popoverOpenPromise;
   
-  popoverOpenPromise = (async () => {
-    try {
-      await OBR.popover.open({
-        id: TOAST_POPOVER_ID,
-        url: '/toast.html',
-        width: 320,
-        height: 300,
-        anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-        transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
-        disableClickAway: true,
-      });
-      popoverOpen = true;
-      console.log('[DiceService] Toast popover opened');
-    } catch (e) {
-      console.warn('[DiceService] Failed to open popover:', e);
-    } finally {
-      popoverOpenPromise = null;
-    }
-  })();
-  
-  return popoverOpenPromise;
+  try {
+    // Сначала закроем если вдруг завис
+    await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
+    
+    await OBR.popover.open({
+      id: TOAST_POPOVER_ID,
+      url: '/toast.html',
+      width: 320,
+      height: 300,
+      anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+      transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+      disableClickAway: true,
+    });
+    
+    popoverOpen = true;
+    popoverReady = false;
+    console.log('[DiceService] Toast popover opened, waiting for ready signal...');
+  } catch (e) {
+    console.warn('[DiceService] Failed to open popover:', e);
+  }
 }
 
-// Экспортируем для вызова из toast.html через broadcast
-export async function closeToastPopover(): Promise<void> {
+async function closeToastPopover(): Promise<void> {
   if (!popoverOpen) return;
   try {
     await OBR.popover.close(TOAST_POPOVER_ID);
     popoverOpen = false;
+    popoverReady = false;
     console.log('[DiceService] Toast popover closed');
   } catch (e) {
     console.warn('[DiceService] Failed to close popover:', e);
+    popoverOpen = false;
+    popoverReady = false;
   }
+}
+
+// Отправка сообщения с гарантией доставки
+async function sendToToast(msg: BroadcastMessage): Promise<void> {
+  try {
+    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+    console.log('[DiceService] Message sent:', msg.title);
+  } catch (e) {
+    console.warn('[DiceService] Broadcast failed:', e);
+  }
+}
+
+// Flush pending messages когда toast готов
+function flushPendingMessages(): void {
+  if (pendingMessages.length === 0) return;
+  console.log('[DiceService] Flushing', pendingMessages.length, 'pending messages');
+  
+  const messages = [...pendingMessages];
+  pendingMessages = [];
+  
+  messages.forEach((msg, i) => {
+    setTimeout(() => sendToToast(msg), i * 100);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -202,28 +226,30 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BROADCAST — Открывает popover, отправляет себе + другим
+// BROADCAST — Открывает popover, ждёт готовности, отправляет
 // ═══════════════════════════════════════════════════════════════
 
-async function broadcast(msg: BroadcastMessage) {
+async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] Broadcasting:', msg.title);
   
-  // 1. Открываем popover (если ещё не открыт)
-  await ensureToastPopoverOpen();
-  
-  // 2. Небольшая задержка чтобы popover успел загрузиться
-  await new Promise(r => setTimeout(r, 50));
-  
-  // 3. Показываем СЕБЕ (локально)
+  // Эмитим локально (для внутренних слушателей если есть)
   emitLocal(msg);
   
-  // 4. Отправляем ДРУГИМ через OBR broadcast
-  try {
-    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
-    console.log('[DiceService] Broadcast sent');
-  } catch (e) {
-    console.warn('[DiceService] OBR broadcast failed:', e);
+  // Если popover не открыт — открываем и кладём сообщение в очередь
+  if (!popoverOpen) {
+    pendingMessages.push(msg);
+    await openToastPopover();
+    return;
   }
+  
+  // Если popover открыт но не готов — в очередь
+  if (!popoverReady) {
+    pendingMessages.push(msg);
+    return;
+  }
+  
+  // Popover готов — отправляем
+  await sendToToast(msg);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -237,13 +263,21 @@ class DiceService {
     if (this.initialized) return;
     this.initialized = true;
     
-    // Слушаем команду закрыть popover от toast.html
     try {
+      // Слушаем сигнал "toast готов"
+      OBR.broadcast.onMessage('cursed-hearts/toast-ready', () => {
+        console.log('[DiceService] Toast is ready!');
+        popoverReady = true;
+        flushPendingMessages();
+      });
+      
+      // Слушаем команду закрыть popover
       OBR.broadcast.onMessage('cursed-hearts/close-toast', () => {
+        console.log('[DiceService] Received close signal');
         closeToastPopover();
       });
     } catch (e) {
-      console.warn('[DiceService] Failed to subscribe to close-toast:', e);
+      console.warn('[DiceService] Failed to setup broadcast listeners:', e);
     }
     
     console.log("[DiceService] Ready");
