@@ -5,16 +5,27 @@ import OBR, { buildShape } from "@owlbear-rodeo/sdk";
 export class TokenBarService {
   async createBars(tokenId: string, hpCurrent: number, hpMax: number, manaCurrent: number, manaMax: number, useManaAsHp?: boolean) {
     try {
+      // Получаем позицию токена
+      const items = await OBR.scene.items.getItems();
+      const token = items.find(item => item.id === tokenId);
+      
+      if (!token) {
+        console.warn("Token not found:", tokenId);
+        return;
+      }
+      
       const ratio = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
       const width = 80 * ratio;
       
-      // Позиция НАД токеном
+      // Абсолютная позиция НАД токеном
+      const barX = token.position.x - 40; // Центрируем по ширине
+      const barY = token.position.y - (token.height || 100) / 2 - 10; // Над токеном
+      
       const bar = buildShape()
         .shapeType("RECTANGLE")
         .width(width)
         .height(6)
-        .position({ x: -40, y: -30 }) // ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ!
-        .attachedTo(tokenId)
+        .position({ x: barX, y: barY })
         .layer("ATTACHMENT")
         .locked(true)
         .disableHit(true)
@@ -26,7 +37,7 @@ export class TokenBarService {
         .build();
       
       await OBR.scene.items.addItems([bar]);
-      console.log("BAR CREATED ABOVE TOKEN!");
+      console.log("BAR CREATED AT ABSOLUTE POSITION!");
     } catch (error) {
       console.error("BAR FAILED:", error);
     }
