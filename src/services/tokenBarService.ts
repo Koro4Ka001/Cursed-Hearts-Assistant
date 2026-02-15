@@ -1,10 +1,9 @@
 // src/services/tokenBarService.ts
 
-import OBR, { buildShape, buildText } from "@owlbear-rodeo/sdk";
+import OBR, { buildShape } from "@owlbear-rodeo/sdk";
 import type { UnitLike } from "@/types";
 
-const EXT = "cursed-hearts-assistant";
-const META_PREFIX = `${EXT}/bar`;
+const META_PREFIX = "cursed-hearts-bar";
 
 export class TokenBarService {
   private ready = false;
@@ -18,49 +17,18 @@ export class TokenBarService {
     }
   }
 
-  private async safeAddItems(items: any[]) {
-    if (!this.ready) return;
-    try {
-      await OBR.scene.items.addItems(items);
-    } catch (e) {
-      console.warn("[TokenBars] Add error:", e);
-    }
-  }
-
-  private async safeDeleteItems(ids: string[]) {
-    if (!this.ready) return;
-    try {
-      await OBR.scene.items.deleteItems(ids);
-    } catch (e) {
-      console.warn("[TokenBars] Delete error:", e);
-    }
-  }
-
-  private getBarIds(tokenId: string): string[] {
-    return [
-      `${tokenId}-hp`,
-      `${tokenId}-mana`,
-    ];
-  }
-
   async removeBars(tokenId: string): Promise<void> {
-    const ids = this.getBarIds(tokenId);
-    await this.safeDeleteItems(ids);
-  }
-
-  async removeAllBars(): Promise<void> {
     if (!this.ready) return;
     try {
       const items = await OBR.scene.items.getItems();
-      const barItems = items.filter(item =>
-        item.metadata && typeof item.metadata === 'object' &&
-        Object.keys(item.metadata).some(key => key.startsWith(META_PREFIX))
+      const barItems = items.filter(item => 
+        item.metadata?.[META_PREFIX] === tokenId
       );
       if (barItems.length > 0) {
         await OBR.scene.items.deleteItems(barItems.map(i => i.id));
       }
     } catch (e) {
-      console.warn("[TokenBars] Remove all error:", e);
+      console.warn("[TokenBars] Remove error:", e);
     }
   }
 
@@ -77,59 +45,61 @@ export class TokenBarService {
     // Удаляем старые бары
     await this.removeBars(tokenId);
 
-    const items = [];
-    const isDead = hpCurrent <= 0;
-
-    // === HP BAR ===
-    const hpRatio = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
-    const hpColor = isDead ? "#000000" : hpRatio > 0.5 ? "#22cc44" : hpRatio > 0.25 ? "#ccaa22" : "#cc2222";
-    
-    items.push(
-      buildShape()
-        .shapeType("RECTANGLE")
-        .width(100)
-        .height(10)
-        .position({ x: -50, y: 60 })
-        .attachedTo(tokenId)
-        .layer("ATTACHMENT")
-        .locked(true)
-        .disableHit(true)
-        .visible(true)
-        .zIndex(1)
-        .name(`${tokenId}-hp`)
-        .fillColor(hpColor)
-        .strokeColor("#7a5a1e")
-        .strokeWidth(1)
-        .metadata({ [`${META_PREFIX}-hp`]: true })
-        .build()
-    );
-
-    // === MANA BAR ===
-    if (!useManaAsHp) {
+    try {
+      const hpRatio = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
       const manaRatio = manaMax > 0 ? Math.max(0, Math.min(1, manaCurrent / manaMax)) : 0;
       
+      const items = [];
+      
+      // HP BAR - всегда создаём
       items.push(
         buildShape()
           .shapeType("RECTANGLE")
-          .width(100 * manaRatio)
-          .height(8)
-          .position({ x: -50, y: 72 })
+          .width(80 * hpRatio)
+          .height(6)
+          .position({ x: -40, y: 55 })
           .attachedTo(tokenId)
           .layer("ATTACHMENT")
           .locked(true)
           .disableHit(true)
           .visible(true)
-          .zIndex(1)
-          .name(`${tokenId}-mana`)
-          .fillColor("#4499dd")
-          .strokeColor("#1a3a5a")
+          .zIndex(10)
+          .fillColor(hpCurrent <= 0 ? "#000000" : hpRatio > 0.5 ? "#22cc44" : "#cc2222")
+          .strokeColor("#ffffff")
           .strokeWidth(1)
-          .metadata({ [`${META_PREFIX}-mana`]: true })
+          .metadata({ [META_PREFIX]: tokenId })
           .build()
       );
-    }
 
-    await this.safeAddItems(items);
+      // MANA BAR - только если не используется как HP
+      if (!useManaAsHp && manaRatio > 0) {
+        items.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(80 * manaRatio)
+            .height(4)
+            .position({ x: -40, y: 63 })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(true)
+            .zIndex(10)
+            .fillColor("#4499dd")
+            .strokeColor("#aaccff")
+            .strokeWidth(1)
+            .metadata({ [META_PREFIX]: tokenId })
+            .build()
+        );
+      }
+
+      if (items.length > 0) {
+        await OBR.scene.items.addItems(items);
+        console.log("[TokenBars] Bars created for token:", tokenId);
+      }
+    } catch (e) {
+      console.error("[TokenBars] Create error:", e);
+    }
   }
 
   async updateBars(
@@ -155,6 +125,19 @@ export class TokenBarService {
           unit.useManaAsHp
         );
       }
+    }
+  }
+
+  async removeAllBars(): Promise<void> {
+    if (!this.ready) return;
+    try {
+      const items = await OBR.scene.items.getItems();
+      const barItems = items.filter(item => item.metadata?.[META_PREFIX]);
+      if (barItems.length > 0) {
+        await OBR.scene.items.deleteItems(barItems.map(i => i.id));
+      }
+    } catch (e) {
+      console.warn("[TokenBars] Remove all error:", e);
     }
   }
 }
