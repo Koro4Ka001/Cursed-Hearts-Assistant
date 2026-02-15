@@ -3,11 +3,10 @@ import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import OBR from "@owlbear-rodeo/sdk";
 import "./index.css";
-import { App } from "./App";  // <-- Изменено: named import вместо default
+import { App } from "./App";
 import { docsService } from "./services/docsService";
 import { diceService } from "./services/diceService";
 import { tokenBarService } from "./services/tokenBarService";
-import { toastOnMapService } from "./services/toastOnMapService";
 import { useGameStore } from "./stores/useGameStore";
 
 // Инициализация OBR
@@ -18,7 +17,6 @@ OBR.onReady(async () => {
     // Инициализируем сервисы
     await diceService.initialize();
     await tokenBarService.initialize();
-    await toastOnMapService.initialize();
     
     // Устанавливаем соединение
     useGameStore.getState().setConnection("owlbear", true);
