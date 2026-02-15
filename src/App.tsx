@@ -23,6 +23,32 @@ import { cn } from './utils/cn';
 
 const TOAST_POPOVER_ID = 'cursed-hearts-dice-toast';
 
+async function openToastPopover() {
+  try {
+    await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
+    
+    await OBR.popover.open({
+      id: TOAST_POPOVER_ID,
+      url: '/toast.html',
+      width: 300,       // Компактная ширина
+      height: 280,      // Компактная высота
+      anchorOrigin: {
+        vertical: 'BOTTOM',
+        horizontal: 'RIGHT'  // ПРАВЫЙ нижний угол
+      },
+      transformOrigin: {
+        vertical: 'BOTTOM',
+        horizontal: 'RIGHT'
+      },
+      disableClickAway: true,
+    });
+    
+    console.log('[App] Toast popover opened');
+  } catch (e) {
+    console.warn('[App] Toast popover failed:', e);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
 // ═══════════════════════════════════════════════════════════════
