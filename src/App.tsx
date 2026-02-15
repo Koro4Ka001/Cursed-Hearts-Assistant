@@ -415,6 +415,32 @@ export function App() {
           </div>
         ))}
       </div>
+
+      {/* ТЕСТОВАЯ КНОПКА ДЛЯ БАРОВ */}
+      {viewMode === 'medium' && (
+        <div className="fixed bottom-4 left-4 z-50">
+          <button 
+            onClick={async () => {
+              const units = useGameStore.getState().units;
+              const unit = units.find(u => u.owlbearTokenId);
+              if (unit) {
+                await tokenBarService.createBars(
+                  unit.owlbearTokenId!,
+                  unit.health.current,
+                  unit.health.max,
+                  unit.mana.current,
+                  unit.mana.max,
+                  unit.useManaAsHp
+                );
+                console.log("TEST: Bars created manually");
+              }
+            }}
+            className="bg-red-500 text-white px-3 py-1 rounded"
+          >
+            TEST BARS
+          </button>
+        </div>
+      )}
     </div>
   );
 }
