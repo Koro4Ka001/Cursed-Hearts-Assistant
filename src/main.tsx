@@ -54,3 +54,12 @@ root.render(
     <App />
   </StrictMode>
 );
+setTimeout(async () => {
+  try {
+    const testTokenId = "a8d8ce72-f81e-420a-8495-aa68f0ea7636"; // Замени на реальный ID токена!
+    await tokenBarService.createBars(testTokenId, 50, 100, 30, 50, false);
+    console.log("TEST BARS CREATED!");
+  } catch (e) {
+    console.error("TEST FAILED:", e);
+  }
+}, 3000);
