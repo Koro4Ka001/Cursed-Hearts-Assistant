@@ -1,5 +1,5 @@
 // src/services/tokenBarService.ts
-import OBR, { buildShape, buildText, isShape, Item, Vector2 } from "@owlbear-rodeo/sdk";
+import OBR, { buildShape, buildText, isShape, Item } from "@owlbear-rodeo/sdk";
 
 const EXT = "cursed-hearts-assistant";
 const META = `${EXT}/bar-v2`;
@@ -49,7 +49,7 @@ class TokenBarService {
         console.log("[TokenBars] Enhanced bars ready");
       }
     } catch (e) {
-      console.warn("[TokenBars] Init:", e);
+      console.warn("[TokenBars] Init error:", e);
     }
   }
 
@@ -91,13 +91,15 @@ class TokenBarService {
     return "#cc2222";
   }
 
-  // Создание красивого HP бара
+  // Создание простого HP бара
   private createHPBar(tokenId: string, current: number, max: number): Item[] {
     const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
     const isLow = ratio < 0.25;
     const isDead = current <= 0;
     const color = this.getHPColor(ratio, current);
     const items: Item[] = [];
+    
+    console.log(`[TokenBars] Creating HP bar: ${current}/${max} (${Math.round(ratio * 100)}%)`);
     
     // Фоновая подложка
     items.push(
@@ -114,8 +116,8 @@ class TokenBarService {
         .zIndex(1)
         .name(`${EXT}-hp-bg`)
         .fillColor("#1a0808")
-        .strokeColor("transparent")
-        .strokeWidth(0)
+        .strokeColor("#4a1515")
+        .strokeWidth(1)
         .metadata({ [META]: { tokenId, barType: 'hp', element: 'bg' } as BarMeta })
         .build()
     );
@@ -163,7 +165,7 @@ class TokenBarService {
         .build()
     );
 
-    // Блик сверху
+    // Блик сверху (полупрозрачный белый)
     if (!isDead) {
       items.push(
         buildShape()
@@ -187,7 +189,7 @@ class TokenBarService {
       );
     }
 
-    // Эффект свечения при низком HP
+    // Эффект свечения при низком HP (красная рамка)
     if (isLow && !isDead) {
       items.push(
         buildShape()
@@ -205,57 +207,7 @@ class TokenBarService {
           .fillColor("transparent")
           .strokeColor("#cc2222")
           .strokeWidth(2)
-          .strokeOpacity(0.5)
           .metadata({ [META]: { tokenId, barType: 'hp', element: 'glow' } as BarMeta })
-          .build()
-      );
-    }
-
-    // "Трещины" при отрицательном HP
-    if (isDead && current < 0) {
-      // Трещина 1
-      items.push(
-        buildShape()
-          .shapeType("POLYGON")
-          .points([
-            { x: -BAR_WIDTH / 2 + 20, y: Y_OFFSET },
-            { x: -BAR_WIDTH / 2 + 22, y: Y_OFFSET + HP_HEIGHT / 2 },
-            { x: -BAR_WIDTH / 2 + 25, y: Y_OFFSET + HP_HEIGHT }
-          ])
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .zIndex(5)
-          .name(`${EXT}-hp-crack-1`)
-          .fillColor("#000000")
-          .strokeColor("#cc0000")
-          .strokeWidth(1)
-          .metadata({ [META]: { tokenId, barType: 'hp', element: 'effect', effectType: 'crack' } as BarMeta })
-          .build()
-      );
-
-      // Трещина 2
-      items.push(
-        buildShape()
-          .shapeType("POLYGON")
-          .points([
-            { x: -BAR_WIDTH / 2 + 60, y: Y_OFFSET + HP_HEIGHT },
-            { x: -BAR_WIDTH / 2 + 62, y: Y_OFFSET + HP_HEIGHT / 2 },
-            { x: -BAR_WIDTH / 2 + 65, y: Y_OFFSET }
-          ])
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .zIndex(5)
-          .name(`${EXT}-hp-crack-2`)
-          .fillColor("#000000")
-          .strokeColor("#cc0000")
-          .strokeWidth(1)
-          .metadata({ [META]: { tokenId, barType: 'hp', element: 'effect', effectType: 'crack' } as BarMeta })
           .build()
       );
     }
@@ -286,11 +238,13 @@ class TokenBarService {
     return items;
   }
 
-  // Создание красивого мана бара
+  // Создание простого мана бара
   private createManaBar(tokenId: string, current: number, max: number): Item[] {
     const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
     const items: Item[] = [];
     const yPos = Y_OFFSET + HP_HEIGHT + SPACING;
+    
+    console.log(`[TokenBars] Creating Mana bar: ${current}/${max} (${Math.round(ratio * 100)}%)`);
     
     // Фоновая подложка
     items.push(
@@ -307,8 +261,8 @@ class TokenBarService {
         .zIndex(1)
         .name(`${EXT}-mana-bg`)
         .fillColor("#0e1a28")
-        .strokeColor("transparent")
-        .strokeWidth(0)
+        .strokeColor("#1a3a5a")
+        .strokeWidth(1)
         .metadata({ [META]: { tokenId, barType: 'mana', element: 'bg' } as BarMeta })
         .build()
     );
@@ -335,7 +289,7 @@ class TokenBarService {
         .build()
     );
 
-    // Золотая рамка
+    // Рамка
     items.push(
       buildShape()
         .shapeType("RECTANGLE")
@@ -378,30 +332,6 @@ class TokenBarService {
         .build()
     );
 
-    // Свечение маны
-    if (ratio > 0.8) {
-      items.push(
-        buildShape()
-          .shapeType("RECTANGLE")
-          .width(BAR_WIDTH + 4)
-          .height(MANA_HEIGHT + 4)
-          .position({ x: -BAR_WIDTH / 2 - 2, y: yPos - 2 })
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .zIndex(0)
-          .name(`${EXT}-mana-glow`)
-          .fillColor("transparent")
-          .strokeColor("#4499dd")
-          .strokeWidth(2)
-          .strokeOpacity(0.4)
-          .metadata({ [META]: { tokenId, barType: 'mana', element: 'glow' } as BarMeta })
-          .build()
-      );
-    }
-
     // Текст маны
     items.push(
       buildText()
@@ -437,7 +367,12 @@ class TokenBarService {
     manaMax: number,
     useManaAsHp?: boolean
   ): Promise<void> {
-    if (!(await this.isReady())) return;
+    if (!(await this.isReady())) {
+      console.warn("[TokenBars] Scene not ready");
+      return;
+    }
+    
+    console.log(`[TokenBars] Creating bars for token ${tokenId}`);
     
     try {
       // Удаляем старые бары
@@ -449,6 +384,7 @@ class TokenBarService {
         ...this.createManaBar(tokenId, manaCurrent, manaMax)
       ];
       
+      console.log(`[TokenBars] Adding ${items.length} items to scene`);
       await OBR.scene.items.addItems(items);
       
       // Сохраняем состояние
@@ -462,7 +398,7 @@ class TokenBarService {
       this.startEffects(tokenId, hpCurrent / hpMax);
       
     } catch (e) {
-      console.warn("[TokenBars] Create error:", e);
+      console.error("[TokenBars] Create error:", e);
     }
   }
 
@@ -475,14 +411,22 @@ class TokenBarService {
     manaMax: number,
     useManaAsHp?: boolean
   ): Promise<void> {
-    if (!(await this.isReady())) return;
+    if (!(await this.isReady())) {
+      console.warn("[TokenBars] Scene not ready for update");
+      return;
+    }
+    
+    console.log(`[TokenBars] Updating bars for token ${tokenId}: HP ${hpCurrent}/${hpMax}, Mana ${manaCurrent}/${manaMax}`);
     
     try {
       const state = this.barStates.get(tokenId);
       const items = await this.getBarItems(tokenId);
       
-      if (items.length < 10) {
+      console.log(`[TokenBars] Found ${items.length} existing bar items`);
+      
+      if (items.length < 8) {
         // Если баров нет или они неполные - создаём заново
+        console.log("[TokenBars] Not enough items, recreating bars");
         await this.createBars(tokenId, hpCurrent, hpMax, manaCurrent, manaMax, useManaAsHp);
         return;
       }
@@ -544,6 +488,7 @@ class TokenBarService {
       }
       
       // Применяем обновления
+      console.log(`[TokenBars] Updating ${updateIds.length} items`);
       if (updateIds.length > 0) {
         await OBR.scene.items.updateItems(updateIds, (items) => {
           for (const item of items) {
@@ -557,11 +502,13 @@ class TokenBarService {
       if (state) {
         // Эффект исцеления
         if (hpCurrent > state.lastHP) {
+          console.log("[TokenBars] Healing detected");
           await this.showHealEffect(tokenId, hpCurrent - state.lastHP);
         }
         
         // Эффект урона
         if (hpCurrent < state.lastHP) {
+          console.log("[TokenBars] Damage detected");
           await this.showDamageEffect(tokenId);
         }
         
@@ -575,7 +522,7 @@ class TokenBarService {
       this.startEffects(tokenId, hpCurrent / hpMax);
       
     } catch (e) {
-      console.warn("[TokenBars] Update error:", e);
+      console.error("[TokenBars] Update error:", e);
     }
   }
 
@@ -598,7 +545,6 @@ class TokenBarService {
         .fillOpacity(0.3)
         .strokeColor("#44ff66")
         .strokeWidth(2)
-        .strokeOpacity(0.5)
         .build();
       
       await OBR.scene.items.addItems([flash]);
@@ -653,6 +599,7 @@ class TokenBarService {
     
     // Пульсация при низком HP
     if (hpRatio < 0.25 && hpRatio > 0) {
+      console.log("[TokenBars] Starting low HP pulse effect");
       state.pulseInterval = window.setInterval(async () => {
         try {
           const items = await this.getBarItems(tokenId);
@@ -699,12 +646,14 @@ class TokenBarService {
     if (!(await this.isReady())) return;
     
     try {
+      console.log(`[TokenBars] Removing bars for token ${tokenId}`);
       this.stopEffects(tokenId);
       this.barStates.delete(tokenId);
       
       const items = await this.getBarItems(tokenId);
       if (items.length > 0) {
         await OBR.scene.items.deleteItems(items.map(i => i.id));
+        console.log(`[TokenBars] Removed ${items.length} items`);
       }
     } catch (e) {
       console.warn("[TokenBars] Remove error:", e);
@@ -737,6 +686,7 @@ class TokenBarService {
 
   // Синхронизировать бары для всех юнитов
   async syncAllBars(units: UnitLike[]): Promise<void> {
+    console.log(`[TokenBars] Syncing bars for ${units.length} units`);
     for (const unit of units) {
       if (!unit.owlbearTokenId) continue;
       await this.updateBars(
