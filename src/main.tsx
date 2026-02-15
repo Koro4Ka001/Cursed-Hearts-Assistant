@@ -5,7 +5,6 @@ import OBR from "@owlbear-rodeo/sdk";
 import "./index.css";
 import App from "./App.tsx";
 import { docsService } from "./services/docsService";
-import { hpTrackerService } from "./services/hpTrackerService";
 import { diceService } from "./services/diceService";
 import { tokenBarService } from "./services/tokenBarService";
 import { toastOnMapService } from "./services/toastOnMapService";
@@ -17,7 +16,6 @@ OBR.onReady(async () => {
   
   try {
     // Инициализируем сервисы
-    await hpTrackerService.initialize();
     await diceService.initialize();
     await tokenBarService.initialize();
     await toastOnMapService.initialize();
