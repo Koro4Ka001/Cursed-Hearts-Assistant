@@ -1,6 +1,6 @@
 // src/services/tokenBarService.ts
 
-import OBR, { buildShape, buildText, isShape } from "@owlbear-rodeo/sdk";
+import OBR, { buildShape, buildText } from "@owlbear-rodeo/sdk";
 import type { UnitLike } from "@/types";
 
 const EXT = "cursed-hearts-assistant";
@@ -120,7 +120,7 @@ export class TokenBarService {
     items.push(
       buildShape()
         .shapeType("RECTANGLE")
-        .width(hpFillWidth)
+        .width(Math.max(1, hpFillWidth))
         .height(HP_HEIGHT)
         .position({ x: -BAR_WIDTH / 2, y: Y_OFFSET_HP })
         .attachedTo(tokenId)
@@ -166,8 +166,7 @@ export class TokenBarService {
         .plainText(`${hpCurrent}/${hpMax}`)
         .fontSize(8)
         .fontFamily("Arial")
-        .textAlign("CENTER")
-        .textAlignVertical("MIDDLE")
+        .textAlignHorizontal("CENTER")
         .fillColor("#ffffff")
         .strokeColor("#000000")
         .strokeWidth(2)
@@ -181,7 +180,7 @@ export class TokenBarService {
         .build()
     );
 
-    // === MANA BG (прямоугольник вместо ромба - LINE не работает стабильно) ===
+    // === MANA BG ===
     items.push(
       buildShape()
         .shapeType("RECTANGLE")
@@ -208,7 +207,7 @@ export class TokenBarService {
       items.push(
         buildShape()
           .shapeType("RECTANGLE")
-          .width(fillWidth)
+          .width(Math.max(1, fillWidth))
           .height(MANA_HEIGHT)
           .position({ x: -BAR_WIDTH / 2, y: Y_OFFSET_MANA })
           .attachedTo(tokenId)
@@ -234,8 +233,7 @@ export class TokenBarService {
         .plainText(`${manaCurrent}/${manaMax}`)
         .fontSize(7)
         .fontFamily("Arial")
-        .textAlign("CENTER")
-        .textAlignVertical("MIDDLE")
+        .textAlignHorizontal("CENTER")
         .fillColor("#aaccff")
         .strokeColor("#000000")
         .strokeWidth(2)
