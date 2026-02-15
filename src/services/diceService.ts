@@ -4,6 +4,7 @@ import type { DiceRollResult, RollModifier } from "../types";
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
+const TOAST_POPOVER_ID = 'cursed-hearts-dice-toast';
 
 // ═══════════════════════════════════════════════════════════════
 // BROADCAST MESSAGE TYPE
@@ -27,7 +28,7 @@ export interface BroadcastMessage {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// LOCAL EVENT EMITTER — для показа toast-ов СЕБЕ
+// LOCAL EVENT EMITTER
 // ═══════════════════════════════════════════════════════════════
 
 type LocalMessageListener = (msg: BroadcastMessage) => void;
@@ -42,6 +43,52 @@ function emitLocal(msg: BroadcastMessage) {
   localListeners.forEach(fn => {
     try { fn(msg); } catch (e) { console.error('[DiceService] Local listener error:', e); }
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST POPOVER — Открывается при броске, закрывается когда пусто
+// ═══════════════════════════════════════════════════════════════
+
+let popoverOpen = false;
+let popoverOpenPromise: Promise<void> | null = null;
+
+async function ensureToastPopoverOpen(): Promise<void> {
+  if (popoverOpen) return;
+  if (popoverOpenPromise) return popoverOpenPromise;
+  
+  popoverOpenPromise = (async () => {
+    try {
+      await OBR.popover.open({
+        id: TOAST_POPOVER_ID,
+        url: '/toast.html',
+        width: 320,
+        height: 300,
+        anchorOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+        transformOrigin: { vertical: 'BOTTOM', horizontal: 'RIGHT' },
+        disableClickAway: true,
+      });
+      popoverOpen = true;
+      console.log('[DiceService] Toast popover opened');
+    } catch (e) {
+      console.warn('[DiceService] Failed to open popover:', e);
+    } finally {
+      popoverOpenPromise = null;
+    }
+  })();
+  
+  return popoverOpenPromise;
+}
+
+// Экспортируем для вызова из toast.html через broadcast
+export async function closeToastPopover(): Promise<void> {
+  if (!popoverOpen) return;
+  try {
+    await OBR.popover.close(TOAST_POPOVER_ID);
+    popoverOpen = false;
+    console.log('[DiceService] Toast popover closed');
+  } catch (e) {
+    console.warn('[DiceService] Failed to close popover:', e);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -155,16 +202,25 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BROADCAST — Отправка себе + другим
+// BROADCAST — Открывает popover, отправляет себе + другим
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage) {
-  // 1. Показываем СЕБЕ (локально) — это главное!
+  console.log('[DiceService] Broadcasting:', msg.title);
+  
+  // 1. Открываем popover (если ещё не открыт)
+  await ensureToastPopoverOpen();
+  
+  // 2. Небольшая задержка чтобы popover успел загрузиться
+  await new Promise(r => setTimeout(r, 50));
+  
+  // 3. Показываем СЕБЕ (локально)
   emitLocal(msg);
   
-  // 2. Отправляем ДРУГИМ через OBR broadcast
+  // 4. Отправляем ДРУГИМ через OBR broadcast
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+    console.log('[DiceService] Broadcast sent');
   } catch (e) {
     console.warn('[DiceService] OBR broadcast failed:', e);
   }
@@ -180,6 +236,16 @@ class DiceService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+    
+    // Слушаем команду закрыть popover от toast.html
+    try {
+      OBR.broadcast.onMessage('cursed-hearts/close-toast', () => {
+        closeToastPopover();
+      });
+    } catch (e) {
+      console.warn('[DiceService] Failed to subscribe to close-toast:', e);
+    }
+    
     console.log("[DiceService] Ready");
   }
 
