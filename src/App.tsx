@@ -18,38 +18,6 @@ import { NotificationToast, LoadingSpinner } from './components/ui';
 import { cn } from './utils/cn';
 
 // ═══════════════════════════════════════════════════════════════
-// TOAST POPOVER CONFIG
-// ═══════════════════════════════════════════════════════════════
-
-const TOAST_POPOVER_ID = 'cursed-hearts-dice-toast';
-
-async function openToastPopover() {
-  try {
-    await OBR.popover.close(TOAST_POPOVER_ID).catch(() => {});
-    
-    await OBR.popover.open({
-      id: TOAST_POPOVER_ID,
-      url: '/toast.html',
-      width: 300,
-      height: 280,
-      anchorOrigin: {
-        vertical: 'BOTTOM',
-        horizontal: 'RIGHT'
-      },
-      transformOrigin: {
-        vertical: 'BOTTOM',
-        horizontal: 'RIGHT'
-      },
-      disableClickAway: true,
-    });
-    
-    console.log('[App] Toast popover opened');
-  } catch (e) {
-    console.warn('[App] Toast popover failed:', e);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
 // ═══════════════════════════════════════════════════════════════
 
@@ -373,14 +341,11 @@ export function App() {
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. Открываем Toast Popover в ПРАВОМ нижнем углу
-        await openToastPopover();
-
-        // 3. Инициализация Dice Service
+        // 2. Инициализация Dice Service (БЕЗ открытия popover — он откроется при первом броске)
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-        // 4. Инициализация Token Bars
+        // 3. Инициализация Token Bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
@@ -391,7 +356,7 @@ export function App() {
           console.warn('[App] Token bars init failed:', e);
         }
 
-        // 5. Инициализация Google Docs
+        // 4. Инициализация Google Docs
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
