@@ -1,6 +1,6 @@
 // src/services/tokenBarService.ts
 
-import OBR, { buildShape, isShape } from "@owlbear-rodeo/sdk";
+import OBR, { buildShape, buildText, isShape } from "@owlbear-rodeo/sdk";
 import type { UnitLike } from "@/types";
 
 const EXT = "cursed-hearts-assistant";
@@ -188,24 +188,23 @@ export class TokenBarService {
 
     // === HP TEXT ===
     items.push(
-      buildShape()
-        .shapeType("TEXT")
-        .text(`${hpCurrent}/${hpMax}`)
+      buildText()
+        .position({ x: 0, y: Y_OFFSET_HP + HP_HEIGHT / 2 })
+        .attachedTo(tokenId)
+        .plainText(`${hpCurrent}/${hpMax}`)
         .fontSize(8)
         .fontFamily("Arial")
         .textAlign("CENTER")
         .textAlignVertical("MIDDLE")
-        .position({ x: 0, y: Y_OFFSET_HP + HP_HEIGHT / 2 })
-        .attachedTo(tokenId)
+        .fillColor("#ffffff")
+        .strokeColor("#000000")
+        .strokeWidth(2)
         .layer("ATTACHMENT")
         .locked(true)
         .disableHit(true)
         .visible(true)
         .zIndex(4)
         .name(`${tokenId}-hp-text`)
-        .fillColor("#ffffff")
-        .strokeColor("#000000")
-        .strokeWidth(2)
         .metadata({ [`${META_PREFIX}-hp-text`]: true })
         .build()
     );
@@ -263,24 +262,23 @@ export class TokenBarService {
 
     // === MANA TEXT ===
     items.push(
-      buildShape()
-        .shapeType("TEXT")
-        .text(`${manaCurrent}/${manaMax}`)
+      buildText()
+        .position({ x: 0, y: Y_OFFSET_MANA + MANA_HEIGHT / 2 })
+        .attachedTo(tokenId)
+        .plainText(`${manaCurrent}/${manaMax}`)
         .fontSize(7)
         .fontFamily("Arial")
         .textAlign("CENTER")
         .textAlignVertical("MIDDLE")
-        .position({ x: 0, y: Y_OFFSET_MANA + MANA_HEIGHT / 2 })
-        .attachedTo(tokenId)
+        .fillColor("#aaccff")
+        .strokeColor("#000000")
+        .strokeWidth(2)
         .layer("ATTACHMENT")
         .locked(true)
         .disableHit(true)
         .visible(true)
         .zIndex(3)
         .name(`${tokenId}-mana-text`)
-        .fillColor("#aaccff")
-        .strokeColor("#000000")
-        .strokeWidth(2)
         .metadata({ [`${META_PREFIX}-mana-text`]: true })
         .build()
     );
