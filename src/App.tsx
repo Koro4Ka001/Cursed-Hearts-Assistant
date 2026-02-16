@@ -337,15 +337,12 @@ export function App() {
 
     const init = async () => {
       try {
-        // 1. Инициализация OBR
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. Инициализация Dice Service (БЕЗ открытия popover — он откроется при первом броске)
         await diceService.initialize();
         setConnection('dice', diceService.getStatus());
 
-        // 3. Инициализация Token Bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
@@ -356,7 +353,6 @@ export function App() {
           console.warn('[App] Token bars init failed:', e);
         }
 
-        // 4. Инициализация Google Docs
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
@@ -377,10 +373,8 @@ export function App() {
     };
 
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Loading screen
   if (isLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
@@ -402,12 +396,10 @@ export function App() {
 
   return (
     <div className="h-screen bg-abyss text-bone overflow-hidden relative">
-      {/* Контент по режиму */}
       {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
       {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
       {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
 
-      {/* Системные уведомления (внутренние) */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className="pointer-events-auto">
@@ -416,39 +408,52 @@ export function App() {
         ))}
       </div>
 
-   {/* ТЕСТОВЫЕ КНОПКИ */}
-{viewMode === 'medium' && (
-  <div className="fixed bottom-4 left-4 z-50 flex gap-2">
-    <button 
-      onClick={async () => {
-        console.log("🔄 Refreshing bars...");
-        await tokenBarService.forceRefresh();
-      }}
-      className="bg-blue-500 text-white px-3 py-1 rounded text-xs"
-    >
-      🔄 REFRESH
-    </button>
-    <button 
-      onClick={async () => {
-        const units = useGameStore.getState().units;
-        const unit = units.find(u => u.owlbearTokenId);
-        if (unit) {
-          console.log("Creating bars for:", unit.name);
-          await tokenBarService.createBars(
-            unit.owlbearTokenId!,
-            unit.health.current,
-            unit.health.max,
-            unit.mana.current,
-            unit.mana.max,
-            unit.useManaAsHp
-          );
-        } else {
-          console.warn("No unit with token!");
-        }
-      }}
-      className="bg-red-500 text-white px-3 py-1 rounded text-xs"
-    >
-      🔨 CREATE
-    </button>
-  </div>
-)}
+      {/* ТЕСТОВЫЕ КНОПКИ ДЛЯ ДЕБАГА */}
+      {viewMode === 'medium' && (
+        <div className="fixed bottom-12 left-2 z-50 flex gap-1">
+          <button 
+            onClick={async () => {
+              console.log("🔄 Refreshing bars...");
+              await tokenBarService.forceRefresh();
+            }}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-[10px] font-bold"
+          >
+            🔄 REFRESH
+          </button>
+          <button 
+            onClick={async () => {
+              const units = useGameStore.getState().units;
+              const unit = units.find(u => u.owlbearTokenId);
+              if (unit) {
+                console.log("🔨 Creating bars for:", unit.name, unit.owlbearTokenId);
+                await tokenBarService.createBars(
+                  unit.owlbearTokenId!,
+                  unit.health.current,
+                  unit.health.max,
+                  unit.mana.current,
+                  unit.mana.max,
+                  unit.useManaAsHp
+                );
+              } else {
+                console.warn("❌ No unit with token!");
+                alert("Нет юнита с привязанным токеном!");
+              }
+            }}
+            className="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-[10px] font-bold"
+          >
+            🔨 CREATE
+          </button>
+          <button 
+            onClick={async () => {
+              console.log("🗑️ Removing all bars...");
+              await tokenBarService.removeAllBars();
+            }}
+            className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-[10px] font-bold"
+          >
+            🗑️ CLEAR
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
