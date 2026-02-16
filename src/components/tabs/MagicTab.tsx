@@ -1,586 +1,632 @@
-// src/components/tabs/MagicTab.tsx
-import { useState } from 'react';
-import { useGameStore } from '../../stores/useGameStore';
-import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState, RollModifierSelector } from '../ui';
-import { getMaxMagicBonus, isHit } from '../../utils/dice';
-import { getIntelligenceBonus } from '../../utils/damage';
-import { diceService } from '../../services/diceService';
-import type { DiceRollResult, Spell, ElementAffinity } from '../../types';
-import { DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../../types';
-import { SPELL_TYPES, DEFAULT_ELEMENT_TABLE, DEFAULT_DAMAGE_TIERS } from '../../constants/elements';
+// src/services/tokenBarService.ts
 
-function safeProjectilesToString(projectiles: string | number | undefined | null): string {
-  if (projectiles === undefined || projectiles === null) return '1';
-  if (typeof projectiles === 'number') return String(projectiles);
-  if (typeof projectiles === 'string') return projectiles || '1';
-  return '1';
-}
+import OBR, { 
+  buildShape, 
+  Item, 
+  Image,
+  isImage, 
+  isShape,
+  Shape
+} from "@owlbear-rodeo/sdk";
+import type { Unit } from "../types";
 
-function hasProjectileDice(projectiles: string | number | undefined | null): boolean {
-  const str = safeProjectilesToString(projectiles);
-  return str.toLowerCase().includes('d');
-}
+// ============================================================================
+// КОНСТАНТЫ
+// ============================================================================
 
-async function parseProjectiles(projectiles: string | number | undefined | null): Promise<{ count: number; rolls?: number[] }> {
-  const str = safeProjectilesToString(projectiles);
-  const asNumber = parseInt(str, 10);
-  if (!isNaN(asNumber) && !str.toLowerCase().includes('d')) {
-    return { count: Math.max(1, asNumber) };
-  }
-  if (str.toLowerCase().includes('d')) {
-    const result = await diceService.roll(str, 'Количество снарядов');
-    return { count: Math.max(1, result.total), rolls: result.rolls };
-  }
-  return { count: 1 };
-}
+const METADATA_KEY = "cursed-hearts-assistant";
+const BAR_PREFIX = `${METADATA_KEY}/bar`;
 
-/**
- * Получает бонусы от предрасположенностей для заклинания
- */
-function getAffinityBonuses(
-  elements: string[],
-  affinities: ElementAffinity[]
-): { castHitBonus: number; manaCostReduction: number; damageBonus: number } {
-  let castHitBonus = 0;
-  let manaCostReduction = 0;
-  let damageBonus = 0;
+const CONFIG = {
+  // Размеры баров
+  BAR_HEIGHT: 8,
+  BAR_GAP: 3,
+  BAR_OFFSET_FROM_TOKEN: 12, // отступ от нижнего края токена
+  MIN_BAR_WIDTH: 50,
+  MAX_BAR_WIDTH: 140,
+  BAR_WIDTH_RATIO: 0.9, // 90% от ширины токена
   
-  for (const aff of affinities) {
-    // Проверяем, есть ли элемент предрасположенности среди элементов заклинания
-    const elementLower = aff.element.toLowerCase();
-    const hasElement = elements.some(e => e.toLowerCase() === elementLower);
-    
-    if (hasElement) {
-      switch (aff.bonusType) {
-        case 'castHit':
-          castHitBonus += aff.value;
-          break;
-        case 'manaCost':
-          manaCostReduction += aff.value;
-          break;
-        case 'damage':
-          damageBonus += aff.value;
-          break;
-      }
+  // Цвета HP
+  HP_BG_COLOR: "#1a0808",
+  HP_BG_STROKE: "#4a2020",
+  HP_FILL_HIGH: "#8b0000",      // > 50%
+  HP_FILL_MEDIUM: "#cc4400",    // 25-50%
+  HP_FILL_LOW: "#ff2200",       // < 25%
+  HP_FILL_CRITICAL: "#ff0000",  // < 10%
+  
+  // Цвета Mana
+  MANA_BG_COLOR: "#080818",
+  MANA_BG_STROKE: "#202050",
+  MANA_FILL_COLOR: "#2244aa",
+  MANA_FILL_LOW: "#4466cc",
+  
+  // Z-индексы
+  Z_BG: 0,
+  Z_FILL: 1,
+} as const;
+
+// ============================================================================
+// ТИПЫ
+// ============================================================================
+
+interface BarIds {
+  hpBg: string;
+  hpFill: string;
+  manaBg: string;
+  manaFill: string;
+}
+
+interface TokenInfo {
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
+// ============================================================================
+// СЕРВИС
+// ============================================================================
+
+class TokenBarService {
+  // tokenId -> BarIds
+  private bars: Map<string, BarIds> = new Map();
+  private isInitialized = false;
+  private unsubscribe: (() => void) | null = null;
+
+  // ==========================================================================
+  // ИНИЦИАЛИЗАЦИЯ
+  // ==========================================================================
+
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      console.log("[TokenBarService] Already initialized");
+      return;
     }
-  }
-  
-  return { castHitBonus, manaCostReduction, damageBonus };
-}
 
-export function MagicTab() {
-  const {
-    units, selectedUnitId, spendMana, takeDamage,
-    nextRollModifier, setNextRollModifier
-  } = useGameStore();
-  const unit = units.find(u => u.id === selectedUnitId);
-  
-  const [selectedSpellId, setSelectedSpellId] = useState<string>('');
-  const [targetCount, setTargetCount] = useState(1);
-  const [useDoubleShot, setUseDoubleShot] = useState(false);
-  const [isCasting, setIsCasting] = useState(false);
-  const [damageResults, setDamageResults] = useState<DiceRollResult[]>([]);
-  const [castLog, setCastLog] = useState<string[]>([]);
-  
-  if (!unit) {
-    return (
-      <EmptyState
-        icon="✨"
-        title="Нет персонажа"
-        description="Выберите персонажа для магии"
-      />
-    );
-  }
-  
-  const spells = unit.spells ?? [];
-  if (spells.length === 0) {
-    return (
-      <div className="p-4">
-        <Section title="Сотворение заклинания" icon="✨">
-          <p className="text-faded text-sm">Добавьте заклинания в настройках персонажа</p>
-        </Section>
-      </div>
-    );
-  }
-  
-  const selectedSpell = spells.find(s => s.id === selectedSpellId) ?? spells[0];
-  const affinities = unit.elementAffinities ?? [];
-  
-  // Бонусы от предрасположенностей
-  const spellElements = selectedSpell?.elements ?? [];
-  const affinityBonuses = getAffinityBonuses(spellElements, affinities);
-  
-  // Стоимость с учётом ДаблШота и предрасположенности
-  const getManaCost = (spell: Spell | undefined): number => {
-    if (!spell) return 0;
-    let base = spell.manaCost ?? 0;
-    // ДаблШот удваивает стоимость
-    if (useDoubleShot && unit.hasDoubleShot) base *= 2;
-    // Предрасположенность снижает стоимость
-    base = Math.max(0, base - affinityBonuses.manaCostReduction);
-    return base;
-  };
-  
-  const currentManaCost = getManaCost(selectedSpell);
-  const currentMana = unit.mana?.current ?? 0;
-  const costType = selectedSpell?.costType ?? 'mana';
-  const canCast = costType === 'health' ? true : currentMana >= currentManaCost;
-  
-  const handleCast = async () => {
-    if (!selectedSpell) return;
-    
-    setIsCasting(true);
-    setDamageResults([]);
-    setCastLog([]);
-    
-    // Забираем модификатор
-    const modifier = nextRollModifier;
-    setNextRollModifier('normal');
-    
-    const log: string[] = [];
-    const newDamageResults: DiceRollResult[] = [];
-    
     try {
-      const baseCost = getManaCost(selectedSpell);
-      const costType = selectedSpell.costType ?? 'mana';
-      const elements = selectedSpell.elements ?? [];
-      const magicBonuses = unit.magicBonuses ?? {};
-      
-      // Базовый бонус + бонус от предрасположенности
-      const baseMagicBonus = getMaxMagicBonus(elements, magicBonuses);
-      const totalCastBonus = baseMagicBonus + affinityBonuses.castHitBonus;
-      
-      let castCritDiscount = false;
-      let castResult: DiceRollResult | null = null;
-      
-      // ═══ БРОСОК НА КАСТ ═══
-      if (!selectedSpell.isMultiStep) {
-        const castFormula = totalCastBonus >= 0 ? `d20+${totalCastBonus}` : `d20${totalCastBonus}`;
-        castResult = await diceService.roll(
-          castFormula,
-          `Каст ${selectedSpell.name}`,
-          unit.shortName ?? unit.name,
-          modifier
-        );
-        
-        const castSuccess = isHit(castResult);
-        
-        // ═══ КРИТ 20 = МАНА ×0.5 ═══
-        if (castResult.rawD20 === 20) {
-          castCritDiscount = true;
-        }
-        
-        const manaSaved = castCritDiscount ? Math.floor(baseCost / 2) : 0;
-        await diceService.announceSpellCast(
-          unit.shortName ?? unit.name,
-          selectedSpell.name,
-          castSuccess,
-          castResult,
-          manaSaved > 0 ? manaSaved : undefined
-        );
-        
-        if (!castSuccess) {
-          // Промах — мана всё равно тратится (полная стоимость)
-          if (costType === 'mana') {
-            if (currentMana >= baseCost) {
-              await spendMana(unit.id, baseCost);
-              log.push(`💠 Потрачено ${baseCost} маны`);
-            }
-          } else {
-            await takeDamage(unit.id, baseCost);
-            log.push(`🩸 Потрачено ${baseCost} HP`);
+      // Ждём готовности сцены
+      const ready = await OBR.scene.isReady();
+      if (!ready) {
+        console.log("[TokenBarService] Scene not ready, subscribing...");
+        OBR.scene.onReadyChange(async (isReady) => {
+          if (isReady && !this.isInitialized) {
+            await this.doInit();
           }
-          
-          const modText = castResult.allD20Rolls && castResult.allD20Rolls.length > 1
-            ? ` (${modifier === 'advantage' ? '🎯' : '💨'}[${castResult.allD20Rolls.join(',')}])`
-            : '';
-          log.push(`❌ Каст провален! [${castResult.rawD20 ?? '?'}] + ${totalCastBonus} = ${castResult.total}${modText}`);
-          setCastLog(log);
-          return;
-        }
-        
-        const modText = castResult.allD20Rolls && castResult.allD20Rolls.length > 1
-          ? ` (${modifier === 'advantage' ? '🎯' : '💨'}[${castResult.allD20Rolls.join(',')}])`
-          : '';
-        log.push(`✅ Каст успешен! [${castResult.rawD20 ?? '?'}] + ${totalCastBonus} = ${castResult.total}${modText}${castCritDiscount ? ' — ✨КРИТ! Мана ×0.5!' : ''}`);
+        });
+        return;
       }
-      
-      // ═══ СПИСЫВАЕМ МАНУ (с учётом крит-скидки) ═══
-      const finalCost = castCritDiscount ? Math.ceil(baseCost / 2) : baseCost;
-      
-      if (costType === 'mana') {
-        if (currentMana < finalCost) {
-          log.push(`❌ Недостаточно маны! Нужно ${finalCost}, есть ${currentMana}`);
-          setCastLog(log);
-          return;
-        }
-        
-        const success = await spendMana(unit.id, finalCost);
-        if (!success) {
-          log.push('❌ Не удалось потратить ману');
-          setCastLog(log);
-          return;
-        }
-        log.push(`💠 Потрачено ${finalCost} маны${castCritDiscount ? ` (было ${baseCost}, крит ×0.5)` : ''}${affinityBonuses.manaCostReduction > 0 ? ` (−${affinityBonuses.manaCostReduction} от предрасп.)` : ''}`);
-      } else {
-        log.push(`🩸 Заклинание стоит ${finalCost} HP${castCritDiscount ? ` (было ${baseCost}, крит ×0.5)` : ''}`);
-        await takeDamage(unit.id, finalCost);
-      }
-      
-      // ═══ ДаблШот проверка ═══
-      let spellCount = 1;
-      if (useDoubleShot && unit.hasDoubleShot && castResult && castResult.rawD20) {
-        const threshold = unit.doubleShotThreshold ?? 18;
-        if (castResult.rawD20 >= threshold) {
-          spellCount = 2;
-          log.push(`⚡ ДаблШот активирован! d20 = ${castResult.rawD20} >= ${threshold}`);
-          await diceService.showNotification(`⚡ ${unit.shortName}: ДаблШот! 2× ${selectedSpell.name}!`);
-        } else {
-          log.push(`💨 ДаблШот не сработал (${castResult.rawD20} < ${threshold}), но мана ×2 потрачена`);
-        }
-      }
-      
-      // ═══ ПРИМЕНЯЕМ ЗАКЛИНАНИЕ ═══
-      const intBonus = getIntelligenceBonus(unit);
-      const equipBonus = selectedSpell.equipmentBonus ?? 0;
-      // Добавляем бонус к урону от предрасположенности
-      const totalDamageBonus = intBonus + equipBonus + affinityBonuses.damageBonus;
-      const spellType = selectedSpell.type ?? 'targeted';
-      
-      for (let cast = 0; cast < spellCount; cast++) {
-        if (spellCount > 1) {
-          log.push(`--- Заклинание ${cast + 1} ---`);
-        }
-        
-        switch (spellType) {
-          case 'self':
-          case 'summon':
-            log.push(`✨ ${selectedSpell.description ?? 'Эффект применён'}`);
-            break;
-            
-          case 'aoe':
-            if (selectedSpell.damageFormula && selectedSpell.damageType) {
-              const aoeFormula = totalDamageBonus > 0
-                ? `${selectedSpell.damageFormula}+${totalDamageBonus}`
-                : selectedSpell.damageFormula;
-              
-              // При крите каста — удваиваем урон АОЕ тоже
-              const aoeResult = await diceService.rollDamage(
-                aoeFormula,
-                'Урон по площади',
-                unit.shortName ?? unit.name,
-                castResult?.isCrit ?? false
-              );
-              newDamageResults.push(aoeResult);
-              
-              const damageTypeName = DAMAGE_TYPE_NAMES[selectedSpell.damageType] ?? selectedSpell.damageType;
-              const critText = castResult?.isCrit ? ' ×2!' : '';
-              log.push(`💥 АОЕ урон${critText}: [${aoeResult.rolls.join(', ')}] + ${totalDamageBonus} = ${aoeResult.total} ${damageTypeName}`);
-              
-              await diceService.announceDamage(
-                unit.shortName ?? unit.name,
-                aoeResult.total,
-                damageTypeName,
-                aoeResult.rolls,
-                totalDamageBonus,
-                castResult?.isCrit
-              );
-            } else {
-              log.push(`✨ ${selectedSpell.description ?? 'АОЕ эффект применён'}`);
-            }
-            break;
-            
-          case 'targeted': {
-            // === МНОГОШАГОВЫЙ РЕЖИМ ===
-            if (selectedSpell.isMultiStep) {
-              const elementTable = selectedSpell.elementTable ?? DEFAULT_ELEMENT_TABLE;
-              const damageTiers = selectedSpell.damageTiers ?? DEFAULT_DAMAGE_TIERS;
-              
-              // Шаг 1: d20 на попадание (с модификатором только первый каст)
-              const useModForHit = cast === 0 ? modifier : 'normal';
-              const hitResult = await diceService.roll('d20', 'Попадание', unit.shortName ?? unit.name, useModForHit);
-              const hitRoll = hitResult.rawD20 ?? hitResult.total;
-              
-              if (hitRoll <= 10) {
-                log.push(`❌ Шаг 1 — Попадание: [${hitRoll}] — ПРОМАХ!`);
-                break;
-              }
-              
-              const isCritHit = hitRoll === 20;
-              log.push(`✅ Шаг 1 — Попадание: [${hitRoll}]${isCritHit ? ' — ✨КРИТ! Чистый урон + ×2 кубики!' : ' — Попадание!'}`);
-              
-              // Шаг 2: Элемент
-              let resolvedDamageType: typeof selectedSpell.damageType;
-              if (isCritHit) {
-                resolvedDamageType = 'pure';
-                log.push(`⚡ Шаг 2 — Элемент: Чистый урон (крит)`);
-              } else {
-                const elementResult = await diceService.roll('d12', 'Элемент', unit.shortName ?? unit.name);
-                const elementRoll = elementResult.total;
-                resolvedDamageType = elementTable[elementRoll] ?? 'fire';
-                const elementName = DAMAGE_TYPE_NAMES[resolvedDamageType] ?? resolvedDamageType;
-                log.push(`🎲 Шаг 2 — Элемент: [${elementRoll}] → ${elementName}`);
-              }
-              
-              // Шаг 3: d20 на силу
-              const powerResult = await diceService.roll('d20', 'Сила удара', unit.shortName ?? unit.name);
-              const powerRoll = powerResult.rawD20 ?? powerResult.total;
-              
-              const tier = damageTiers.find(t => powerRoll >= t.minRoll && powerRoll <= t.maxRoll);
-              if (!tier) {
-                log.push(`⚠️ Шаг 3 — Сила: [${powerRoll}] — Tier не найден!`);
-                break;
-              }
-              
-              const tierLabel = tier.label ?? `${tier.minRoll}-${tier.maxRoll}`;
-              log.push(`💪 Шаг 3 — Сила: [${powerRoll}] → ${tierLabel} (${tier.formula})`);
-              
-              // Шаг 4: Урон
-              const dmgFormula = totalDamageBonus > 0
-                ? `${tier.formula}+${totalDamageBonus}`
-                : tier.formula;
-              
-              const dmgResult = await diceService.rollDamage(dmgFormula, `Урон (${tierLabel})`, unit.shortName ?? unit.name, isCritHit);
-              newDamageResults.push(dmgResult);
-              
-              const damageTypeName = resolvedDamageType ? (DAMAGE_TYPE_NAMES[resolvedDamageType] ?? resolvedDamageType) : 'неизвестный';
-              const critDmgText = isCritHit ? ' (×2 кубики!)' : '';
-              log.push(`💥 Шаг 4 — Урон${critDmgText}: [${dmgResult.rolls.join(', ')}]${totalDamageBonus > 0 ? ` + ${totalDamageBonus}` : ''} = ${dmgResult.total} ${damageTypeName}`);
-              
-              await diceService.announceDamage(
-                unit.shortName ?? unit.name,
-                dmgResult.total,
-                damageTypeName,
-                dmgResult.rolls,
-                totalDamageBonus,
-                isCritHit
-              );
-              
-              break;
-            }
-            
-            // === ОБЫЧНЫЙ TARGETED РЕЖИМ ===
-            const { count: projectileCount, rolls: projectileRolls } = await parseProjectiles(selectedSpell.projectiles);
-            
-            if (projectileRolls) {
-              log.push(`🎲 Количество снарядов: [${projectileRolls.join(', ')}] = ${projectileCount}`);
-              await diceService.announceProjectileCount(unit.shortName ?? unit.name, projectileCount, projectileRolls);
-            }
-            
-            const targets = projectileRolls ? 1 : targetCount;
-            const projectileStr = safeProjectilesToString(selectedSpell.projectiles);
-            const projectilesPerTarget = projectileRolls ? projectileCount : (parseInt(projectileStr, 10) || 1);
-            
-            // Крит на каст = удвоение урона снарядов
-            const isCastCrit = castResult?.isCrit ?? false;
-            
-            for (let t = 0; t < targets; t++) {
-              if (targets > 1) {
-                log.push(`--- Цель ${t + 1} ---`);
-              }
-              
-              for (let p = 0; p < projectilesPerTarget; p++) {
-                const projectileHitFormula = totalCastBonus >= 0 ? `d20+${totalCastBonus}` : `d20${totalCastBonus}`;
-                const projectileHit = await diceService.roll(projectileHitFormula, `Снаряд ${p + 1}`, unit.shortName ?? unit.name);
-                
-                const projectileSuccess = isHit(projectileHit);
-                // Крит на снаряде ИЛИ крит на касте = удвоение урона
-                const projectileCrit = projectileHit.isCrit || isCastCrit;
-                
-                if (projectileSuccess && selectedSpell.damageFormula && selectedSpell.damageType) {
-                  const dmgFormula2 = totalDamageBonus > 0
-                    ? `${selectedSpell.damageFormula}+${totalDamageBonus}`
-                    : selectedSpell.damageFormula;
-                  
-                  const dmgResult2 = await diceService.rollDamage(dmgFormula2, `Урон снаряда ${p + 1}`, unit.shortName ?? unit.name, projectileCrit);
-                  newDamageResults.push(dmgResult2);
-                  
-                  const damageTypeName2 = DAMAGE_TYPE_NAMES[selectedSpell.damageType] ?? selectedSpell.damageType;
-                  const critText = projectileCrit ? ' ×2' : '';
-                  log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20 ?? '?'}] = ${projectileHit.total} → 💥 ${dmgResult2.total}${critText} ${damageTypeName2}`);
-                  
-                  await diceService.announceDamage(
-                    unit.shortName ?? unit.name,
-                    dmgResult2.total,
-                    damageTypeName2,
-                    dmgResult2.rolls,
-                    totalDamageBonus,
-                    projectileCrit
-                  );
-                } else if (projectileSuccess) {
-                  log.push(`🎯 Снаряд ${p + 1}: [${projectileHit.rawD20 ?? '?'}] = ${projectileHit.total} → Попадание!`);
-                } else {
-                  log.push(`💨 Снаряд ${p + 1}: [${projectileHit.rawD20 ?? '?'}] = ${projectileHit.total} → Промах`);
-                }
-              }
-            }
-            break;
-          }
-        }
-      }
-      
-    } catch (err) {
-      log.push(`❌ Ошибка: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setCastLog(log);
-      setDamageResults(newDamageResults);
-      setIsCasting(false);
+
+      await this.doInit();
+    } catch (error) {
+      console.error("[TokenBarService] Initialize failed:", error);
     }
-  };
-  
-  const projectileHasFormula = selectedSpell ? hasProjectileDice(selectedSpell.projectiles) : false;
-  
-  return (
-    <div className="space-y-3 p-3 overflow-y-auto h-full">
+  }
+
+  private async doInit(): Promise<void> {
+    try {
+      // Удаляем старые бары (если остались)
+      await this.cleanupOldBars();
       
-      {/* ═══ МОДИФИКАТОР БРОСКА ═══ */}
-      <Section title="Модификатор следующего броска" icon="🎲">
-        <RollModifierSelector
-          value={nextRollModifier}
-          onChange={setNextRollModifier}
-        />
-      </Section>
+      // Слушаем изменения на сцене для синхронизации видимости
+      this.unsubscribe = OBR.scene.items.onChange(this.onItemsChange.bind(this));
       
-      <Section title="Сотворение заклинания" icon="✨">
-        <div className="space-y-3">
-          <Select
-            label="Заклинание"
-            value={selectedSpell?.id ?? ''}
-            onChange={(e) => setSelectedSpellId(e.target.value)}
-            options={spells.map(s => ({
-              value: s.id,
-              label: `${s.name} (${s.manaCost ?? 0} ${(s.costType ?? 'mana') === 'health' ? 'HP' : 'маны'})`
-            }))}
-          />
-          
-          {selectedSpell && (
-            <div className="p-2 bg-obsidian rounded border border-edge-bone text-sm">
-              <div className="flex flex-wrap gap-2 mb-1">
-                <span className="text-mana-bright">
-                  {(selectedSpell.costType ?? 'mana') === 'health' ? '🩸' : '💠'} {currentManaCost}
-                  {affinityBonuses.manaCostReduction > 0 && (
-                    <span className="text-emerald-400 text-xs ml-1">(−{affinityBonuses.manaCostReduction})</span>
-                  )}
-                </span>
-                <span className="text-faded">|</span>
-                <span className="text-gold">{SPELL_TYPES[selectedSpell.type ?? 'targeted'] ?? selectedSpell.type ?? 'targeted'}</span>
-              </div>
-              <div className="text-xs text-faded">
-                Элементы: {(selectedSpell.elements ?? []).map(e => ELEMENT_NAMES[e] ?? e).join(', ') || 'нет'}
-              </div>
-              {selectedSpell.damageFormula && (
-                <div className="text-xs text-ancient">
-                  Урон: {selectedSpell.damageFormula} {selectedSpell.damageType && (DAMAGE_TYPE_NAMES[selectedSpell.damageType] ?? selectedSpell.damageType)}
-                  {affinityBonuses.damageBonus > 0 && (
-                    <span className="text-emerald-400 ml-1">(+{affinityBonuses.damageBonus} от предрасп.)</span>
-                  )}
-                </div>
-              )}
-              {affinityBonuses.castHitBonus > 0 && (
-                <div className="text-xs text-emerald-400">
-                  +{affinityBonuses.castHitBonus} к касту (предрасположенность)
-                </div>
-              )}
-              {selectedSpell.description && (
-                <div className="text-xs text-bone mt-1 italic">
-                  {selectedSpell.description}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {(selectedSpell?.type ?? 'targeted') === 'targeted' && !projectileHasFormula && (
-            <NumberStepper
-              label="Количество целей"
-              value={targetCount}
-              onChange={setTargetCount}
-              min={1}
-              max={10}
-            />
-          )}
-          
-          {unit.hasDoubleShot && (
-            <Checkbox
-              checked={useDoubleShot}
-              onChange={setUseDoubleShot}
-              label={`⚡ ДаблШот (×2 мана, d20 >= ${unit.doubleShotThreshold ?? 18} = 2 заклинания)`}
-            />
-          )}
-          
-          {useDoubleShot && currentMana < currentManaCost && (
-            <div className="text-blood-bright text-xs">
-              ⚠️ Нужно {currentManaCost} маны для ДаблШот!
-            </div>
-          )}
-          
-          <Button
-            variant="mana"
-            onClick={handleCast}
-            loading={isCasting}
-            disabled={!selectedSpell || !canCast}
-            className="w-full"
-          >
-            ✨ СОТВОРИТЬ {nextRollModifier !== 'normal' && (nextRollModifier === 'advantage' ? '🎯' : '💨')}
-          </Button>
-          
-          {!canCast && selectedSpell && (
-            <div className="text-blood-bright text-xs text-center">
-              Мало маны! Нужно {currentManaCost}, есть {currentMana}
-            </div>
-          )}
-          
-          {castLog.length > 0 && (
-            <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-64 overflow-y-auto">
-              {castLog.map((line, idx) => (
-                <div key={idx} className="text-sm font-garamond">{line}</div>
-              ))}
-            </div>
-          )}
-          
-          {damageResults.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs text-faded uppercase">Урон:</div>
-              <DiceResultDisplay results={damageResults} />
-            </div>
-          )}
-        </div>
-      </Section>
+      this.isInitialized = true;
+      console.log("[TokenBarService] Initialized successfully");
+    } catch (error) {
+      console.error("[TokenBarService] doInit failed:", error);
+    }
+  }
+
+  // ==========================================================================
+  // СОЗДАНИЕ БАРОВ
+  // ==========================================================================
+
+  async createBars(
+    tokenId: string,
+    hp: number,
+    maxHp: number,
+    mana: number,
+    maxMana: number,
+    useManaAsHp: boolean = false
+  ): Promise<void> {
+    try {
+      const ready = await OBR.scene.isReady();
+      if (!ready) {
+        console.warn("[TokenBarService] Scene not ready");
+        return;
+      }
+
+      // Удаляем старые бары для этого токена
+      await this.removeBars(tokenId);
+
+      // Получаем информацию о токене
+      const tokenInfo = await this.getTokenInfo(tokenId);
+      if (!tokenInfo) {
+        console.warn(`[TokenBarService] Token not found: ${tokenId}`);
+        return;
+      }
+
+      // Вычисляем размеры
+      const barWidth = this.calculateBarWidth(tokenInfo.width);
       
-      {/* ═══ ПРЕДРАСПОЛОЖЕННОСТИ ═══ */}
-      {affinities.length > 0 && (
-        <Section title="Активные предрасположенности" icon="🔮" collapsible defaultOpen={false}>
-          <div className="space-y-1 text-sm">
-            {affinities.map(aff => (
-              <div key={aff.id} className="flex justify-between items-center">
-                <span className="text-ancient">
-                  {ELEMENT_NAMES[aff.element] ?? aff.element}
-                </span>
-                <span className="text-emerald-400">
-                  {aff.bonusType === 'castHit' && `+${aff.value} каст/попадание`}
-                  {aff.bonusType === 'manaCost' && `−${aff.value} мана`}
-                  {aff.bonusType === 'damage' && `+${aff.value} урон`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+      // Проценты заполнения
+      const hpPercent = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+      const manaPercent = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+
+      // Позиции (относительно ЦЕНТРА токена, т.к. attachedTo)
+      // Бары должны быть ПОД токеном
+      const halfTokenHeight = tokenInfo.height / 2;
+      const barX = -barWidth / 2; // центрируем по X
       
-      {/* ═══ МАГИЧЕСКИЕ БОНУСЫ ═══ */}
-      <Section title="Магические бонусы" icon="📚" collapsible defaultOpen={false}>
-        {Object.keys(unit.magicBonuses ?? {}).length === 0 ? (
-          <p className="text-faded text-sm">Нет магических бонусов</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {Object.entries(unit.magicBonuses ?? {}).map(([element, bonus]) => (
-              <div key={element} className="flex justify-between">
-                <span className="text-ancient capitalize">{ELEMENT_NAMES[element] ?? element}</span>
-                <span className="text-gold">+{bonus}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-    </div>
-  );
+      // Если useManaAsHp - показываем только ману как HP
+      const showHpBar = !useManaAsHp;
+      const showManaBar = true;
+
+      // Y-позиции
+      let hpBarY = halfTokenHeight + CONFIG.BAR_OFFSET_FROM_TOKEN;
+      let manaBarY = hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
+      
+      // Если HP не показываем - мана занимает его место
+      if (!showHpBar) {
+        manaBarY = hpBarY;
+      }
+
+      // Генерируем ID
+      const ts = Date.now();
+      const ids: BarIds = {
+        hpBg: `${BAR_PREFIX}/hp-bg/${tokenId}/${ts}`,
+        hpFill: `${BAR_PREFIX}/hp-fill/${tokenId}/${ts}`,
+        manaBg: `${BAR_PREFIX}/mana-bg/${tokenId}/${ts}`,
+        manaFill: `${BAR_PREFIX}/mana-fill/${tokenId}/${ts}`,
+      };
+
+      const shapes: Shape[] = [];
+
+      // === HP BAR ===
+      if (showHpBar) {
+        // Background
+        shapes.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(barWidth)
+            .height(CONFIG.BAR_HEIGHT)
+            .position({ x: barX, y: hpBarY })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(tokenInfo.visible)
+            .fillColor(CONFIG.HP_BG_COLOR)
+            .strokeColor(CONFIG.HP_BG_STROKE)
+            .strokeWidth(1)
+            .zIndex(CONFIG.Z_BG)
+            .id(ids.hpBg)
+            .metadata({ [METADATA_KEY]: { type: "hp-bg", tokenId } })
+            .build()
+        );
+
+        // Fill
+        const hpFillWidth = Math.max(0, (barWidth - 2) * hpPercent);
+        if (hpFillWidth > 0) {
+          shapes.push(
+            buildShape()
+              .shapeType("RECTANGLE")
+              .width(hpFillWidth)
+              .height(CONFIG.BAR_HEIGHT - 2)
+              .position({ x: barX + 1, y: hpBarY + 1 })
+              .attachedTo(tokenId)
+              .layer("ATTACHMENT")
+              .locked(true)
+              .disableHit(true)
+              .visible(tokenInfo.visible)
+              .fillColor(this.getHpColor(hpPercent))
+              .strokeWidth(0)
+              .zIndex(CONFIG.Z_FILL)
+              .id(ids.hpFill)
+              .metadata({ [METADATA_KEY]: { type: "hp-fill", tokenId } })
+              .build()
+          );
+        }
+      }
+
+      // === MANA BAR ===
+      if (showManaBar) {
+        // Background
+        shapes.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(barWidth)
+            .height(CONFIG.BAR_HEIGHT)
+            .position({ x: barX, y: manaBarY })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(tokenInfo.visible)
+            .fillColor(useManaAsHp ? CONFIG.HP_BG_COLOR : CONFIG.MANA_BG_COLOR)
+            .strokeColor(useManaAsHp ? CONFIG.HP_BG_STROKE : CONFIG.MANA_BG_STROKE)
+            .strokeWidth(1)
+            .zIndex(CONFIG.Z_BG)
+            .id(ids.manaBg)
+            .metadata({ [METADATA_KEY]: { type: "mana-bg", tokenId } })
+            .build()
+        );
+
+        // Fill
+        const manaFillWidth = Math.max(0, (barWidth - 2) * manaPercent);
+        if (manaFillWidth > 0) {
+          // Если useManaAsHp - используем цвета HP для маны
+          const fillColor = useManaAsHp 
+            ? this.getHpColor(manaPercent)
+            : (manaPercent < 0.25 ? CONFIG.MANA_FILL_LOW : CONFIG.MANA_FILL_COLOR);
+          
+          shapes.push(
+            buildShape()
+              .shapeType("RECTANGLE")
+              .width(manaFillWidth)
+              .height(CONFIG.BAR_HEIGHT - 2)
+              .position({ x: barX + 1, y: manaBarY + 1 })
+              .attachedTo(tokenId)
+              .layer("ATTACHMENT")
+              .locked(true)
+              .disableHit(true)
+              .visible(tokenInfo.visible)
+              .fillColor(fillColor)
+              .strokeWidth(0)
+              .zIndex(CONFIG.Z_FILL)
+              .id(ids.manaFill)
+              .metadata({ [METADATA_KEY]: { type: "mana-fill", tokenId } })
+              .build()
+          );
+        }
+      }
+
+      // Добавляем все элементы
+      if (shapes.length > 0) {
+        await OBR.scene.items.addItems(shapes);
+        this.bars.set(tokenId, ids);
+        console.log(`[TokenBarService] Created bars for token ${tokenId}`);
+      }
+    } catch (error) {
+      console.error(`[TokenBarService] createBars failed:`, error);
+    }
+  }
+
+  // ==========================================================================
+  // ОБНОВЛЕНИЕ БАРОВ
+  // ==========================================================================
+
+  async updateBars(
+    tokenId: string,
+    hp: number,
+    maxHp: number,
+    mana: number,
+    maxMana: number,
+    useManaAsHp: boolean = false
+  ): Promise<void> {
+    try {
+      const ready = await OBR.scene.isReady();
+      if (!ready) return;
+
+      const ids = this.bars.get(tokenId);
+      
+      // Если баров нет - создаём
+      if (!ids) {
+        await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+        return;
+      }
+
+      // Получаем токен
+      const tokenInfo = await this.getTokenInfo(tokenId);
+      if (!tokenInfo) {
+        await this.removeBars(tokenId);
+        return;
+      }
+
+      const barWidth = this.calculateBarWidth(tokenInfo.width);
+      const hpPercent = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+      const manaPercent = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+
+      const halfTokenHeight = tokenInfo.height / 2;
+      const barX = -barWidth / 2;
+      
+      const showHpBar = !useManaAsHp;
+      let hpBarY = halfTokenHeight + CONFIG.BAR_OFFSET_FROM_TOKEN;
+      let manaBarY = hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
+      
+      if (!showHpBar) {
+        manaBarY = hpBarY;
+      }
+
+      const hpFillWidth = Math.max(0, (barWidth - 2) * hpPercent);
+      const manaFillWidth = Math.max(0, (barWidth - 2) * manaPercent);
+
+      // Собираем все ID
+      const allIds = [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill];
+      
+      // Получаем существующие элементы
+      const items = await OBR.scene.items.getItems(allIds);
+      const existingIds = new Set(items.map(i => i.id));
+
+      // Обновляем существующие
+      await OBR.scene.items.updateItems(
+        items.filter(i => isShape(i)).map(i => i.id),
+        (updateItems) => {
+          for (const item of updateItems) {
+            if (!isShape(item)) continue;
+
+            if (item.id === ids.hpBg) {
+              item.width = barWidth;
+              item.position = { x: barX, y: hpBarY };
+              item.visible = tokenInfo.visible && showHpBar;
+            } 
+            else if (item.id === ids.hpFill) {
+              item.width = hpFillWidth;
+              item.position = { x: barX + 1, y: hpBarY + 1 };
+              item.style.fillColor = this.getHpColor(hpPercent);
+              item.visible = tokenInfo.visible && showHpBar && hpFillWidth > 0;
+            }
+            else if (item.id === ids.manaBg) {
+              item.width = barWidth;
+              item.position = { x: barX, y: manaBarY };
+              item.visible = tokenInfo.visible;
+              item.style.fillColor = useManaAsHp ? CONFIG.HP_BG_COLOR : CONFIG.MANA_BG_COLOR;
+              item.style.strokeColor = useManaAsHp ? CONFIG.HP_BG_STROKE : CONFIG.MANA_BG_STROKE;
+            }
+            else if (item.id === ids.manaFill) {
+              item.width = manaFillWidth;
+              item.position = { x: barX + 1, y: manaBarY + 1 };
+              const fillColor = useManaAsHp 
+                ? this.getHpColor(manaPercent)
+                : (manaPercent < 0.25 ? CONFIG.MANA_FILL_LOW : CONFIG.MANA_FILL_COLOR);
+              item.style.fillColor = fillColor;
+              item.visible = tokenInfo.visible && manaFillWidth > 0;
+            }
+          }
+        }
+      );
+
+      // Создаём недостающие fill элементы
+      const shapesToAdd: Shape[] = [];
+
+      if (!existingIds.has(ids.hpFill) && hpFillWidth > 0 && showHpBar) {
+        shapesToAdd.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(hpFillWidth)
+            .height(CONFIG.BAR_HEIGHT - 2)
+            .position({ x: barX + 1, y: hpBarY + 1 })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(tokenInfo.visible)
+            .fillColor(this.getHpColor(hpPercent))
+            .strokeWidth(0)
+            .zIndex(CONFIG.Z_FILL)
+            .id(ids.hpFill)
+            .metadata({ [METADATA_KEY]: { type: "hp-fill", tokenId } })
+            .build()
+        );
+      }
+
+      if (!existingIds.has(ids.manaFill) && manaFillWidth > 0) {
+        const fillColor = useManaAsHp 
+          ? this.getHpColor(manaPercent)
+          : (manaPercent < 0.25 ? CONFIG.MANA_FILL_LOW : CONFIG.MANA_FILL_COLOR);
+        
+        shapesToAdd.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(manaFillWidth)
+            .height(CONFIG.BAR_HEIGHT - 2)
+            .position({ x: barX + 1, y: manaBarY + 1 })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(tokenInfo.visible)
+            .fillColor(fillColor)
+            .strokeWidth(0)
+            .zIndex(CONFIG.Z_FILL)
+            .id(ids.manaFill)
+            .metadata({ [METADATA_KEY]: { type: "mana-fill", tokenId } })
+            .build()
+        );
+      }
+
+      if (shapesToAdd.length > 0) {
+        await OBR.scene.items.addItems(shapesToAdd);
+      }
+
+    } catch (error) {
+      console.error(`[TokenBarService] updateBars failed:`, error);
+    }
+  }
+
+  // ==========================================================================
+  // УДАЛЕНИЕ БАРОВ
+  // ==========================================================================
+
+  async removeBars(tokenId: string): Promise<void> {
+    try {
+      const ready = await OBR.scene.isReady();
+      if (!ready) return;
+
+      const ids = this.bars.get(tokenId);
+      if (!ids) return;
+
+      const allIds = [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill];
+      
+      // Проверяем какие существуют
+      const items = await OBR.scene.items.getItems(allIds);
+      const existingIds = items.map(i => i.id);
+
+      if (existingIds.length > 0) {
+        await OBR.scene.items.deleteItems(existingIds);
+      }
+
+      this.bars.delete(tokenId);
+      console.log(`[TokenBarService] Removed bars for ${tokenId}`);
+    } catch (error) {
+      console.error(`[TokenBarService] removeBars failed:`, error);
+    }
+  }
+
+  async removeAllBars(): Promise<void> {
+    try {
+      const ready = await OBR.scene.isReady();
+      if (!ready) return;
+
+      // Удаляем из карты
+      for (const tokenId of this.bars.keys()) {
+        await this.removeBars(tokenId);
+      }
+
+      // Чистим осиротевшие
+      await this.cleanupOldBars();
+      
+      console.log("[TokenBarService] Removed all bars");
+    } catch (error) {
+      console.error("[TokenBarService] removeAllBars failed:", error);
+    }
+  }
+
+  // ==========================================================================
+  // СИНХРОНИЗАЦИЯ С ЮНИТАМИ
+  // ==========================================================================
+
+  async syncAllBars(units: Unit[]): Promise<void> {
+    try {
+      const ready = await OBR.scene.isReady();
+      if (!ready) return;
+
+      const validTokenIds = new Set<string>();
+
+      for (const unit of units) {
+        if (unit.owlbearTokenId) {
+          validTokenIds.add(unit.owlbearTokenId);
+          
+          await this.createBars(
+            unit.owlbearTokenId,
+            unit.health?.current ?? 0,
+            unit.health?.max ?? 100,
+            unit.mana?.current ?? 0,
+            unit.mana?.max ?? 50,
+            unit.useManaAsHp ?? false
+          );
+        }
+      }
+
+      // Удаляем бары для токенов которых больше нет
+      for (const tokenId of this.bars.keys()) {
+        if (!validTokenIds.has(tokenId)) {
+          await this.removeBars(tokenId);
+        }
+      }
+
+      console.log(`[TokenBarService] Synced ${validTokenIds.size} bars`);
+    } catch (error) {
+      console.error("[TokenBarService] syncAllBars failed:", error);
+    }
+  }
+
+  // ==========================================================================
+  // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+  // ==========================================================================
+
+  private async getTokenInfo(tokenId: string): Promise<TokenInfo | null> {
+    try {
+      const items = await OBR.scene.items.getItems([tokenId]);
+      if (items.length === 0) return null;
+
+      const token = items[0];
+      if (!isImage(token)) return null;
+
+      return {
+        width: token.image.width * token.scale.x,
+        height: token.image.height * token.scale.y,
+        visible: token.visible,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private calculateBarWidth(tokenWidth: number): number {
+    return Math.min(
+      CONFIG.MAX_BAR_WIDTH,
+      Math.max(CONFIG.MIN_BAR_WIDTH, tokenWidth * CONFIG.BAR_WIDTH_RATIO)
+    );
+  }
+
+  private getHpColor(percent: number): string {
+    if (percent < 0.1) return CONFIG.HP_FILL_CRITICAL;
+    if (percent < 0.25) return CONFIG.HP_FILL_LOW;
+    if (percent < 0.5) return CONFIG.HP_FILL_MEDIUM;
+    return CONFIG.HP_FILL_HIGH;
+  }
+
+  private async cleanupOldBars(): Promise<void> {
+    try {
+      const items = await OBR.scene.items.getItems();
+      const ourBars = items.filter(item => 
+        item.id.startsWith(BAR_PREFIX) || 
+        (item.metadata?.[METADATA_KEY] as any)?.type
+      );
+
+      if (ourBars.length > 0) {
+        await OBR.scene.items.deleteItems(ourBars.map(i => i.id));
+        console.log(`[TokenBarService] Cleaned up ${ourBars.length} old bars`);
+      }
+    } catch (error) {
+      console.error("[TokenBarService] cleanupOldBars failed:", error);
+    }
+  }
+
+  private async onItemsChange(items: Item[]): Promise<void> {
+    // Синхронизируем видимость баров с видимостью токенов
+    try {
+      for (const [tokenId, ids] of this.bars.entries()) {
+        const token = items.find(i => i.id === tokenId);
+        if (!token) continue;
+
+        const barIds = [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill];
+        const barItems = items.filter(i => barIds.includes(i.id));
+
+        for (const bar of barItems) {
+          if (bar.visible !== token.visible) {
+            await OBR.scene.items.updateItems([bar.id], (updateItems) => {
+              for (const item of updateItems) {
+                item.visible = token.visible;
+              }
+            });
+          }
+        }
+      }
+    } catch {
+      // Молча игнорируем
+    }
+  }
+
+  // ==========================================================================
+  // ОЧИСТКА
+  // ==========================================================================
+
+  async destroy(): Promise<void> {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
+    
+    await this.removeAllBars();
+    this.isInitialized = false;
+    
+    console.log("[TokenBarService] Destroyed");
+  }
 }
+
+// ============================================================================
+// ЭКСПОРТ SINGLETON
+// ============================================================================
+
+export const tokenBarService = new TokenBarService();
