@@ -37,10 +37,11 @@ OBR.onReady(async () => {
     // Синхронизируем бары для существующих юнитов
     if (settings.showTokenBars) {
       const units = useGameStore.getState().units;
+      console.log(`[Main] Syncing bars for ${units.length} units`);
       await tokenBarService.syncAllBars(units);
     }
     
-    console.log("[Main] Initialization complete!");
+    console.log("[Main] ✓ Initialization complete!");
   } catch (error) {
     console.error("[Main] Initialization error:", error);
   }
@@ -56,5 +57,3 @@ root.render(
     <App />
   </StrictMode>
 );
-
-// УБРАЛИ тестовый setTimeout!
