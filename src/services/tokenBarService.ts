@@ -22,7 +22,7 @@ const CONFIG = {
   // ═══════════════════════════════════════════════════════════════════════
   BAR_HEIGHT: 8,
   BAR_GAP: 3,
-  BAR_OFFSET_FROM_TOKEN: -5,  // <-- ОТРИЦАТЕЛЬНОЕ = ближе к токену / на токене
+  BAR_OFFSET_FROM_TOKEN: -10,  // <-- ОТРИЦАТЕЛЬНОЕ = ближе к токену / на токене
   MIN_BAR_WIDTH: 50,
   MAX_BAR_WIDTH: 140,
   BAR_WIDTH_RATIO: 0.9,
