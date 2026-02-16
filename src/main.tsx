@@ -39,12 +39,14 @@ OBR.onReady(async () => {
       const units = useGameStore.getState().units;
       await tokenBarService.syncAllBars(units);
     }
+    
+    console.log("[Main] Initialization complete!");
   } catch (error) {
     console.error("[Main] Initialization error:", error);
   }
 });
 
-// Монтируем React (React 18 стиль)
+// Монтируем React
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found");
 
@@ -54,12 +56,5 @@ root.render(
     <App />
   </StrictMode>
 );
-setTimeout(async () => {
-  try {
-    const testTokenId = "8fccc7ac-7b1d-4f97-921f-6a4a9a057ee1"; // НОВЫЙ ID!
-    await tokenBarService.createBars(testTokenId, 50, 100, 30, 50, false);
-    console.log("TEST BARS CREATED!");
-  } catch (e) {
-    console.error("TEST FAILED:", e);
-  }
-}, 3000);
+
+// УБРАЛИ тестовый setTimeout!
