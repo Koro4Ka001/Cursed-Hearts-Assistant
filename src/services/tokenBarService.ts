@@ -5,7 +5,8 @@ import OBR, {
   Item, 
   isImage, 
   isShape,
-  Shape
+  Shape,
+  Image
 } from "@owlbear-rodeo/sdk";
 import type { Unit } from "../types";
 
@@ -51,7 +52,9 @@ interface BarIds {
   manaFill: string;
 }
 
-interface TokenInfo {
+interface TokenData {
+  id: string;
+  position: { x: number; y: number };
   width: number;
   height: number;
   visible: boolean;
@@ -99,18 +102,84 @@ class TokenBarService {
       await this.cleanupOldBars();
       this.unsubscribe = OBR.scene.items.onChange(this.onItemsChange.bind(this));
       this.isInitialized = true;
-      console.log("[TokenBarService] ✓ Initialized successfully");
+      console.log("[TokenBarService] ✓ Initialized");
     } catch (error) {
       console.error("[TokenBarService] doInit failed:", error);
     }
   }
 
   // ==========================================================================
-  // ВАЛИДАЦИЯ
+  // ПОЛУЧЕНИЕ ДАННЫХ ТОКЕНА
   // ==========================================================================
 
-  private isValidTokenId(tokenId: unknown): tokenId is string {
-    return typeof tokenId === "string" && tokenId.length > 0;
+  private async getTokenData(tokenId: string): Promise<TokenData | null> {
+    try {
+      const items = await OBR.scene.items.getItems([tokenId]);
+      if (items.length === 0) {
+        console.warn(`[TokenBarService] Token not found: ${tokenId}`);
+        return null;
+      }
+
+      const token = items[0];
+      if (!isImage(token)) {
+        console.warn(`[TokenBarService] Item is not an image: ${tokenId}`);
+        return null;
+      }
+
+      const data: TokenData = {
+        id: token.id,
+        position: token.position,
+        width: token.image.width * token.scale.x,
+        height: token.image.height * token.scale.y,
+        visible: token.visible,
+      };
+
+      console.log(`[TokenBarService] Token data:`, data);
+      return data;
+    } catch (error) {
+      console.error(`[TokenBarService] getTokenData failed:`, error);
+      return null;
+    }
+  }
+
+  // ==========================================================================
+  // ВЫЧИСЛЕНИЕ ПОЗИЦИЙ БАРОВ
+  // ==========================================================================
+
+  private calculateBarPositions(
+    token: TokenData,
+    barWidth: number,
+    showHpBar: boolean
+  ): {
+    hpBgPos: { x: number; y: number };
+    hpFillPos: { x: number; y: number };
+    manaBgPos: { x: number; y: number };
+    manaFillPos: { x: number; y: number };
+  } {
+    // Центр токена в МИРОВЫХ координатах
+    const centerX = token.position.x;
+    const centerY = token.position.y;
+    
+    // Нижний край токена + отступ
+    const bottomY = centerY + token.height / 2 + CONFIG.BAR_OFFSET_FROM_TOKEN;
+    
+    // Левый край бара (центрируем по X)
+    const leftX = centerX - barWidth / 2;
+    
+    // HP бар
+    const hpBarY = bottomY;
+    
+    // Mana бар (под HP или на месте HP если HP скрыт)
+    const manaBarY = showHpBar 
+      ? bottomY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP 
+      : bottomY;
+
+    return {
+      hpBgPos: { x: leftX, y: hpBarY },
+      hpFillPos: { x: leftX + 1, y: hpBarY + 1 },
+      manaBgPos: { x: leftX, y: manaBarY },
+      manaFillPos: { x: leftX + 1, y: manaBarY + 1 },
+    };
   }
 
   // ==========================================================================
@@ -125,51 +194,44 @@ class TokenBarService {
     maxMana: number,
     useManaAsHp: boolean = false
   ): Promise<void> {
-    // === ВАЛИДАЦИЯ ===
-    if (!this.isValidTokenId(tokenId)) {
-      console.warn("[TokenBarService] createBars: Invalid tokenId:", tokenId);
+    // Валидация
+    if (!tokenId || typeof tokenId !== 'string') {
+      console.warn("[TokenBarService] createBars: Invalid tokenId");
       return;
     }
 
     try {
       const ready = await OBR.scene.isReady();
       if (!ready) {
-        console.warn("[TokenBarService] createBars: Scene not ready");
+        console.warn("[TokenBarService] Scene not ready");
         return;
       }
 
       // Удаляем старые бары
       await this.removeBars(tokenId);
 
-      // Получаем информацию о токене
-      const tokenInfo = await this.getTokenInfo(tokenId);
-      if (!tokenInfo) {
-        console.warn(`[TokenBarService] createBars: Token not found on scene: ${tokenId}`);
-        return;
-      }
-
-      console.log(`[TokenBarService] Creating bars for token ${tokenId.substring(0, 8)}...`);
-      console.log(`[TokenBarService] Token size: ${tokenInfo.width}x${tokenInfo.height}, visible: ${tokenInfo.visible}`);
+      // Получаем данные токена
+      const token = await this.getTokenData(tokenId);
+      if (!token) return;
 
       // Вычисляем размеры
-      const barWidth = this.calculateBarWidth(tokenInfo.width);
-      
+      const barWidth = Math.min(
+        CONFIG.MAX_BAR_WIDTH,
+        Math.max(CONFIG.MIN_BAR_WIDTH, token.width * CONFIG.BAR_WIDTH_RATIO)
+      );
+
+      // Проценты
       const hpPercent = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPercent = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
 
-      // Позиции относительно ЦЕНТРА токена
-      const halfTokenHeight = tokenInfo.height / 2;
-      const barX = -barWidth / 2;
-      
       const showHpBar = !useManaAsHp;
-      let hpBarY = halfTokenHeight + CONFIG.BAR_OFFSET_FROM_TOKEN;
-      let manaBarY = hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
-      
-      if (!showHpBar) {
-        manaBarY = hpBarY;
-      }
 
-      // Генерируем ID
+      // Вычисляем позиции (МИРОВЫЕ координаты!)
+      const positions = this.calculateBarPositions(token, barWidth, showHpBar);
+
+      console.log(`[TokenBarService] Creating bars at positions:`, positions);
+
+      // ID баров
       const ts = Date.now();
       const ids: BarIds = {
         hpBg: `${BAR_PREFIX}/hp-bg/${tokenId}/${ts}`,
@@ -182,17 +244,18 @@ class TokenBarService {
 
       // === HP BAR ===
       if (showHpBar) {
+        // Background
         shapes.push(
           buildShape()
             .shapeType("RECTANGLE")
             .width(barWidth)
             .height(CONFIG.BAR_HEIGHT)
-            .position({ x: barX, y: hpBarY })
+            .position(positions.hpBgPos)
             .attachedTo(tokenId)
             .layer("ATTACHMENT")
             .locked(true)
             .disableHit(true)
-            .visible(tokenInfo.visible)
+            .visible(token.visible)
             .fillColor(CONFIG.HP_BG_COLOR)
             .strokeColor(CONFIG.HP_BG_STROKE)
             .strokeWidth(1)
@@ -202,6 +265,7 @@ class TokenBarService {
             .build()
         );
 
+        // Fill
         const hpFillWidth = Math.max(0, (barWidth - 2) * hpPercent);
         if (hpFillWidth > 0) {
           shapes.push(
@@ -209,12 +273,12 @@ class TokenBarService {
               .shapeType("RECTANGLE")
               .width(hpFillWidth)
               .height(CONFIG.BAR_HEIGHT - 2)
-              .position({ x: barX + 1, y: hpBarY + 1 })
+              .position(positions.hpFillPos)
               .attachedTo(tokenId)
               .layer("ATTACHMENT")
               .locked(true)
               .disableHit(true)
-              .visible(tokenInfo.visible)
+              .visible(token.visible)
               .fillColor(this.getHpColor(hpPercent))
               .strokeWidth(0)
               .zIndex(CONFIG.Z_FILL)
@@ -226,17 +290,18 @@ class TokenBarService {
       }
 
       // === MANA BAR ===
+      // Background
       shapes.push(
         buildShape()
           .shapeType("RECTANGLE")
           .width(barWidth)
           .height(CONFIG.BAR_HEIGHT)
-          .position({ x: barX, y: manaBarY })
+          .position(positions.manaBgPos)
           .attachedTo(tokenId)
           .layer("ATTACHMENT")
           .locked(true)
           .disableHit(true)
-          .visible(tokenInfo.visible)
+          .visible(token.visible)
           .fillColor(useManaAsHp ? CONFIG.HP_BG_COLOR : CONFIG.MANA_BG_COLOR)
           .strokeColor(useManaAsHp ? CONFIG.HP_BG_STROKE : CONFIG.MANA_BG_STROKE)
           .strokeWidth(1)
@@ -246,6 +311,7 @@ class TokenBarService {
           .build()
       );
 
+      // Fill
       const manaFillWidth = Math.max(0, (barWidth - 2) * manaPercent);
       if (manaFillWidth > 0) {
         const fillColor = useManaAsHp 
@@ -257,12 +323,12 @@ class TokenBarService {
             .shapeType("RECTANGLE")
             .width(manaFillWidth)
             .height(CONFIG.BAR_HEIGHT - 2)
-            .position({ x: barX + 1, y: manaBarY + 1 })
+            .position(positions.manaFillPos)
             .attachedTo(tokenId)
             .layer("ATTACHMENT")
             .locked(true)
             .disableHit(true)
-            .visible(tokenInfo.visible)
+            .visible(token.visible)
             .fillColor(fillColor)
             .strokeWidth(0)
             .zIndex(CONFIG.Z_FILL)
@@ -272,14 +338,14 @@ class TokenBarService {
         );
       }
 
-      // Добавляем все элементы
+      // Добавляем
       if (shapes.length > 0) {
         await OBR.scene.items.addItems(shapes);
         this.bars.set(tokenId, ids);
-        console.log(`[TokenBarService] ✓ Created ${shapes.length} bar elements for token ${tokenId.substring(0, 8)}`);
+        console.log(`[TokenBarService] ✓ Created ${shapes.length} bars for token`);
       }
     } catch (error) {
-      console.error(`[TokenBarService] createBars failed for ${tokenId}:`, error);
+      console.error(`[TokenBarService] createBars failed:`, error);
     }
   }
 
@@ -295,10 +361,7 @@ class TokenBarService {
     maxMana: number,
     useManaAsHp: boolean = false
   ): Promise<void> {
-    if (!this.isValidTokenId(tokenId)) {
-      console.warn("[TokenBarService] updateBars: Invalid tokenId:", tokenId);
-      return;
-    }
+    if (!tokenId) return;
 
     try {
       const ready = await OBR.scene.isReady();
@@ -306,31 +369,29 @@ class TokenBarService {
 
       const ids = this.bars.get(tokenId);
       
+      // Если баров нет - создаём
       if (!ids) {
         await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
         return;
       }
 
-      const tokenInfo = await this.getTokenInfo(tokenId);
-      if (!tokenInfo) {
+      // Получаем токен
+      const token = await this.getTokenData(tokenId);
+      if (!token) {
         await this.removeBars(tokenId);
         return;
       }
 
-      const barWidth = this.calculateBarWidth(tokenInfo.width);
+      const barWidth = Math.min(
+        CONFIG.MAX_BAR_WIDTH,
+        Math.max(CONFIG.MIN_BAR_WIDTH, token.width * CONFIG.BAR_WIDTH_RATIO)
+      );
+
       const hpPercent = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPercent = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
-
-      const halfTokenHeight = tokenInfo.height / 2;
-      const barX = -barWidth / 2;
-      
       const showHpBar = !useManaAsHp;
-      let hpBarY = halfTokenHeight + CONFIG.BAR_OFFSET_FROM_TOKEN;
-      let manaBarY = hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
-      
-      if (!showHpBar) {
-        manaBarY = hpBarY;
-      }
+
+      const positions = this.calculateBarPositions(token, barWidth, showHpBar);
 
       const hpFillWidth = Math.max(0, (barWidth - 2) * hpPercent);
       const manaFillWidth = Math.max(0, (barWidth - 2) * manaPercent);
@@ -349,37 +410,37 @@ class TokenBarService {
 
               if (item.id === ids.hpBg) {
                 item.width = barWidth;
-                item.position = { x: barX, y: hpBarY };
-                item.visible = tokenInfo.visible && showHpBar;
+                item.position = positions.hpBgPos;
+                item.visible = token.visible && showHpBar;
               } 
               else if (item.id === ids.hpFill) {
                 item.width = hpFillWidth;
-                item.position = { x: barX + 1, y: hpBarY + 1 };
+                item.position = positions.hpFillPos;
                 item.style.fillColor = this.getHpColor(hpPercent);
-                item.visible = tokenInfo.visible && showHpBar && hpFillWidth > 0;
+                item.visible = token.visible && showHpBar && hpFillWidth > 0;
               }
               else if (item.id === ids.manaBg) {
                 item.width = barWidth;
-                item.position = { x: barX, y: manaBarY };
-                item.visible = tokenInfo.visible;
+                item.position = positions.manaBgPos;
+                item.visible = token.visible;
                 item.style.fillColor = useManaAsHp ? CONFIG.HP_BG_COLOR : CONFIG.MANA_BG_COLOR;
                 item.style.strokeColor = useManaAsHp ? CONFIG.HP_BG_STROKE : CONFIG.MANA_BG_STROKE;
               }
               else if (item.id === ids.manaFill) {
                 item.width = manaFillWidth;
-                item.position = { x: barX + 1, y: manaBarY + 1 };
+                item.position = positions.manaFillPos;
                 const fillColor = useManaAsHp 
                   ? this.getHpColor(manaPercent)
                   : (manaPercent < 0.25 ? CONFIG.MANA_FILL_LOW : CONFIG.MANA_FILL_COLOR);
                 item.style.fillColor = fillColor;
-                item.visible = tokenInfo.visible && manaFillWidth > 0;
+                item.visible = token.visible && manaFillWidth > 0;
               }
             }
           }
         );
       }
 
-      // Создаём недостающие fill элементы
+      // Создаём недостающие fill
       const shapesToAdd: Shape[] = [];
 
       if (!existingIds.has(ids.hpFill) && hpFillWidth > 0 && showHpBar) {
@@ -388,12 +449,12 @@ class TokenBarService {
             .shapeType("RECTANGLE")
             .width(hpFillWidth)
             .height(CONFIG.BAR_HEIGHT - 2)
-            .position({ x: barX + 1, y: hpBarY + 1 })
+            .position(positions.hpFillPos)
             .attachedTo(tokenId)
             .layer("ATTACHMENT")
             .locked(true)
             .disableHit(true)
-            .visible(tokenInfo.visible)
+            .visible(token.visible)
             .fillColor(this.getHpColor(hpPercent))
             .strokeWidth(0)
             .zIndex(CONFIG.Z_FILL)
@@ -413,12 +474,12 @@ class TokenBarService {
             .shapeType("RECTANGLE")
             .width(manaFillWidth)
             .height(CONFIG.BAR_HEIGHT - 2)
-            .position({ x: barX + 1, y: manaBarY + 1 })
+            .position(positions.manaFillPos)
             .attachedTo(tokenId)
             .layer("ATTACHMENT")
             .locked(true)
             .disableHit(true)
-            .visible(tokenInfo.visible)
+            .visible(token.visible)
             .fillColor(fillColor)
             .strokeWidth(0)
             .zIndex(CONFIG.Z_FILL)
@@ -431,18 +492,17 @@ class TokenBarService {
       if (shapesToAdd.length > 0) {
         await OBR.scene.items.addItems(shapesToAdd);
       }
-
     } catch (error) {
       console.error(`[TokenBarService] updateBars failed:`, error);
     }
   }
 
   // ==========================================================================
-  // УДАЛЕНИЕ БАРОВ
+  // УДАЛЕНИЕ
   // ==========================================================================
 
   async removeBars(tokenId: string): Promise<void> {
-    if (!this.isValidTokenId(tokenId)) return;
+    if (!tokenId) return;
 
     try {
       const ready = await OBR.scene.isReady();
@@ -489,96 +549,40 @@ class TokenBarService {
   async syncAllBars(units: Unit[]): Promise<void> {
     try {
       const ready = await OBR.scene.isReady();
-      if (!ready) {
-        console.warn("[TokenBarService] syncAllBars: Scene not ready");
-        return;
-      }
+      if (!ready) return;
 
       const validTokenIds = new Set<string>();
-      let createdCount = 0;
 
       for (const unit of units) {
-        // Проверяем что tokenId валидный
-        if (!this.isValidTokenId(unit.owlbearTokenId)) {
-          continue;
+        if (unit.owlbearTokenId) {
+          validTokenIds.add(unit.owlbearTokenId);
+          
+          await this.createBars(
+            unit.owlbearTokenId,
+            unit.health?.current ?? 0,
+            unit.health?.max ?? 100,
+            unit.mana?.current ?? 0,
+            unit.mana?.max ?? 50,
+            unit.useManaAsHp ?? false
+          );
         }
-
-        validTokenIds.add(unit.owlbearTokenId);
-        
-        await this.createBars(
-          unit.owlbearTokenId,
-          unit.health?.current ?? 0,
-          unit.health?.max ?? 100,
-          unit.mana?.current ?? 0,
-          unit.mana?.max ?? 50,
-          unit.useManaAsHp ?? false
-        );
-        createdCount++;
       }
 
-      // Удаляем бары для токенов которых больше нет
       for (const tokenId of this.bars.keys()) {
         if (!validTokenIds.has(tokenId)) {
           await this.removeBars(tokenId);
         }
       }
 
-      console.log(`[TokenBarService] Synced ${createdCount} bars (${units.length} units total)`);
+      console.log(`[TokenBarService] Synced ${validTokenIds.size} bars`);
     } catch (error) {
       console.error("[TokenBarService] syncAllBars failed:", error);
     }
   }
 
   // ==========================================================================
-  // DEBUG: Тест с выбранным токеном
+  // HELPERS
   // ==========================================================================
-
-  async testWithSelectedToken(): Promise<void> {
-    try {
-      const selection = await OBR.player.getSelection();
-      if (!selection || selection.length === 0) {
-        console.warn("[TokenBarService] TEST: No token selected! Select a token first.");
-        return;
-      }
-
-      const tokenId = selection[0];
-      console.log(`[TokenBarService] TEST: Creating bars for selected token: ${tokenId}`);
-      
-      await this.createBars(tokenId, 75, 100, 40, 50, false);
-      console.log("[TokenBarService] TEST: Done!");
-    } catch (error) {
-      console.error("[TokenBarService] TEST failed:", error);
-    }
-  }
-
-  // ==========================================================================
-  // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-  // ==========================================================================
-
-  private async getTokenInfo(tokenId: string): Promise<TokenInfo | null> {
-    try {
-      const items = await OBR.scene.items.getItems([tokenId]);
-      if (items.length === 0) return null;
-
-      const token = items[0];
-      if (!isImage(token)) return null;
-
-      return {
-        width: token.image.width * token.scale.x,
-        height: token.image.height * token.scale.y,
-        visible: token.visible,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  private calculateBarWidth(tokenWidth: number): number {
-    return Math.min(
-      CONFIG.MAX_BAR_WIDTH,
-      Math.max(CONFIG.MIN_BAR_WIDTH, tokenWidth * CONFIG.BAR_WIDTH_RATIO)
-    );
-  }
 
   private getHpColor(percent: number): string {
     if (percent < 0.1) return CONFIG.HP_FILL_CRITICAL;
@@ -624,7 +628,7 @@ class TokenBarService {
         }
       }
     } catch {
-      // Молча игнорируем
+      // Молча
     }
   }
 
@@ -633,19 +637,17 @@ class TokenBarService {
       this.unsubscribe();
       this.unsubscribe = null;
     }
-    
     await this.removeAllBars();
     this.isInitialized = false;
-    
     console.log("[TokenBarService] Destroyed");
   }
 }
 
 // ============================================================================
-// ЭКСПОРТ
+// EXPORT
 // ============================================================================
 
 export const tokenBarService = new TokenBarService();
 
-// Для отладки в консоли браузера
+// Debug в консоли
 (window as any).tokenBarService = tokenBarService;
