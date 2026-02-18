@@ -47,13 +47,13 @@ OBR.onReady(async () => {
     // СЛУШАЕМ BROADCAST ДЛЯ ОТКРЫТИЯ NOTIFICATION POPOVER
     // ═══════════════════════════════════════════════════════════
     
+    console.log("[Main] 📡 Setting up broadcast listener for:", DICE_BROADCAST_CHANNEL);
+    
     OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, async (event) => {
-      console.log("[Main] Received broadcast, opening notification popover");
+      console.log("[Main] 📨 Received broadcast:", event.data);
       
-      // Проверяем, открыт ли уже popover
       try {
-        // Пытаемся открыть (если уже открыт — ничего не произойдёт,
-        // сообщение дойдёт напрямую в notification.html через broadcast)
+        console.log("[Main] 🔓 Opening notification popover...");
         await OBR.popover.open({
           id: NOTIFICATION_POPOVER_ID,
           url: "/notification.html",
@@ -65,9 +65,9 @@ OBR.onReady(async () => {
           hidePaper: true,
           marginThreshold: 0
         });
+        console.log("[Main] ✅ Popover opened");
       } catch (e) {
-        // Popover уже открыт — это нормально
-        console.log("[Main] Notification popover already open or error:", e);
+        console.log("[Main] ⚠️ Popover open result:", e);
       }
     });
     
