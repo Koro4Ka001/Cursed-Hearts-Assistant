@@ -13,13 +13,55 @@ import type { Unit } from "../types";
 const METADATA_KEY = "cursed-hearts-assistant";
 const BAR_PREFIX = `${METADATA_KEY}/bar`;
 
+const CONFIG = {
+  BAR_HEIGHT: 6,
+  BAR_GAP: 1,
+  BAR_OFFSET: 2,  // Пикселей от нижнего края токена (поменяй если надо)
+  MIN_BAR_WIDTH: 40,
+  MAX_BAR_WIDTH: 120,
+  BAR_WIDTH_RATIO: 0.8,
+  
+  HP_BG: "#1a0808",
+  HP_STROKE: "#4a2020",
+  HP_HIGH: "#8b0000",
+  HP_MED: "#cc4400",
+  HP_LOW: "#ff2200",
+  HP_CRIT: "#ff0000",
+  
+  MANA_BG: "#080818",
+  MANA_STROKE: "#202050",
+  MANA_FILL: "#2244aa",
+  MANA_BRIGHT: "#4488ff",
+  
+  ANIM_INTERVAL: 150,
+} as const;
+
+interface BarIds {
+  hpBg: string;
+  hpFill: string;
+  manaBg: string;
+  manaFill: string;
+}
+
+interface BarState {
+  tokenId: string;
+  hp: number;
+  maxHp: number;
+  mana: number;
+  maxMana: number;
+  useManaAsHp: boolean;
+}
+
 class TokenBarService {
-  private bars = new Map<string, string[]>();
+  private bars = new Map<string, BarIds>();
+  private states = new Map<string, BarState>();
   private initialized = false;
+  private animInterval: number | null = null;
+  private frame = 0;
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    
+
     try {
       const ready = await OBR.scene.isReady();
       if (!ready) {
@@ -36,12 +78,13 @@ class TokenBarService {
 
   private async doInit(): Promise<void> {
     await this.cleanup();
+    this.startAnim();
     this.initialized = true;
     console.log("[Bars] ✓ Ready");
   }
 
   // ==========================================================================
-  // ТЕСТОВОЕ СОЗДАНИЕ — пробуем разные варианты!
+  // СОЗДАНИЕ БАРОВ
   // ==========================================================================
 
   async createBars(
@@ -60,139 +103,133 @@ class TokenBarService {
 
       await this.removeBars(tokenId);
 
-      // Получаем токен
       const items = await OBR.scene.items.getItems([tokenId]);
-      if (!items.length) {
-        console.error("[Bars] ❌ Token not found!");
+      if (!items.length || !isImage(items[0])) {
+        console.warn("[Bars] Token not found:", tokenId);
         return;
       }
 
-      const token = items[0];
-      if (!isImage(token)) {
-        console.error("[Bars] ❌ Not an image!");
-        return;
-      }
-
-      // Размеры токена
+      const token = items[0] as Image;
       const tokenW = token.image.width * token.scale.x;
       const tokenH = token.image.height * token.scale.y;
       const tokenX = token.position.x;
       const tokenY = token.position.y;
 
-      console.log("═══════════════════════════════════════");
-      console.log("[Bars] 🎯 TOKEN INFO:");
-      console.log(`  ID: ${tokenId}`);
-      console.log(`  Position: (${tokenX}, ${tokenY})`);
-      console.log(`  Size: ${tokenW} x ${tokenH}`);
-      console.log(`  Visible: ${token.visible}`);
-      console.log("═══════════════════════════════════════");
+      const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
+      const showHp = !useManaAsHp;
 
-      const barWidth = 100;
-      const barHeight = 8;
+      // АБСОЛЮТНЫЕ координаты!
+      const barX = tokenX - barW / 2;
+      const hpBarY = tokenY + tokenH / 2 + CONFIG.BAR_OFFSET;
+      const manaBarY = showHp ? hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP : hpBarY;
+
+      console.log(`[Bars] Creating at (${barX.toFixed(0)}, ${hpBarY.toFixed(0)})`);
+
+      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+      const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+
       const ts = Date.now();
-      const createdIds: string[] = [];
+      const ids: BarIds = {
+        hpBg: `${BAR_PREFIX}/hpbg/${tokenId}/${ts}`,
+        hpFill: `${BAR_PREFIX}/hpfill/${tokenId}/${ts}`,
+        manaBg: `${BAR_PREFIX}/manabg/${tokenId}/${ts}`,
+        manaFill: `${BAR_PREFIX}/manafill/${tokenId}/${ts}`,
+      };
 
-      // ═══════════════════════════════════════════════════════════════
-      // ТЕСТ 1: Абсолютные координаты, БЕЗ attachedTo
-      // ═══════════════════════════════════════════════════════════════
-      const test1X = tokenX - barWidth / 2;
-      const test1Y = tokenY + tokenH / 2 + 5;
-      
-      console.log(`[Bars] TEST 1: Absolute pos (${test1X.toFixed(0)}, ${test1Y.toFixed(0)}), NO attachedTo`);
-      
-      const bar1 = buildShape()
-        .shapeType("RECTANGLE")
-        .width(barWidth)
-        .height(barHeight)
-        .position({ x: test1X, y: test1Y })
-        .layer("DRAWING")
-        .fillColor("#ff0000")
-        .strokeColor("#ffffff")
-        .strokeWidth(2)
-        .locked(true)
-        .id(`${BAR_PREFIX}/test1/${ts}`)
-        .build();
+      const shapes: Shape[] = [];
 
-      // ═══════════════════════════════════════════════════════════════
-      // ТЕСТ 2: position(0,0) С attachedTo — должен быть в ЦЕНТРЕ токена
-      // ═══════════════════════════════════════════════════════════════
-      console.log(`[Bars] TEST 2: pos(0, 0) WITH attachedTo — should be at token CENTER`);
-      
-      const bar2 = buildShape()
-        .shapeType("RECTANGLE")
-        .width(barWidth)
-        .height(barHeight)
-        .position({ x: 0, y: 0 })
-        .attachedTo(tokenId)
-        .layer("ATTACHMENT")
-        .fillColor("#00ff00")
-        .strokeColor("#ffffff")
-        .strokeWidth(2)
-        .locked(true)
-        .id(`${BAR_PREFIX}/test2/${ts}`)
-        .build();
+      // HP Background
+      if (showHp) {
+        shapes.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(barW)
+            .height(CONFIG.BAR_HEIGHT)
+            .position({ x: barX, y: hpBarY })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(token.visible)
+            .fillColor(CONFIG.HP_BG)
+            .strokeColor(CONFIG.HP_STROKE)
+            .strokeWidth(1)
+            .id(ids.hpBg)
+            .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
+            .build()
+        );
 
-      // ═══════════════════════════════════════════════════════════════
-      // ТЕСТ 3: position(0, tokenH/2) С attachedTo — должен быть ВНИЗУ токена
-      // ═══════════════════════════════════════════════════════════════
-      const test3Y = tokenH / 2 + 10;
-      console.log(`[Bars] TEST 3: pos(0, ${test3Y.toFixed(0)}) WITH attachedTo — should be BELOW token`);
-      
-      const bar3 = buildShape()
-        .shapeType("RECTANGLE")
-        .width(barWidth)
-        .height(barHeight)
-        .position({ x: -barWidth / 2, y: test3Y })
-        .attachedTo(tokenId)
-        .layer("ATTACHMENT")
-        .fillColor("#0000ff")
-        .strokeColor("#ffffff")
-        .strokeWidth(2)
-        .locked(true)
-        .id(`${BAR_PREFIX}/test3/${ts}`)
-        .build();
+        const hpW = Math.max(1, (barW - 2) * hpPct);
+        shapes.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(hpW)
+            .height(CONFIG.BAR_HEIGHT - 2)
+            .position({ x: barX + 1, y: hpBarY + 1 })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(token.visible && hpPct > 0)
+            .fillColor(this.hpColor(hpPct))
+            .strokeWidth(0)
+            .id(ids.hpFill)
+            .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
+            .build()
+        );
+      }
 
-      // ═══════════════════════════════════════════════════════════════
-      // ТЕСТ 4: Абсолютные + attachedTo (гибрид)
-      // ═══════════════════════════════════════════════════════════════
-      console.log(`[Bars] TEST 4: Absolute (${test1X.toFixed(0)}, ${test1Y.toFixed(0)}) WITH attachedTo`);
-      
-      const bar4 = buildShape()
-        .shapeType("RECTANGLE")
-        .width(barWidth)
-        .height(barHeight)
-        .position({ x: test1X, y: test1Y })
-        .attachedTo(tokenId)
-        .layer("ATTACHMENT")
-        .fillColor("#ffff00")
-        .strokeColor("#000000")
-        .strokeWidth(2)
-        .locked(true)
-        .id(`${BAR_PREFIX}/test4/${ts}`)
-        .build();
+      // Mana Background
+      shapes.push(
+        buildShape()
+          .shapeType("RECTANGLE")
+          .width(barW)
+          .height(CONFIG.BAR_HEIGHT)
+          .position({ x: barX, y: manaBarY })
+          .attachedTo(tokenId)
+          .layer("ATTACHMENT")
+          .locked(true)
+          .disableHit(true)
+          .visible(token.visible)
+          .fillColor(useManaAsHp ? CONFIG.HP_BG : CONFIG.MANA_BG)
+          .strokeColor(useManaAsHp ? CONFIG.HP_STROKE : CONFIG.MANA_STROKE)
+          .strokeWidth(1)
+          .id(ids.manaBg)
+          .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
+          .build()
+      );
 
-      // Добавляем все тесты
-      await OBR.scene.items.addItems([bar1, bar2, bar3, bar4]);
-      
-      createdIds.push(bar1.id, bar2.id, bar3.id, bar4.id);
-      this.bars.set(tokenId, createdIds);
+      const manaW = Math.max(1, (barW - 2) * manaPct);
+      shapes.push(
+        buildShape()
+          .shapeType("RECTANGLE")
+          .width(manaW)
+          .height(CONFIG.BAR_HEIGHT - 2)
+          .position({ x: barX + 1, y: manaBarY + 1 })
+          .attachedTo(tokenId)
+          .layer("ATTACHMENT")
+          .locked(true)
+          .disableHit(true)
+          .visible(token.visible && manaPct > 0)
+          .fillColor(useManaAsHp ? this.hpColor(manaPct) : CONFIG.MANA_FILL)
+          .strokeWidth(0)
+          .id(ids.manaFill)
+          .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
+          .build()
+      );
 
-      console.log("═══════════════════════════════════════");
-      console.log("[Bars] ✓ Created 4 test bars:");
-      console.log("  🔴 RED = Absolute, no attach (should be correct)");
-      console.log("  🟢 GREEN = (0,0) + attach (should be at center)");
-      console.log("  🔵 BLUE = relative + attach (should be below)");
-      console.log("  🟡 YELLOW = absolute + attach (hybrid test)");
-      console.log("═══════════════════════════════════════");
-      console.log("[Bars] 👀 Look at the scene and tell me where each color appeared!");
+      await OBR.scene.items.addItems(shapes);
+      this.bars.set(tokenId, ids);
+      this.states.set(tokenId, { tokenId, hp, maxHp, mana, maxMana, useManaAsHp });
 
+      console.log(`[Bars] ✓ Created ${shapes.length} bars`);
     } catch (e) {
       console.error("[Bars] Create error:", e);
     }
   }
 
   // ==========================================================================
-  // UPDATE / REMOVE / SYNC
+  // UPDATE
   // ==========================================================================
 
   async updateBars(
@@ -203,18 +240,70 @@ class TokenBarService {
     maxMana: number,
     useManaAsHp = false
   ): Promise<void> {
-    await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+    if (!tokenId) return;
+
+    const ids = this.bars.get(tokenId);
+    if (!ids) {
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+      return;
+    }
+
+    try {
+      const items = await OBR.scene.items.getItems([tokenId]);
+      if (!items.length || !isImage(items[0])) {
+        await this.removeBars(tokenId);
+        return;
+      }
+
+      const token = items[0] as Image;
+      const tokenW = token.image.width * token.scale.x;
+      const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
+
+      this.states.set(tokenId, { tokenId, hp, maxHp, mana, maxMana, useManaAsHp });
+
+      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+      const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+      const hpW = Math.max(1, (barW - 2) * hpPct);
+      const manaW = Math.max(1, (barW - 2) * manaPct);
+      const showHp = !useManaAsHp;
+
+      await OBR.scene.items.updateItems([ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill], (upd) => {
+        for (const item of upd) {
+          if (!isShape(item)) continue;
+
+          if (item.id === ids.hpBg) {
+            item.visible = token.visible && showHp;
+          } else if (item.id === ids.hpFill) {
+            item.width = hpW;
+            item.style.fillColor = this.hpColor(hpPct);
+            item.visible = token.visible && showHp && hpPct > 0;
+          } else if (item.id === ids.manaBg) {
+            item.visible = token.visible;
+          } else if (item.id === ids.manaFill) {
+            item.width = manaW;
+            item.visible = token.visible && manaPct > 0;
+          }
+        }
+      });
+    } catch (e) {
+      console.error("[Bars] Update error:", e);
+    }
   }
+
+  // ==========================================================================
+  // REMOVE
+  // ==========================================================================
 
   async removeBars(tokenId: string): Promise<void> {
     const ids = this.bars.get(tokenId);
     if (!ids) return;
     
     try {
-      await OBR.scene.items.deleteItems(ids);
+      await OBR.scene.items.deleteItems([ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill]);
     } catch {}
     
     this.bars.delete(tokenId);
+    this.states.delete(tokenId);
   }
 
   async removeAllBars(): Promise<void> {
@@ -225,9 +314,16 @@ class TokenBarService {
     console.log("[Bars] All removed");
   }
 
+  // ==========================================================================
+  // SYNC
+  // ==========================================================================
+
   async syncAllBars(units: Unit[]): Promise<void> {
+    const valid = new Set<string>();
+
     for (const u of units) {
       if (u.owlbearTokenId) {
+        valid.add(u.owlbearTokenId);
         await this.createBars(
           u.owlbearTokenId,
           u.health?.current ?? 0,
@@ -238,10 +334,82 @@ class TokenBarService {
         );
       }
     }
+
+    for (const id of this.bars.keys()) {
+      if (!valid.has(id)) await this.removeBars(id);
+    }
   }
 
   async forceRefresh(): Promise<void> {
-    console.log("[Bars] Force refresh - run CREATE again");
+    console.log("[Bars] Force refresh");
+    const s = new Map(this.states);
+    await this.removeAllBars();
+    for (const [id, st] of s) {
+      await this.createBars(id, st.hp, st.maxHp, st.mana, st.maxMana, st.useManaAsHp);
+    }
+  }
+
+  // ==========================================================================
+  // ANIMATION
+  // ==========================================================================
+
+  private startAnim(): void {
+    if (this.animInterval) return;
+    this.animInterval = window.setInterval(() => {
+      this.frame++;
+      this.animate();
+    }, CONFIG.ANIM_INTERVAL);
+  }
+
+  private async animate(): Promise<void> {
+    for (const [tokenId, state] of this.states) {
+      const ids = this.bars.get(tokenId);
+      if (!ids) continue;
+
+      const hpPct = state.maxHp > 0 ? state.hp / state.maxHp : 0;
+      const manaPct = state.maxMana > 0 ? state.mana / state.maxMana : 0;
+
+      // HP пульсация при низком здоровье
+      if (hpPct > 0 && hpPct < 0.5) {
+        const pulse = Math.sin(this.frame * 0.4) * 0.5 + 0.5;
+        const color = hpPct < 0.1
+          ? (pulse > 0.5 ? "#ff0000" : "#880000")
+          : hpPct < 0.25
+            ? (pulse > 0.5 ? "#ff2200" : "#aa0000")
+            : (pulse > 0.5 ? "#cc4400" : "#992200");
+
+        try {
+          await OBR.scene.items.updateItems([ids.hpFill], (items) => {
+            for (const i of items) if (isShape(i)) i.style.fillColor = color;
+          });
+        } catch {}
+      }
+
+      // Mana мерцание при высокой мане
+      if (manaPct > 0.5) {
+        const shimmer = Math.sin(this.frame * 0.2) * 0.5 + 0.5;
+        const color = manaPct > 0.75
+          ? (shimmer > 0.5 ? "#4488ff" : "#2255cc")
+          : (shimmer > 0.5 ? "#3366dd" : "#2244aa");
+
+        try {
+          await OBR.scene.items.updateItems([ids.manaFill], (items) => {
+            for (const i of items) if (isShape(i)) i.style.fillColor = color;
+          });
+        } catch {}
+      }
+    }
+  }
+
+  // ==========================================================================
+  // HELPERS
+  // ==========================================================================
+
+  private hpColor(pct: number): string {
+    if (pct < 0.1) return CONFIG.HP_CRIT;
+    if (pct < 0.25) return CONFIG.HP_LOW;
+    if (pct < 0.5) return CONFIG.HP_MED;
+    return CONFIG.HP_HIGH;
   }
 
   private async cleanup(): Promise<void> {
@@ -256,6 +424,7 @@ class TokenBarService {
   }
 
   async destroy(): Promise<void> {
+    if (this.animInterval) clearInterval(this.animInterval);
     await this.removeAllBars();
     this.initialized = false;
   }
