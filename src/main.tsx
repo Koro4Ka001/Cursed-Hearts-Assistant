@@ -5,20 +5,41 @@ import OBR from "@owlbear-rodeo/sdk";
 import "./index.css";
 import { App } from "./App";
 import { docsService } from "./services/docsService";
-import { diceService, DICE_BROADCAST_CHANNEL, onLocalDiceMessage } from "./services/diceService";
+import { diceService, DICE_BROADCAST_CHANNEL, onLocalDiceMessage, LOCAL_STORAGE_KEY } from "./services/diceService";
 import { tokenBarService } from "./services/tokenBarService";
 import { useGameStore } from "./stores/useGameStore";
+import type { BroadcastMessage } from "./services/diceService";
 
 const NOTIFICATION_POPOVER_ID = "cursed-hearts-notification";
-let popoverOpen = false;
+
+// Добавляем сообщение в очередь localStorage
+function addToLocalQueue(msg: BroadcastMessage) {
+  try {
+    const existing = localStorage.getItem(LOCAL_STORAGE_KEY);
+    let queue: BroadcastMessage[] = [];
+    
+    if (existing) {
+      try {
+        queue = JSON.parse(existing);
+        if (!Array.isArray(queue)) queue = [];
+      } catch {
+        queue = [];
+      }
+    }
+    
+    queue.push(msg);
+    if (queue.length > 10) queue = queue.slice(-10);
+    
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(queue));
+  } catch (e) {
+    console.warn('[Main] localStorage error:', e);
+  }
+}
 
 // Открытие popover
 async function openNotificationPopover() {
-  if (popoverOpen) return;
-  
   try {
     console.log("[Main] 🔓 Opening notification popover...");
-    popoverOpen = true;
     
     await OBR.popover.open({
       id: NOTIFICATION_POPOVER_ID,
@@ -34,8 +55,8 @@ async function openNotificationPopover() {
     
     console.log("[Main] ✅ Popover opened");
   } catch (e) {
-    console.log("[Main] ⚠️ Popover error:", e);
-    popoverOpen = false;
+    // Ошибка означает что popover уже открыт — это нормально
+    console.log("[Main] ⚠️ Popover already open or error:", e);
   }
 }
 
@@ -72,24 +93,31 @@ OBR.onReady(async () => {
     }
     
     // ═══════════════════════════════════════════════════════════
-    // СЛУШАЕМ ЛОКАЛЬНЫЕ СОБЫТИЯ (для себя)
+    // СЛУШАЕМ ЛОКАЛЬНЫЕ СОБЫТИЯ (когда Я бросаю кубик)
     // ═══════════════════════════════════════════════════════════
     
     console.log("[Main] 📡 Setting up LOCAL message listener");
     
     onLocalDiceMessage((msg) => {
-      console.log("[Main] 📨 Received LOCAL message:", msg.title);
+      console.log("[Main] 📨 LOCAL message:", msg.title);
+      // Данные уже в localStorage (diceService их записал)
       openNotificationPopover();
     });
     
     // ═══════════════════════════════════════════════════════════
-    // СЛУШАЕМ BROADCAST (для других игроков)
+    // СЛУШАЕМ BROADCAST (когда ДРУГОЙ игрок бросает кубик)
     // ═══════════════════════════════════════════════════════════
     
-    console.log("[Main] 📡 Setting up BROADCAST listener for:", DICE_BROADCAST_CHANNEL);
+    console.log("[Main] 📡 Setting up BROADCAST listener");
     
     OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, async (event) => {
-      console.log("[Main] 📨 Received BROADCAST:", event.data);
+      const msg = event.data as BroadcastMessage;
+      console.log("[Main] 📨 BROADCAST from other player:", msg.title);
+      
+      // Добавляем в localStorage чтобы popover увидел
+      addToLocalQueue(msg);
+      
+      // Открываем popover
       openNotificationPopover();
     });
     
