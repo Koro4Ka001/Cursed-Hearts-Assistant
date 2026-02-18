@@ -368,40 +368,6 @@ export function App() {
           </div>
         ))}
       </div>
-
-      {viewMode === 'medium' && (
-        <div className="fixed bottom-12 left-2 z-50 flex gap-1">
-          <button 
-            onClick={async () => {
-              console.log("🔄 Refreshing bars...");
-              await tokenBarService.forceRefresh();
-            }}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-[10px] font-bold"
-          >
-            🔄
-          </button>
-          <button 
-            onClick={async () => {
-              const units = useGameStore.getState().units;
-              const unit = units.find(u => u.owlbearTokenId);
-              if (unit) {
-                await tokenBarService.createBars(unit.owlbearTokenId!, unit.health.current, unit.health.max, unit.mana.current, unit.mana.max, unit.useManaAsHp);
-              }
-            }}
-            className="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-[10px] font-bold"
-          >
-            🔨
-          </button>
-          <button 
-            onClick={async () => {
-              await tokenBarService.removeAllBars();
-            }}
-            className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-[10px] font-bold"
-          >
-            🗑️
-          </button>
-        </div>
-      )}
     </div>
   );
 }
