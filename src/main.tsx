@@ -5,11 +5,39 @@ import OBR from "@owlbear-rodeo/sdk";
 import "./index.css";
 import { App } from "./App";
 import { docsService } from "./services/docsService";
-import { diceService, DICE_BROADCAST_CHANNEL } from "./services/diceService";
+import { diceService, DICE_BROADCAST_CHANNEL, onLocalDiceMessage } from "./services/diceService";
 import { tokenBarService } from "./services/tokenBarService";
 import { useGameStore } from "./stores/useGameStore";
 
 const NOTIFICATION_POPOVER_ID = "cursed-hearts-notification";
+let popoverOpen = false;
+
+// Открытие popover
+async function openNotificationPopover() {
+  if (popoverOpen) return;
+  
+  try {
+    console.log("[Main] 🔓 Opening notification popover...");
+    popoverOpen = true;
+    
+    await OBR.popover.open({
+      id: NOTIFICATION_POPOVER_ID,
+      url: "/notification.html",
+      width: 320,
+      height: 500,
+      anchorOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
+      transformOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
+      disableClickAway: true,
+      hidePaper: true,
+      marginThreshold: 0
+    });
+    
+    console.log("[Main] ✅ Popover opened");
+  } catch (e) {
+    console.log("[Main] ⚠️ Popover error:", e);
+    popoverOpen = false;
+  }
+}
 
 // Инициализация OBR
 OBR.onReady(async () => {
@@ -44,31 +72,25 @@ OBR.onReady(async () => {
     }
     
     // ═══════════════════════════════════════════════════════════
-    // СЛУШАЕМ BROADCAST ДЛЯ ОТКРЫТИЯ NOTIFICATION POPOVER
+    // СЛУШАЕМ ЛОКАЛЬНЫЕ СОБЫТИЯ (для себя)
     // ═══════════════════════════════════════════════════════════
     
-    console.log("[Main] 📡 Setting up broadcast listener for:", DICE_BROADCAST_CHANNEL);
+    console.log("[Main] 📡 Setting up LOCAL message listener");
+    
+    onLocalDiceMessage((msg) => {
+      console.log("[Main] 📨 Received LOCAL message:", msg.title);
+      openNotificationPopover();
+    });
+    
+    // ═══════════════════════════════════════════════════════════
+    // СЛУШАЕМ BROADCAST (для других игроков)
+    // ═══════════════════════════════════════════════════════════
+    
+    console.log("[Main] 📡 Setting up BROADCAST listener for:", DICE_BROADCAST_CHANNEL);
     
     OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, async (event) => {
-      console.log("[Main] 📨 Received broadcast:", event.data);
-      
-      try {
-        console.log("[Main] 🔓 Opening notification popover...");
-        await OBR.popover.open({
-          id: NOTIFICATION_POPOVER_ID,
-          url: "/notification.html",
-          width: 320,
-          height: 500,
-          anchorOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
-          transformOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
-          disableClickAway: true,
-          hidePaper: true,
-          marginThreshold: 0
-        });
-        console.log("[Main] ✅ Popover opened");
-      } catch (e) {
-        console.log("[Main] ⚠️ Popover open result:", e);
-      }
+      console.log("[Main] 📨 Received BROADCAST:", event.data);
+      openNotificationPopover();
     });
     
     console.log("[Main] ✓ Initialization complete!");
