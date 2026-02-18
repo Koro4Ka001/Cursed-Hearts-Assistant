@@ -4,7 +4,7 @@ import type { DiceRollResult, RollModifier } from "../types";
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
-const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
+export const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
 
 // ═══════════════════════════════════════════════════════════════
 // BROADCAST MESSAGE TYPE
@@ -43,6 +43,38 @@ function emitLocal(msg: BroadcastMessage) {
   localListeners.forEach(fn => {
     try { fn(msg); } catch (e) { console.error('[DiceService] Local listener error:', e); }
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NOTIFICATION QUEUE (для нескольких сообщений)
+// ═══════════════════════════════════════════════════════════════
+
+function addToQueue(msg: BroadcastMessage) {
+  try {
+    const existing = localStorage.getItem(LOCAL_STORAGE_KEY);
+    let queue: BroadcastMessage[] = [];
+    
+    if (existing) {
+      try {
+        queue = JSON.parse(existing);
+        if (!Array.isArray(queue)) queue = [];
+      } catch {
+        queue = [];
+      }
+    }
+    
+    queue.push(msg);
+    
+    // Храним максимум 10 сообщений
+    if (queue.length > 10) {
+      queue = queue.slice(-10);
+    }
+    
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(queue));
+    console.log('[DiceService] 💾 Added to queue, total:', queue.length);
+  } catch (e) {
+    console.warn('[DiceService] localStorage error:', e);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -162,18 +194,13 @@ function msgId(): string {
 async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] 📤 Broadcasting:', msg.title);
   
-  // Эмитим локально (для main.tsx чтобы открыть popover)
+  // 1. СНАЧАЛА сохраняем в очередь localStorage (чтобы popover сразу увидел)
+  addToQueue(msg);
+  
+  // 2. ПОТОМ эмитим локально (открывает popover)
   emitLocal(msg);
   
-  // Сохраняем в localStorage (для передачи в popover)
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(msg));
-    console.log('[DiceService] 💾 Saved to localStorage');
-  } catch (e) {
-    console.warn('[DiceService] localStorage error:', e);
-  }
-  
-  // Отправляем broadcast другим игрокам
+  // 3. Отправляем broadcast другим игрокам
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
     console.log('[DiceService] ✅ Broadcast sent to others');
@@ -198,10 +225,6 @@ class DiceService {
   getStatus(): DiceStatus { 
     return "local"; 
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // ОСНОВНОЙ БРОСОК
-  // ═══════════════════════════════════════════════════════════
 
   async roll(
     formula: string,
@@ -235,10 +258,6 @@ class DiceService {
     }
     return r;
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // БРОСОК УРОНА
-  // ═══════════════════════════════════════════════════════════
 
   async rollDamage(
     formula: string,
@@ -275,10 +294,6 @@ class DiceService {
   ): Promise<DiceRollResult> {
     return this.rollDamage(formula, label, unitName, isCrit);
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // СПЕЦИАЛЬНЫЕ АНОНСЫ
-  // ═══════════════════════════════════════════════════════════
 
   async announceHit(
     unitName: string,
@@ -465,9 +480,5 @@ class DiceService {
     await OBR.notification.show(message);
   }
 }
-
-// ═══════════════════════════════════════════════════════════════
-// EXPORT
-// ═══════════════════════════════════════════════════════════════
 
 export const diceService = new DiceService();
