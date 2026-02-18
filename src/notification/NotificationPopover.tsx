@@ -33,8 +33,8 @@ interface QueuedNotification extends NotificationMessage {
 
 const BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
 const MAX_VISIBLE = 4;
-const DISPLAY_TIME = 5000; // 5 секунд
-const ANIMATION_TIME = 400; // 0.4 сек
+const DISPLAY_TIME = 5000;
+const ANIMATION_TIME = 400;
 
 const BORDER_COLORS: Record<string, string> = {
   gold: "#c9a227",
@@ -62,14 +62,15 @@ export function NotificationPopover() {
   const [notifications, setNotifications] = useState<QueuedNotification[]>([]);
   const timeoutsRef = useRef<Map<string, number>>(new Map());
   
+  console.log("[NotificationPopover] Render, notifications:", notifications.length);
+  
   // Удаление уведомления
   const removeNotification = useCallback((id: string) => {
-    // Сначала переводим в состояние exiting
+    console.log("[NotificationPopover] Removing notification:", id);
     setNotifications(prev => 
       prev.map(n => n.id === id ? { ...n, state: 'exiting' as const } : n)
     );
     
-    // Потом удаляем после анимации
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, ANIMATION_TIME);
@@ -77,15 +78,14 @@ export function NotificationPopover() {
   
   // Добавление уведомления
   const addNotification = useCallback((msg: NotificationMessage) => {
+    console.log("[NotificationPopover] Adding notification:", msg.title);
     const queued: QueuedNotification = { ...msg, state: 'entering' };
     
     setNotifications(prev => {
-      // Убираем лишние если больше MAX_VISIBLE
       let newList = [...prev, queued];
       while (newList.length > MAX_VISIBLE) {
         const oldest = newList[0];
         if (oldest) {
-          // Отменяем timeout для старого
           const oldTimeout = timeoutsRef.current.get(oldest.id);
           if (oldTimeout) {
             window.clearTimeout(oldTimeout);
@@ -97,14 +97,12 @@ export function NotificationPopover() {
       return newList;
     });
     
-    // Переводим в visible после входной анимации
     setTimeout(() => {
       setNotifications(prev =>
         prev.map(n => n.id === msg.id ? { ...n, state: 'visible' as const } : n)
       );
     }, 50);
     
-    // Ставим таймер на удаление
     const timeout = window.setTimeout(() => {
       removeNotification(msg.id);
       timeoutsRef.current.delete(msg.id);
@@ -115,23 +113,29 @@ export function NotificationPopover() {
   
   // Слушаем broadcast
   useEffect(() => {
+    console.log("[NotificationPopover] 📡 Setting up broadcast listener...");
+    
     const unsubscribe = OBR.broadcast.onMessage(BROADCAST_CHANNEL, (event) => {
       const msg = event.data as NotificationMessage;
-      console.log("[Notification] Received:", msg.title);
+      console.log("[NotificationPopover] 📨 Received message:", msg.title, msg);
       addNotification(msg);
     });
     
+    console.log("[NotificationPopover] ✅ Listener set up for channel:", BROADCAST_CHANNEL);
+    
     return () => {
+      console.log("[NotificationPopover] 🔌 Unsubscribing...");
       unsubscribe();
-      // Очищаем все таймеры
       timeoutsRef.current.forEach(t => window.clearTimeout(t));
     };
   }, [addNotification]);
   
-  // Закрываем popover когда пусто (с задержкой)
+  // Закрываем popover когда пусто
   useEffect(() => {
     if (notifications.length === 0) {
+      console.log("[NotificationPopover] Queue empty, scheduling close...");
       const closeTimeout = setTimeout(() => {
+        console.log("[NotificationPopover] Closing popover");
         OBR.popover.close("cursed-hearts-notification");
       }, 1000);
       return () => clearTimeout(closeTimeout);
