@@ -35,7 +35,6 @@
     0 0 20px var(--glow-color, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   
-  /* Переходы для анимаций */
   transition: 
     transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
     opacity 0.4s ease,
@@ -50,7 +49,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* Декоративный уголок */
 .notification-card::before {
   content: '';
   position: absolute;
@@ -340,10 +338,6 @@
   margin-top: 2px;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   SPECIAL — LOW HP WARNING
-   ═══════════════════════════════════════════════════════════════ */
-
 .hpbar-fill.low {
   background: linear-gradient(90deg, #8b4000, #cc5500, #ff6600);
   animation: lowHpPulse 1s ease-in-out infinite;
@@ -353,10 +347,6 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   RESPONSIVE
-   ═══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 400px) {
   .notification-container {
