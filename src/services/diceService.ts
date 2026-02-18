@@ -4,6 +4,7 @@ import type { DiceRollResult, RollModifier } from "../types";
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
+const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
 
 // ═══════════════════════════════════════════════════════════════
 // BROADCAST MESSAGE TYPE
@@ -159,17 +160,25 @@ function msgId(): string {
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage): Promise<void> {
-  console.log('[DiceService] 📤 Broadcasting:', msg.title, msg);
+  console.log('[DiceService] 📤 Broadcasting:', msg.title);
   
-  // Эмитим локально
+  // Эмитим локально (для main.tsx чтобы открыть popover)
   emitLocal(msg);
   
-  // Отправляем всем через OBR broadcast
+  // Сохраняем в localStorage (для передачи в popover)
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(msg));
+    console.log('[DiceService] 💾 Saved to localStorage');
+  } catch (e) {
+    console.warn('[DiceService] localStorage error:', e);
+  }
+  
+  // Отправляем broadcast другим игрокам
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
-    console.log('[DiceService] ✅ Broadcast sent successfully');
+    console.log('[DiceService] ✅ Broadcast sent to others');
   } catch (e) {
-    console.error('[DiceService] ❌ Broadcast failed:', e);
+    console.warn('[DiceService] ❌ Broadcast failed:', e);
   }
 }
 
