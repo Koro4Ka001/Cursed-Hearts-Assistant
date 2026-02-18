@@ -46,7 +46,7 @@ function emitLocal(msg: BroadcastMessage) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// NOTIFICATION QUEUE (для нескольких сообщений)
+// NOTIFICATION QUEUE
 // ═══════════════════════════════════════════════════════════════
 
 function addToQueue(msg: BroadcastMessage) {
@@ -64,14 +64,10 @@ function addToQueue(msg: BroadcastMessage) {
     }
     
     queue.push(msg);
-    
-    // Храним максимум 10 сообщений
-    if (queue.length > 10) {
-      queue = queue.slice(-10);
-    }
+    if (queue.length > 10) queue = queue.slice(-10);
     
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(queue));
-    console.log('[DiceService] 💾 Added to queue, total:', queue.length);
+    console.log('[DiceService] 💾 Queue size:', queue.length);
   } catch (e) {
     console.warn('[DiceService] localStorage error:', e);
   }
@@ -188,22 +184,22 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BROADCAST — Отправляет всем игрокам с расширением
+// BROADCAST
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] 📤 Broadcasting:', msg.title);
   
-  // 1. СНАЧАЛА сохраняем в очередь localStorage (чтобы popover сразу увидел)
+  // 1. Сохраняем в очередь localStorage
   addToQueue(msg);
   
-  // 2. ПОТОМ эмитим локально (открывает popover)
+  // 2. Эмитим локально (main.tsx откроет popover)
   emitLocal(msg);
   
-  // 3. Отправляем broadcast другим игрокам
+  // 3. Отправляем другим игрокам
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
-    console.log('[DiceService] ✅ Broadcast sent to others');
+    console.log('[DiceService] ✅ Broadcast sent');
   } catch (e) {
     console.warn('[DiceService] ❌ Broadcast failed:', e);
   }
