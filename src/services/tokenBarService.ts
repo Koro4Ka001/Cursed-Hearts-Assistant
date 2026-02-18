@@ -16,7 +16,7 @@ const BAR_PREFIX = `${METADATA_KEY}/bar`;
 const CONFIG = {
   BAR_HEIGHT: 6,
   BAR_GAP: 1,
-  BAR_OFFSET: 2,  // Пикселей от нижнего края токена (поменяй если надо)
+  BAR_OFFSET: 0,  // Пикселей от нижнего края токена (поменяй если надо)
   MIN_BAR_WIDTH: 40,
   MAX_BAR_WIDTH: 120,
   BAR_WIDTH_RATIO: 0.8,
