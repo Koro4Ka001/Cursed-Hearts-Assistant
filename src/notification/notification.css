@@ -1,0 +1,375 @@
+/* src/notification/notification.css */
+
+/* ═══════════════════════════════════════════════════════════════
+   CONTAINER
+   ═══════════════════════════════════════════════════════════════ */
+
+.notification-container {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  width: 300px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 9999;
+  font-family: 'EB Garamond', Georgia, serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD BASE
+   ═══════════════════════════════════════════════════════════════ */
+
+.notification-card {
+  background: linear-gradient(145deg, #0d0d12 0%, #1a1a24 100%);
+  border: 2px solid var(--border-color, #8b7355);
+  border-radius: 8px;
+  padding: 12px;
+  pointer-events: auto;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 20px var(--glow-color, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  
+  /* Переходы для анимаций */
+  transition: 
+    transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.4s ease,
+    box-shadow 0.3s ease;
+}
+
+.notification-card:hover {
+  transform: scale(1.02) translateX(4px);
+  box-shadow: 
+    0 6px 16px rgba(0, 0, 0, 0.6),
+    0 0 30px var(--glow-color, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Декоративный уголок */
+.notification-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-top: 2px solid var(--border-color);
+  border-left: 2px solid var(--border-color);
+  opacity: 0.5;
+}
+
+.notification-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  border-bottom: 2px solid var(--border-color);
+  border-right: 2px solid var(--border-color);
+  opacity: 0.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS — ENTER / EXIT
+   ═══════════════════════════════════════════════════════════════ */
+
+.notification-card.entering {
+  animation: slideInLeft 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.notification-card.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.notification-card.exiting {
+  animation: slideOutLeft 0.4s ease-in forwards;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS — CRIT PULSE
+   ═══════════════════════════════════════════════════════════════ */
+
+.notification-card.crit-pulse {
+  animation: 
+    slideInLeft 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    critPulse 0.6s ease-in-out 0.4s 3;
+}
+
+@keyframes critPulse {
+  0%, 100% {
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.5),
+      0 0 20px var(--glow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    border-color: var(--border-color);
+  }
+  50% {
+    box-shadow: 
+      0 4px 20px rgba(201, 162, 39, 0.6),
+      0 0 40px rgba(255, 215, 0, 0.8),
+      inset 0 0 20px rgba(255, 215, 0, 0.2);
+    border-color: #ffd700;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS — FAIL SHAKE
+   ═══════════════════════════════════════════════════════════════ */
+
+.notification-card.fail-shake {
+  animation: 
+    slideInLeft 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    failShake 0.5s ease-in-out 0.4s 2;
+}
+
+@keyframes failShake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80% { transform: translateX(6px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS — DEATH GLOW
+   ═══════════════════════════════════════════════════════════════ */
+
+.notification-card.death-glow {
+  animation: 
+    slideInLeft 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    deathGlow 1s ease-in-out 0.4s infinite;
+}
+
+@keyframes deathGlow {
+  0%, 100% {
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.5),
+      0 0 20px rgba(139, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 
+      0 4px 20px rgba(139, 0, 0, 0.8),
+      0 0 40px rgba(255, 0, 0, 0.6),
+      inset 0 0 15px rgba(139, 0, 0, 0.3);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD CONTENT — HEADER
+   ═══════════════════════════════════════════════════════════════ */
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.card-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.card-title {
+  font-family: 'Cinzel', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e8e0d4;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-unit {
+  font-size: 11px;
+  color: #8b7355;
+  background: rgba(139, 115, 85, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD CONTENT — SUBTITLE
+   ═══════════════════════════════════════════════════════════════ */
+
+.card-subtitle {
+  font-size: 12px;
+  color: #a89e8c;
+  margin-bottom: 6px;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD CONTENT — ROLLS
+   ═══════════════════════════════════════════════════════════════ */
+
+.card-rolls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  border-left: 2px solid var(--border-color);
+}
+
+.rolls-dice {
+  font-size: 14px;
+}
+
+.rolls-values {
+  color: #c9a227;
+  font-family: 'Cinzel', monospace;
+}
+
+.rolls-total {
+  color: #e8e0d4;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD CONTENT — CRIT MARKERS
+   ═══════════════════════════════════════════════════════════════ */
+
+.card-crit {
+  text-align: center;
+  font-family: 'Cinzel', serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffd700;
+  padding: 4px;
+  margin: 4px 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.15), transparent);
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+  animation: critTextPulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes critTextPulse {
+  from { opacity: 0.8; text-shadow: 0 0 10px rgba(255, 215, 0, 0.6); }
+  to { opacity: 1; text-shadow: 0 0 20px rgba(255, 215, 0, 1); }
+}
+
+.card-critfail {
+  text-align: center;
+  font-family: 'Cinzel', serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff4444;
+  padding: 4px;
+  margin: 4px 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 0, 0.15), transparent);
+  text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD CONTENT — DETAILS
+   ═══════════════════════════════════════════════════════════════ */
+
+.card-details {
+  font-size: 11px;
+  color: #a89e8c;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(139, 115, 85, 0.2);
+}
+
+.detail-line {
+  padding: 2px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARD CONTENT — HP BAR
+   ═══════════════════════════════════════════════════════════════ */
+
+.card-hpbar {
+  margin-top: 8px;
+}
+
+.hpbar-track {
+  height: 8px;
+  background: #2a1515;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #3a1818;
+}
+
+.hpbar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6b0000, #8b0000, #a00000);
+  border-radius: 3px;
+  transition: width 0.5s ease-out;
+  box-shadow: 0 0 8px rgba(139, 0, 0, 0.6);
+}
+
+.hpbar-text {
+  text-align: center;
+  font-size: 10px;
+  color: #8b7355;
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SPECIAL — LOW HP WARNING
+   ═══════════════════════════════════════════════════════════════ */
+
+.hpbar-fill.low {
+  background: linear-gradient(90deg, #8b4000, #cc5500, #ff6600);
+  animation: lowHpPulse 1s ease-in-out infinite;
+}
+
+@keyframes lowHpPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 400px) {
+  .notification-container {
+    width: 260px;
+    left: 8px;
+    bottom: 8px;
+  }
+  
+  .card-title {
+    font-size: 13px;
+  }
+  
+  .card-rolls {
+    font-size: 12px;
+  }
+}
