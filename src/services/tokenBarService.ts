@@ -14,26 +14,32 @@ const METADATA_KEY = "cursed-hearts-assistant";
 const BAR_PREFIX = `${METADATA_KEY}/bar`;
 
 const CONFIG = {
+  // Размеры
   BAR_HEIGHT: 6,
   BAR_GAP: 1,
-  BAR_OFFSET: -65,  // Пикселей от нижнего края токена (поменяй если надо)
+  BAR_OFFSET: -65,
   MIN_BAR_WIDTH: 40,
   MAX_BAR_WIDTH: 120,
   BAR_WIDTH_RATIO: 0.8,
   
+  // Цвета HP
   HP_BG: "#1a0808",
   HP_STROKE: "#4a2020",
   HP_HIGH: "#8b0000",
   HP_MED: "#cc4400",
   HP_LOW: "#ff2200",
   HP_CRIT: "#ff0000",
+  HP_GLOW: "#ff4444",
   
+  // Цвета Mana
   MANA_BG: "#080818",
   MANA_STROKE: "#202050",
   MANA_FILL: "#2244aa",
   MANA_BRIGHT: "#4488ff",
+  MANA_DIM: "#1a2255",
   
-  ANIM_INTERVAL: 150,
+  // Анимации
+  ANIM_INTERVAL: 100,
 } as const;
 
 interface BarIds {
@@ -41,6 +47,10 @@ interface BarIds {
   hpFill: string;
   manaBg: string;
   manaFill: string;
+  // Эффекты смерти
+  crack1?: string;
+  crack2?: string;
+  crack3?: string;
 }
 
 interface BarState {
@@ -50,6 +60,10 @@ interface BarState {
   mana: number;
   maxMana: number;
   useManaAsHp: boolean;
+  tokenX: number;
+  tokenY: number;
+  tokenH: number;
+  barW: number;
 }
 
 class TokenBarService {
@@ -58,6 +72,10 @@ class TokenBarService {
   private initialized = false;
   private animInterval: number | null = null;
   private frame = 0;
+
+  // ==========================================================================
+  // INIT
+  // ==========================================================================
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -84,7 +102,7 @@ class TokenBarService {
   }
 
   // ==========================================================================
-  // СОЗДАНИЕ БАРОВ
+  // CREATE
   // ==========================================================================
 
   async createBars(
@@ -104,10 +122,7 @@ class TokenBarService {
       await this.removeBars(tokenId);
 
       const items = await OBR.scene.items.getItems([tokenId]);
-      if (!items.length || !isImage(items[0])) {
-        console.warn("[Bars] Token not found:", tokenId);
-        return;
-      }
+      if (!items.length || !isImage(items[0])) return;
 
       const token = items[0] as Image;
       const tokenW = token.image.width * token.scale.x;
@@ -118,12 +133,9 @@ class TokenBarService {
       const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
       const showHp = !useManaAsHp;
 
-      // АБСОЛЮТНЫЕ координаты!
       const barX = tokenX - barW / 2;
       const hpBarY = tokenY + tokenH / 2 + CONFIG.BAR_OFFSET;
       const manaBarY = showHp ? hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP : hpBarY;
-
-      console.log(`[Bars] Creating at (${barX.toFixed(0)}, ${hpBarY.toFixed(0)})`);
 
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
@@ -220,11 +232,141 @@ class TokenBarService {
 
       await OBR.scene.items.addItems(shapes);
       this.bars.set(tokenId, ids);
-      this.states.set(tokenId, { tokenId, hp, maxHp, mana, maxMana, useManaAsHp });
+      this.states.set(tokenId, { 
+        tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
+        tokenX, tokenY, tokenH, barW 
+      });
 
-      console.log(`[Bars] ✓ Created ${shapes.length} bars`);
+      // Если HP <= 0, создаём эффект смерти
+      if (showHp && hpPct <= 0) {
+        await this.createDeathEffect(tokenId);
+      }
     } catch (e) {
       console.error("[Bars] Create error:", e);
+    }
+  }
+
+  // ==========================================================================
+  // DEATH EFFECT (трещины при HP <= 0)
+  // ==========================================================================
+
+  private async createDeathEffect(tokenId: string): Promise<void> {
+    const ids = this.bars.get(tokenId);
+    const state = this.states.get(tokenId);
+    if (!ids || !state || ids.crack1) return;
+
+    try {
+      const barX = state.tokenX - state.barW / 2;
+      const hpBarY = state.tokenY + state.tokenH / 2 + CONFIG.BAR_OFFSET;
+      const barW = state.barW;
+
+      const ts = Date.now();
+      const crackShapes: Shape[] = [];
+
+      // Скрываем обычный HP бар
+      await OBR.scene.items.updateItems([ids.hpBg, ids.hpFill], (items) => {
+        for (const item of items) item.visible = false;
+      });
+
+      // Осколок 1 (левый)
+      const crack1Id = `${BAR_PREFIX}/crack1/${tokenId}/${ts}`;
+      crackShapes.push(
+        buildShape()
+          .shapeType("RECTANGLE")
+          .width(barW * 0.32)
+          .height(CONFIG.BAR_HEIGHT)
+          .position({ x: barX - 3, y: hpBarY + 2 })
+          .rotation(-18)
+          .attachedTo(tokenId)
+          .layer("ATTACHMENT")
+          .locked(true)
+          .disableHit(true)
+          .visible(true)
+          .fillColor("#2a0a0a")
+          .strokeColor("#5a1818")
+          .strokeWidth(1)
+          .id(crack1Id)
+          .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
+          .build()
+      );
+
+      // Осколок 2 (центр)
+      const crack2Id = `${BAR_PREFIX}/crack2/${tokenId}/${ts}`;
+      crackShapes.push(
+        buildShape()
+          .shapeType("RECTANGLE")
+          .width(barW * 0.36)
+          .height(CONFIG.BAR_HEIGHT)
+          .position({ x: barX + barW * 0.28, y: hpBarY - 1 })
+          .rotation(6)
+          .attachedTo(tokenId)
+          .layer("ATTACHMENT")
+          .locked(true)
+          .disableHit(true)
+          .visible(true)
+          .fillColor("#3a0808")
+          .strokeColor("#6a2020")
+          .strokeWidth(1)
+          .id(crack2Id)
+          .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
+          .build()
+      );
+
+      // Осколок 3 (правый)
+      const crack3Id = `${BAR_PREFIX}/crack3/${tokenId}/${ts}`;
+      crackShapes.push(
+        buildShape()
+          .shapeType("RECTANGLE")
+          .width(barW * 0.28)
+          .height(CONFIG.BAR_HEIGHT)
+          .position({ x: barX + barW * 0.68, y: hpBarY + 3 })
+          .rotation(22)
+          .attachedTo(tokenId)
+          .layer("ATTACHMENT")
+          .locked(true)
+          .disableHit(true)
+          .visible(true)
+          .fillColor("#1a0505")
+          .strokeColor("#4a1212")
+          .strokeWidth(1)
+          .id(crack3Id)
+          .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
+          .build()
+      );
+
+      await OBR.scene.items.addItems(crackShapes);
+      ids.crack1 = crack1Id;
+      ids.crack2 = crack2Id;
+      ids.crack3 = crack3Id;
+
+      console.log("[Bars] 💀 Death effect created");
+    } catch (e) {
+      console.error("[Bars] Death effect error:", e);
+    }
+  }
+
+  private async removeDeathEffect(tokenId: string): Promise<void> {
+    const ids = this.bars.get(tokenId);
+    if (!ids || !ids.crack1) return;
+
+    try {
+      const crackIds = [ids.crack1, ids.crack2, ids.crack3].filter(Boolean) as string[];
+      if (crackIds.length) {
+        await OBR.scene.items.deleteItems(crackIds);
+      }
+
+      // Показываем обычный HP бар
+      await OBR.scene.items.updateItems([ids.hpBg, ids.hpFill], (items) => {
+        for (const item of items) item.visible = true;
+      });
+
+      delete ids.crack1;
+      delete ids.crack2;
+      delete ids.crack3;
+
+      console.log("[Bars] ✨ Death effect removed");
+    } catch (e) {
+      console.error("[Bars] Remove death effect error:", e);
     }
   }
 
@@ -259,7 +401,16 @@ class TokenBarService {
       const tokenW = token.image.width * token.scale.x;
       const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
 
-      this.states.set(tokenId, { tokenId, hp, maxHp, mana, maxMana, useManaAsHp });
+      const oldState = this.states.get(tokenId);
+      const oldHpPct = oldState ? (oldState.maxHp > 0 ? oldState.hp / oldState.maxHp : 0) : 1;
+
+      this.states.set(tokenId, { 
+        tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
+        tokenX: token.position.x,
+        tokenY: token.position.y,
+        tokenH: token.image.height * token.scale.y,
+        barW
+      });
 
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
@@ -267,12 +418,23 @@ class TokenBarService {
       const manaW = Math.max(1, (barW - 2) * manaPct);
       const showHp = !useManaAsHp;
 
+      // Проверяем переход в/из смерти
+      if (showHp) {
+        if (hpPct <= 0 && oldHpPct > 0) {
+          // Умер!
+          await this.createDeathEffect(tokenId);
+        } else if (hpPct > 0 && oldHpPct <= 0) {
+          // Воскрес!
+          await this.removeDeathEffect(tokenId);
+        }
+      }
+
       await OBR.scene.items.updateItems([ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill], (upd) => {
         for (const item of upd) {
           if (!isShape(item)) continue;
 
           if (item.id === ids.hpBg) {
-            item.visible = token.visible && showHp;
+            item.visible = token.visible && showHp && hpPct > 0;
           } else if (item.id === ids.hpFill) {
             item.width = hpW;
             item.style.fillColor = this.hpColor(hpPct);
@@ -299,7 +461,12 @@ class TokenBarService {
     if (!ids) return;
     
     try {
-      await OBR.scene.items.deleteItems([ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill]);
+      const allIds = [
+        ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill,
+        ids.crack1, ids.crack2, ids.crack3
+      ].filter(Boolean) as string[];
+      
+      await OBR.scene.items.deleteItems(allIds);
     } catch {}
     
     this.bars.delete(tokenId);
@@ -311,7 +478,6 @@ class TokenBarService {
       await this.removeBars(id);
     }
     await this.cleanup();
-    console.log("[Bars] All removed");
   }
 
   // ==========================================================================
@@ -341,7 +507,6 @@ class TokenBarService {
   }
 
   async forceRefresh(): Promise<void> {
-    console.log("[Bars] Force refresh");
     const s = new Map(this.states);
     await this.removeAllBars();
     for (const [id, st] of s) {
@@ -350,7 +515,7 @@ class TokenBarService {
   }
 
   // ==========================================================================
-  // ANIMATION
+  // ANIMATION LOOP
   // ==========================================================================
 
   private startAnim(): void {
@@ -368,33 +533,117 @@ class TokenBarService {
 
       const hpPct = state.maxHp > 0 ? state.hp / state.maxHp : 0;
       const manaPct = state.maxMana > 0 ? state.mana / state.maxMana : 0;
+      const showHp = !state.useManaAsHp;
 
-      // HP пульсация при низком здоровье
-      if (hpPct > 0 && hpPct < 0.5) {
-        const pulse = Math.sin(this.frame * 0.4) * 0.5 + 0.5;
-        const color = hpPct < 0.1
-          ? (pulse > 0.5 ? "#ff0000" : "#880000")
-          : hpPct < 0.25
-            ? (pulse > 0.5 ? "#ff2200" : "#aa0000")
-            : (pulse > 0.5 ? "#cc4400" : "#992200");
-
+      // ═══════════════════════════════════════════════════════════
+      // 🩸 HP АНИМАЦИИ
+      // ═══════════════════════════════════════════════════════════
+      
+      if (showHp && hpPct > 0 && hpPct < 0.5) {
         try {
+          // Интенсивность пульсации зависит от HP
+          const speed = hpPct < 0.1 ? 0.8 : hpPct < 0.25 ? 0.5 : 0.3;
+          const pulse = (Math.sin(this.frame * speed) + 1) / 2;  // 0-1
+          
+          let colorA: string, colorB: string;
+          
+          if (hpPct < 0.1) {
+            // Критично! Яркая быстрая пульсация красный<->тёмный
+            colorA = "#ff0000";
+            colorB = "#660000";
+          } else if (hpPct < 0.25) {
+            // Низко! Оранжево-красная пульсация
+            colorA = "#ff2200";
+            colorB = "#881100";
+          } else {
+            // Средне. Лёгкая пульсация
+            colorA = "#cc4400";
+            colorB = "#882200";
+          }
+          
+          const color = this.lerpColor(colorB, colorA, pulse);
+          
           await OBR.scene.items.updateItems([ids.hpFill], (items) => {
-            for (const i of items) if (isShape(i)) i.style.fillColor = color;
+            for (const i of items) {
+              if (isShape(i)) {
+                i.style.fillColor = color;
+              }
+            }
+          });
+
+          // Дрожание рамки при критическом HP
+          if (hpPct < 0.25 && ids.hpBg) {
+            const shakeX = (Math.random() - 0.5) * (hpPct < 0.1 ? 2 : 1);
+            const baseX = state.tokenX - state.barW / 2;
+            const baseY = state.tokenY + state.tokenH / 2 + CONFIG.BAR_OFFSET;
+            
+            await OBR.scene.items.updateItems([ids.hpBg], (items) => {
+              for (const i of items) {
+                if (isShape(i)) {
+                  i.position = { x: baseX + shakeX, y: baseY };
+                  // Пульсация рамки
+                  i.style.strokeColor = pulse > 0.5 ? "#6a2020" : "#4a1515";
+                }
+              }
+            });
+          }
+        } catch {}
+      }
+
+      // ═══════════════════════════════════════════════════════════
+      // 💀 АНИМАЦИЯ ТРЕЩИН (при смерти)
+      // ═══════════════════════════════════════════════════════════
+      
+      if (showHp && hpPct <= 0 && ids.crack1) {
+        try {
+          // Лёгкое мерцание осколков
+          const flicker = (Math.sin(this.frame * 0.3) + 1) / 2;
+          const crackColor1 = this.lerpColor("#1a0505", "#2a0a0a", flicker);
+          const crackColor2 = this.lerpColor("#2a0808", "#3a1010", flicker);
+          
+          await OBR.scene.items.updateItems([ids.crack1, ids.crack2, ids.crack3].filter(Boolean) as string[], (items) => {
+            for (const i of items) {
+              if (isShape(i)) {
+                if (i.id === ids.crack1) i.style.fillColor = crackColor1;
+                if (i.id === ids.crack2) i.style.fillColor = crackColor2;
+                if (i.id === ids.crack3) i.style.fillColor = crackColor1;
+              }
+            }
           });
         } catch {}
       }
 
-      // Mana мерцание при высокой мане
-      if (manaPct > 0.5) {
-        const shimmer = Math.sin(this.frame * 0.2) * 0.5 + 0.5;
-        const color = manaPct > 0.75
-          ? (shimmer > 0.5 ? "#4488ff" : "#2255cc")
-          : (shimmer > 0.5 ? "#3366dd" : "#2244aa");
-
+      // ═══════════════════════════════════════════════════════════
+      // 💎 MANA АНИМАЦИИ
+      // ═══════════════════════════════════════════════════════════
+      
+      if (manaPct > 0) {
         try {
+          let color: string;
+          
+          if (manaPct > 0.75) {
+            // Высокая мана - яркое мерцание
+            const shimmer = (Math.sin(this.frame * 0.25) + 1) / 2;
+            color = this.lerpColor("#2255cc", "#55aaff", shimmer);
+          } else if (manaPct > 0.5) {
+            // Средняя мана - лёгкое мерцание
+            const shimmer = (Math.sin(this.frame * 0.15) + 1) / 2;
+            color = this.lerpColor("#2244aa", "#3366cc", shimmer);
+          } else if (manaPct > 0.25) {
+            // Мало маны - тусклая
+            color = "#2244aa";
+          } else {
+            // Критически мало - тусклая пульсация
+            const dim = (Math.sin(this.frame * 0.4) + 1) / 2;
+            color = this.lerpColor("#1a2255", "#223377", dim);
+          }
+          
           await OBR.scene.items.updateItems([ids.manaFill], (items) => {
-            for (const i of items) if (isShape(i)) i.style.fillColor = color;
+            for (const i of items) {
+              if (isShape(i)) {
+                i.style.fillColor = color;
+              }
+            }
           });
         } catch {}
       }
@@ -412,13 +661,32 @@ class TokenBarService {
     return CONFIG.HP_HIGH;
   }
 
+  private lerpColor(color1: string, color2: string, t: number): string {
+    const c1 = this.hexToRgb(color1);
+    const c2 = this.hexToRgb(color2);
+    
+    const r = Math.round(c1.r + (c2.r - c1.r) * t);
+    const g = Math.round(c1.g + (c2.g - c1.g) * t);
+    const b = Math.round(c1.b + (c2.b - c1.b) * t);
+    
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  }
+
+  private hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16),
+    } : { r: 0, g: 0, b: 0 };
+  }
+
   private async cleanup(): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
       const ours = items.filter(i => i.id.startsWith(BAR_PREFIX));
       if (ours.length) {
         await OBR.scene.items.deleteItems(ours.map(i => i.id));
-        console.log(`[Bars] Cleaned ${ours.length}`);
       }
     } catch {}
   }
@@ -431,4 +699,3 @@ class TokenBarService {
 }
 
 export const tokenBarService = new TokenBarService();
-(window as any).tokenBarService = tokenBarService;
