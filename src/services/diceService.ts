@@ -159,7 +159,7 @@ function msgId(): string {
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage): Promise<void> {
-  console.log('[DiceService] Broadcasting:', msg.title);
+  console.log('[DiceService] 📤 Broadcasting:', msg.title, msg);
   
   // Эмитим локально
   emitLocal(msg);
@@ -167,8 +167,9 @@ async function broadcast(msg: BroadcastMessage): Promise<void> {
   // Отправляем всем через OBR broadcast
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+    console.log('[DiceService] ✅ Broadcast sent successfully');
   } catch (e) {
-    console.warn('[DiceService] Broadcast failed:', e);
+    console.error('[DiceService] ❌ Broadcast failed:', e);
   }
 }
 
