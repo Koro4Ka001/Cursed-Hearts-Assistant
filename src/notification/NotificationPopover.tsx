@@ -32,6 +32,7 @@ interface QueuedNotification extends NotificationMessage {
 // ═══════════════════════════════════════════════════════════════
 
 const BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
+const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
 const MAX_VISIBLE = 4;
 const DISPLAY_TIME = 5000;
 const ANIMATION_TIME = 400;
@@ -61,6 +62,7 @@ const GLOW_COLORS: Record<string, string> = {
 export function NotificationPopover() {
   const [notifications, setNotifications] = useState<QueuedNotification[]>([]);
   const timeoutsRef = useRef<Map<string, number>>(new Map());
+  const processedIdsRef = useRef<Set<string>>(new Set());
   
   console.log("[NotificationPopover] Render, notifications:", notifications.length);
   
@@ -78,6 +80,19 @@ export function NotificationPopover() {
   
   // Добавление уведомления
   const addNotification = useCallback((msg: NotificationMessage) => {
+    // Предотвращаем дубликаты
+    if (processedIdsRef.current.has(msg.id)) {
+      console.log("[NotificationPopover] Skipping duplicate:", msg.id);
+      return;
+    }
+    processedIdsRef.current.add(msg.id);
+    
+    // Очищаем старые ID (держим только последние 100)
+    if (processedIdsRef.current.size > 100) {
+      const arr = Array.from(processedIdsRef.current);
+      processedIdsRef.current = new Set(arr.slice(-50));
+    }
+    
     console.log("[NotificationPopover] Adding notification:", msg.title);
     const queued: QueuedNotification = { ...msg, state: 'entering' };
     
@@ -111,23 +126,77 @@ export function NotificationPopover() {
     timeoutsRef.current.set(msg.id, timeout);
   }, [removeNotification]);
   
-  // Слушаем broadcast
+  // Проверяем localStorage при монтировании
+  useEffect(() => {
+    const pending = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (pending) {
+      try {
+        const msg = JSON.parse(pending) as NotificationMessage;
+        console.log("[NotificationPopover] Found pending notification:", msg.title);
+        addNotification(msg);
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+      } catch (e) {
+        console.error("[NotificationPopover] Failed to parse pending:", e);
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+      }
+    }
+  }, [addNotification]);
+  
+  // Слушаем broadcast (от других игроков)
   useEffect(() => {
     console.log("[NotificationPopover] 📡 Setting up broadcast listener...");
     
     const unsubscribe = OBR.broadcast.onMessage(BROADCAST_CHANNEL, (event) => {
       const msg = event.data as NotificationMessage;
-      console.log("[NotificationPopover] 📨 Received message:", msg.title, msg);
+      console.log("[NotificationPopover] 📨 Received BROADCAST:", msg.title);
       addNotification(msg);
     });
     
-    console.log("[NotificationPopover] ✅ Listener set up for channel:", BROADCAST_CHANNEL);
+    console.log("[NotificationPopover] ✅ Broadcast listener ready");
     
     return () => {
       console.log("[NotificationPopover] 🔌 Unsubscribing...");
       unsubscribe();
       timeoutsRef.current.forEach(t => window.clearTimeout(t));
     };
+  }, [addNotification]);
+  
+  // Слушаем storage events (для локальных сообщений)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_KEY && e.newValue) {
+        try {
+          const msg = JSON.parse(e.newValue) as NotificationMessage;
+          console.log("[NotificationPopover] 📨 Received via localStorage:", msg.title);
+          addNotification(msg);
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+        } catch (err) {
+          console.error("[NotificationPopover] Parse error:", err);
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [addNotification]);
+  
+  // Периодически проверяем localStorage (fallback)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const pending = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (pending) {
+        try {
+          const msg = JSON.parse(pending) as NotificationMessage;
+          console.log("[NotificationPopover] 📨 Found pending (poll):", msg.title);
+          addNotification(msg);
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+        } catch (e) {
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+        }
+      }
+    }, 100);
+    
+    return () => clearInterval(interval);
   }, [addNotification]);
   
   // Закрываем popover когда пусто
