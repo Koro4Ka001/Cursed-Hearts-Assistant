@@ -155,57 +155,7 @@ function msgId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FORMAT MESSAGE FOR NOTIFICATION
-// ═══════════════════════════════════════════════════════════════
-
-function formatNotification(msg: BroadcastMessage): string {
-  let text = '';
-  
-  // Иконка и имя юнита
-  if (msg.icon) text += msg.icon + ' ';
-  if (msg.unitName) text += `[${msg.unitName}] `;
-  
-  // Заголовок
-  text += msg.title;
-  
-  // Подзаголовок
-  if (msg.subtitle) {
-    text += '\n' + msg.subtitle;
-  }
-  
-  // Броски
-  if (msg.rolls && msg.rolls.length > 0) {
-    const showRolls = msg.rolls.slice(0, 8).join(', ');
-    const more = msg.rolls.length > 8 ? ` ...+${msg.rolls.length - 8}` : '';
-    text += `\n[${showRolls}${more}]`;
-    
-    if (msg.total !== undefined) {
-      text += ` = ${msg.total}`;
-    }
-  }
-  
-  // Критические метки
-  if (msg.isCrit) {
-    text += '\n✨ КРИТИЧЕСКИЙ УСПЕХ! ✨';
-  } else if (msg.isCritFail) {
-    text += '\n💀 КРИТИЧЕСКИЙ ПРОВАЛ! 💀';
-  }
-  
-  // HP бар
-  if (msg.hpBar) {
-    text += `\nHP: ${msg.hpBar.current}/${msg.hpBar.max}`;
-  }
-  
-  // Детали
-  if (msg.details && msg.details.length > 0) {
-    text += '\n' + msg.details.join('\n');
-  }
-  
-  return text;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// BROADCAST — Использует встроенные уведомления OBR
+// BROADCAST — Отправляет всем игрокам с расширением
 // ═══════════════════════════════════════════════════════════════
 
 async function broadcast(msg: BroadcastMessage): Promise<void> {
@@ -214,13 +164,11 @@ async function broadcast(msg: BroadcastMessage): Promise<void> {
   // Эмитим локально
   emitLocal(msg);
   
-  // Показываем встроенное уведомление OBR
-  const notificationText = formatNotification(msg);
-  
+  // Отправляем всем через OBR broadcast
   try {
-    await OBR.notification.show(notificationText);
+    await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
   } catch (e) {
-    console.warn('[DiceService] Failed to show notification:', e);
+    console.warn('[DiceService] Broadcast failed:', e);
   }
 }
 
