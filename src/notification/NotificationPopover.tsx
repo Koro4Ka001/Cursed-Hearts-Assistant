@@ -65,11 +65,8 @@ export function NotificationPopover() {
   const processedIdsRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(false);
   
-  console.log("[NotificationPopover] Render, notifications:", notifications.length);
-  
   // Удаление уведомления
   const removeNotification = useCallback((id: string) => {
-    console.log("[NotificationPopover] Removing:", id);
     setNotifications(prev => 
       prev.map(n => n.id === id ? { ...n, state: 'exiting' as const } : n)
     );
@@ -82,7 +79,6 @@ export function NotificationPopover() {
   // Добавление уведомления
   const addNotification = useCallback((msg: NotificationMessage) => {
     if (processedIdsRef.current.has(msg.id)) {
-      console.log("[NotificationPopover] Skip duplicate:", msg.id);
       return;
     }
     processedIdsRef.current.add(msg.id);
@@ -92,7 +88,6 @@ export function NotificationPopover() {
       processedIdsRef.current = new Set(arr.slice(-50));
     }
     
-    console.log("[NotificationPopover] ✅ Adding:", msg.title);
     const queued: QueuedNotification = { ...msg, state: 'entering' };
     
     setNotifications(prev => {
@@ -134,17 +129,12 @@ export function NotificationPopover() {
       const queue = JSON.parse(data) as NotificationMessage[];
       if (!Array.isArray(queue) || queue.length === 0) return;
       
-      console.log("[NotificationPopover] 📨 Processing queue:", queue.length);
-      
-      // Очищаем localStorage сразу
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       
-      // Добавляем все сообщения
       for (const msg of queue) {
         addNotification(msg);
       }
     } catch (e) {
-      console.error("[NotificationPopover] Queue error:", e);
       localStorage.removeItem(LOCAL_STORAGE_KEY);
     }
   }, [addNotification]);
@@ -154,15 +144,12 @@ export function NotificationPopover() {
     if (mountedRef.current) return;
     mountedRef.current = true;
     
-    console.log("[NotificationPopover] 🚀 Mounted, checking queue...");
-    
-    // Небольшая задержка чтобы localStorage успел обновиться
     setTimeout(() => {
       processQueue();
     }, 50);
   }, [processQueue]);
   
-  // Polling localStorage (fallback)
+  // Polling localStorage
   useEffect(() => {
     const interval = setInterval(() => {
       processQueue();
@@ -171,13 +158,10 @@ export function NotificationPopover() {
     return () => clearInterval(interval);
   }, [processQueue]);
   
-  // Слушаем broadcast (от других игроков)
+  // Слушаем broadcast
   useEffect(() => {
-    console.log("[NotificationPopover] 📡 Setting up broadcast listener...");
-    
     const unsubscribe = OBR.broadcast.onMessage(BROADCAST_CHANNEL, (event) => {
       const msg = event.data as NotificationMessage;
-      console.log("[NotificationPopover] 📨 BROADCAST:", msg.title);
       addNotification(msg);
     });
     
@@ -191,7 +175,6 @@ export function NotificationPopover() {
   useEffect(() => {
     if (notifications.length === 0) {
       const closeTimeout = setTimeout(() => {
-        console.log("[NotificationPopover] Closing popover (empty)");
         OBR.popover.close("cursed-hearts-notification");
       }, 800);
       return () => clearTimeout(closeTimeout);
@@ -226,13 +209,31 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
   const borderColor = BORDER_COLORS[notification.color ?? 'white'];
   const glowColor = GLOW_COLORS[notification.color ?? 'white'];
   
+  // Определяем специальные классы анимации
+  const getAnimationClass = () => {
+    if (notification.isCrit) return 'crit-pulse';
+    if (notification.isCritFail) return 'fail-shake';
+    if (notification.type === 'death') return 'death-glow';
+    if (notification.type === 'heal') return 'heal-glow';
+    if (notification.type === 'spell') return 'spell-glow';
+    if (notification.color === 'mana') return 'mana-glow';
+    return '';
+  };
+  
   const cardClass = [
     'notification-card',
     notification.state,
-    notification.isCrit && 'crit-pulse',
-    notification.isCritFail && 'fail-shake',
-    notification.type === 'death' && 'death-glow'
+    getAnimationClass()
   ].filter(Boolean).join(' ');
+  
+  // HP bar state class
+  const getHpBarClass = () => {
+    if (!notification.hpBar) return '';
+    const percent = notification.hpBar.current / notification.hpBar.max;
+    if (percent <= 0.1) return 'critical';
+    if (percent <= 0.25) return 'low';
+    return '';
+  };
   
   return (
     <div 
@@ -244,16 +245,22 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
       } as React.CSSProperties}
       onClick={onDismiss}
     >
+      {/* Shine effect */}
+      <div className="card-shine" />
+      
+      {/* Header */}
       <div className="card-header">
         <span className="card-icon">{notification.icon ?? '🎲'}</span>
         <span className="card-title">{notification.title}</span>
         <span className="card-unit">{notification.unitName}</span>
       </div>
       
+      {/* Subtitle */}
       {notification.subtitle && (
         <div className="card-subtitle">{notification.subtitle}</div>
       )}
       
+      {/* Rolls */}
       {notification.rolls && notification.rolls.length > 0 && (
         <div className="card-rolls">
           <span className="rolls-dice">🎲</span>
@@ -267,6 +274,7 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
         </div>
       )}
       
+      {/* Crit markers */}
       {notification.isCrit && (
         <div className="card-crit">✨ КРИТИЧЕСКИЙ УСПЕХ! ✨</div>
       )}
@@ -274,6 +282,7 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
         <div className="card-critfail">💀 КРИТИЧЕСКИЙ ПРОВАЛ! 💀</div>
       )}
       
+      {/* Details */}
       {notification.details && notification.details.length > 0 && (
         <div className="card-details">
           {notification.details.map((detail, i) => (
@@ -282,11 +291,12 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
         </div>
       )}
       
+      {/* HP Bar */}
       {notification.hpBar && (
         <div className="card-hpbar">
           <div className="hpbar-track">
             <div 
-              className="hpbar-fill"
+              className={`hpbar-fill ${getHpBarClass()}`}
               style={{ 
                 width: `${Math.max(0, Math.min(100, (notification.hpBar.current / notification.hpBar.max) * 100))}%` 
               }}
