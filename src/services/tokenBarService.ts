@@ -18,14 +18,14 @@ const BAR_PREFIX = `${METADATA_KEY}/bar`;
 
 const CONFIG = {
   // ═══════════════════════════════════════════════════════════════════════
-  // 📐 КАЛИБРОВКА — МЕНЯЙ ЗДЕСЬ И НАЖМИ "REFRESH BARS"!
+  // 📐 КАЛИБРОВКА ПОЗИЦИИ
   // ═══════════════════════════════════════════════════════════════════════
   BAR_HEIGHT: 6,
   BAR_GAP: 2,
-  BAR_OFFSET_FROM_TOKEN: 2,  // Пикселей от нижнего края токена (2 = почти вплотную)
+  BAR_OFFSET_FROM_TOKEN: 4,  // Пикселей от нижнего края токена
   MIN_BAR_WIDTH: 40,
   MAX_BAR_WIDTH: 120,
-  BAR_WIDTH_RATIO: 0.85,     // 85% от ширины токена
+  BAR_WIDTH_RATIO: 0.85,
   
   // Цвета HP
   HP_BG_COLOR: "#1a0808",
@@ -47,7 +47,7 @@ const CONFIG = {
   Z_CRACK: 2,
   
   // Анимации
-  ANIMATION_INTERVAL: 200,
+  ANIMATION_INTERVAL: 150,
 } as const;
 
 // ============================================================================
@@ -66,7 +66,6 @@ interface BarIds {
 
 interface TokenData {
   id: string;
-  position: { x: number; y: number };
   width: number;
   height: number;
   visible: boolean;
@@ -80,6 +79,7 @@ interface BarState {
   maxMana: number;
   useManaAsHp: boolean;
   barWidth: number;
+  tokenHeight: number;
 }
 
 // ============================================================================
@@ -92,7 +92,6 @@ class TokenBarService {
   private isInitialized = false;
   private unsubscribe: (() => void) | null = null;
   
-  // Анимация
   private animationInterval: number | null = null;
   private animationFrame = 0;
   private isAnimating = false;
@@ -163,11 +162,6 @@ class TokenBarService {
       const ready = await OBR.scene.isReady();
       if (!ready) return;
 
-      // Логируем каждые 10 кадров
-      if (this.animationFrame % 10 === 0) {
-        console.log(`[TokenBarService] 🎬 Animation frame ${this.animationFrame}, bars: ${this.barStates.size}`);
-      }
-
       for (const [tokenId, state] of this.barStates.entries()) {
         const ids = this.bars.get(tokenId);
         if (!ids) continue;
@@ -175,7 +169,7 @@ class TokenBarService {
         await this.animateBar(tokenId, state, ids);
       }
     } catch (error) {
-      console.error("[TokenBarService] Animation error:", error);
+      // Молча
     } finally {
       this.isAnimating = false;
     }
@@ -186,47 +180,73 @@ class TokenBarService {
     const manaPercent = state.maxMana > 0 ? state.mana / state.maxMana : 0;
     const showHpBar = !state.useManaAsHp;
 
-    // Собираем ID
     const idsToUpdate: string[] = [];
     if (showHpBar && ids.hpFill) idsToUpdate.push(ids.hpFill);
+    if (showHpBar && ids.hpBg) idsToUpdate.push(ids.hpBg);
     if (ids.manaFill) idsToUpdate.push(ids.manaFill);
 
     if (idsToUpdate.length === 0) return;
 
     try {
+      // Вычисляем базовые позиции для сброса
+      const positions = this.calculateRelativePositions(state.tokenHeight, state.barWidth, showHpBar);
+
       await OBR.scene.items.updateItems(idsToUpdate, (items) => {
         for (const item of items) {
           if (!isShape(item)) continue;
 
           // 🩸 HP АНИМАЦИИ
-          if (item.id === ids.hpFill && showHpBar) {
-            if (hpPercent > 0 && hpPercent < 0.5) {
-              // Пульсация цвета при низком HP
-              const pulse = Math.sin(this.animationFrame * 0.5) * 0.5 + 0.5;
-              
-              if (hpPercent < 0.1) {
-                // Критический - быстрая яркая пульсация
-                item.style.fillColor = pulse > 0.5 ? "#ff0000" : "#aa0000";
-              } else if (hpPercent < 0.25) {
-                // Низкий - пульсация
-                item.style.fillColor = pulse > 0.5 ? "#ff2200" : "#cc0000";
-              } else {
-                // Средний - лёгкая пульсация
-                item.style.fillColor = pulse > 0.5 ? "#cc4400" : "#aa2200";
-              }
+          if (item.id === ids.hpFill && showHpBar && hpPercent > 0) {
+            // Пульсация цвета
+            const pulse = Math.sin(this.animationFrame * 0.4) * 0.5 + 0.5;
+            
+            if (hpPercent < 0.1) {
+              // Критический - быстрая яркая пульсация + дрожание
+              item.style.fillColor = pulse > 0.5 ? "#ff0000" : "#880000";
+              const shake = (Math.random() - 0.5) * 3;
+              item.position = { 
+                x: positions.hpFillPos.x + shake, 
+                y: positions.hpFillPos.y + (Math.random() - 0.5) * 2 
+              };
+            } else if (hpPercent < 0.25) {
+              // Низкий HP - пульсация + лёгкое дрожание
+              item.style.fillColor = pulse > 0.5 ? "#ff2200" : "#aa0000";
+              const shake = (Math.random() - 0.5) * 2;
+              item.position = { 
+                x: positions.hpFillPos.x + shake, 
+                y: positions.hpFillPos.y 
+              };
+            } else if (hpPercent < 0.5) {
+              // Средний HP - только пульсация
+              item.style.fillColor = pulse > 0.6 ? "#cc4400" : "#992200";
             }
+          }
+
+          // HP Background тоже дрожит при низком HP
+          if (item.id === ids.hpBg && showHpBar && hpPercent > 0 && hpPercent < 0.25) {
+            const shake = (Math.random() - 0.5) * (hpPercent < 0.1 ? 3 : 2);
+            item.position = { 
+              x: positions.hpBgPos.x + shake, 
+              y: positions.hpBgPos.y + (Math.random() - 0.5) 
+            };
           }
 
           // 💎 MANA АНИМАЦИИ
           if (item.id === ids.manaFill) {
+            const wave = Math.sin(this.animationFrame * 0.15);
+            
             if (manaPercent > 0.75) {
-              // Мерцание при высокой мане
-              const shimmer = Math.sin(this.animationFrame * 0.3) * 0.5 + 0.5;
-              item.style.fillColor = shimmer > 0.5 ? "#4488ff" : "#2244aa";
+              // Высокая мана - яркое мерцание
+              const shimmer = wave * 0.5 + 0.5;
+              item.style.fillColor = shimmer > 0.5 ? "#4488ff" : "#2255cc";
             } else if (manaPercent > 0.5) {
-              // Лёгкое мерцание
-              const shimmer = Math.sin(this.animationFrame * 0.2) * 0.3 + 0.7;
-              item.style.fillColor = shimmer > 0.5 ? "#3366cc" : "#2244aa";
+              // Средняя мана - лёгкое мерцание
+              const shimmer = wave * 0.3 + 0.7;
+              item.style.fillColor = shimmer > 0.5 ? "#3366dd" : "#2244aa";
+            } else if (manaPercent < 0.2 && manaPercent > 0) {
+              // Низкая мана - тусклая пульсация
+              const dim = wave * 0.2 + 0.8;
+              item.style.fillColor = dim > 0.5 ? "#334488" : "#223366";
             }
           }
         }
@@ -234,38 +254,59 @@ class TokenBarService {
 
       // 💀 ТРЕЩИНЫ ПРИ СМЕРТИ
       if (showHpBar && hpPercent <= 0 && !ids.crack1) {
-        console.log(`[TokenBarService] 💀 Creating death cracks for ${tokenId.substring(0, 8)}`);
-        await this.createDeathCracks(tokenId);
+        console.log(`[TokenBarService] 💀 HP <= 0, creating death cracks`);
+        await this.createDeathCracks(tokenId, state);
       } else if (hpPercent > 0 && ids.crack1) {
-        console.log(`[TokenBarService] ✨ Removing death cracks for ${tokenId.substring(0, 8)}`);
+        console.log(`[TokenBarService] ✨ HP > 0, removing death cracks`);
         await this.removeDeathCracks(tokenId);
       }
     } catch (error) {
-      // Молча игнорируем
+      // Молча
     }
   }
 
   // ==========================================================================
-  // ЭФФЕКТ СМЕРТИ - ТРЕЩИНЫ
+  // ВЫЧИСЛЕНИЕ ОТНОСИТЕЛЬНЫХ ПОЗИЦИЙ (относительно центра токена!)
   // ==========================================================================
 
-  private async createDeathCracks(tokenId: string): Promise<void> {
+  private calculateRelativePositions(tokenHeight: number, barWidth: number, showHpBar: boolean) {
+    // ОТНОСИТЕЛЬНО ЦЕНТРА ТОКЕНА!
+    // x = 0 — это центр по горизонтали
+    // y = tokenHeight/2 — это нижний край токена
+    
+    const halfTokenHeight = tokenHeight / 2;
+    const barX = -barWidth / 2;  // Центрируем бар
+    
+    const hpBarY = halfTokenHeight + CONFIG.BAR_OFFSET_FROM_TOKEN;
+    const manaBarY = showHpBar 
+      ? hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP 
+      : hpBarY;
+
+    return {
+      hpBgPos: { x: barX, y: hpBarY },
+      hpFillPos: { x: barX + 1, y: hpBarY + 1 },
+      manaBgPos: { x: barX, y: manaBarY },
+      manaFillPos: { x: barX + 1, y: manaBarY + 1 },
+    };
+  }
+
+  // ==========================================================================
+  // ЭФФЕКТ СМЕРТИ
+  // ==========================================================================
+
+  private async createDeathCracks(tokenId: string, state: BarState): Promise<void> {
     const ids = this.bars.get(tokenId);
-    const state = this.barStates.get(tokenId);
-    if (!ids || !state || ids.crack1) return;
+    if (!ids || ids.crack1) return;
 
     try {
-      const token = await this.getTokenData(tokenId);
-      if (!token) return;
-
-      const barWidth = state.barWidth;
-      const positions = this.calculateBarPositions(token, barWidth, true);
+      const positions = this.calculateRelativePositions(state.tokenHeight, state.barWidth, true);
       const { hpBgPos } = positions;
+      const barWidth = state.barWidth;
 
       const ts = Date.now();
       const crackShapes: Shape[] = [];
 
-      // Осколок 1 (левый, наклонён влево)
+      // Осколок 1 (левый)
       crackShapes.push(
         buildShape()
           .shapeType("RECTANGLE")
@@ -309,7 +350,7 @@ class TokenBarService {
           .build()
       );
 
-      // Осколок 3 (правый, наклонён вправо)
+      // Осколок 3 (правый)
       crackShapes.push(
         buildShape()
           .shapeType("RECTANGLE")
@@ -343,7 +384,6 @@ class TokenBarService {
         });
       }
 
-      // Сохраняем ID
       ids.crack1 = crackShapes[0].id;
       ids.crack2 = crackShapes[1].id;
       ids.crack3 = crackShapes[2].id;
@@ -365,7 +405,6 @@ class TokenBarService {
         await OBR.scene.items.deleteItems(crackIds);
       }
 
-      // Показываем HP бар
       const hpIds = [ids.hpBg, ids.hpFill].filter(Boolean);
       if (hpIds.length > 0) {
         await OBR.scene.items.updateItems(hpIds, (items) => {
@@ -399,7 +438,6 @@ class TokenBarService {
 
       return {
         id: token.id,
-        position: token.position,
         width: token.image.width * token.scale.x,
         height: token.image.height * token.scale.y,
         visible: token.visible,
@@ -407,34 +445,6 @@ class TokenBarService {
     } catch {
       return null;
     }
-  }
-
-  private calculateBarPositions(token: TokenData, barWidth: number, showHpBar: boolean) {
-    // Центр токена
-    const centerX = token.position.x;
-    const centerY = token.position.y;
-    
-    // Нижний край токена
-    const bottomEdge = centerY + token.height / 2;
-    
-    // Позиция баров (сразу под токеном)
-    const barsY = bottomEdge + CONFIG.BAR_OFFSET_FROM_TOKEN;
-    
-    // Левый край (центрируем)
-    const leftX = centerX - barWidth / 2;
-    
-    const hpBarY = barsY;
-    const manaBarY = showHpBar ? barsY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP : barsY;
-
-    console.log(`[TokenBarService] 📐 Token center: (${centerX.toFixed(0)}, ${centerY.toFixed(0)}), size: ${token.width.toFixed(0)}x${token.height.toFixed(0)}`);
-    console.log(`[TokenBarService] 📐 Bar position: (${leftX.toFixed(0)}, ${hpBarY.toFixed(0)}), width: ${barWidth.toFixed(0)}`);
-
-    return {
-      hpBgPos: { x: leftX, y: hpBarY },
-      hpFillPos: { x: leftX + 1, y: hpBarY + 1 },
-      manaBgPos: { x: leftX, y: manaBarY },
-      manaFillPos: { x: leftX + 1, y: manaBarY + 1 },
-    };
   }
 
   // ==========================================================================
@@ -452,7 +462,7 @@ class TokenBarService {
     if (!tokenId || typeof tokenId !== 'string') return;
 
     console.log(`[TokenBarService] 🔨 Creating bars for ${tokenId.substring(0, 8)}...`);
-    console.log(`[TokenBarService]    HP: ${hp}/${maxHp}, Mana: ${mana}/${maxMana}, useManaAsHp: ${useManaAsHp}`);
+    console.log(`[TokenBarService]    HP: ${hp}/${maxHp}, Mana: ${mana}/${maxMana}`);
 
     try {
       const ready = await OBR.scene.isReady();
@@ -461,7 +471,6 @@ class TokenBarService {
         return;
       }
 
-      // ВАЖНО: Удаляем старые бары
       await this.removeBars(tokenId);
 
       const token = await this.getTokenData(tokenId);
@@ -479,7 +488,11 @@ class TokenBarService {
       const manaPercent = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const showHpBar = !useManaAsHp;
 
-      const positions = this.calculateBarPositions(token, barWidth, showHpBar);
+      // ОТНОСИТЕЛЬНЫЕ позиции!
+      const positions = this.calculateRelativePositions(token.height, barWidth, showHpBar);
+
+      console.log(`[TokenBarService] 📐 Token size: ${token.width.toFixed(0)}x${token.height.toFixed(0)}`);
+      console.log(`[TokenBarService] 📐 HP bar relative pos: (${positions.hpBgPos.x.toFixed(0)}, ${positions.hpBgPos.y.toFixed(0)})`);
 
       const ts = Date.now();
       const ids: BarIds = {
@@ -498,7 +511,7 @@ class TokenBarService {
             .shapeType("RECTANGLE")
             .width(barWidth)
             .height(CONFIG.BAR_HEIGHT)
-            .position(positions.hpBgPos)
+            .position(positions.hpBgPos)  // ОТНОСИТЕЛЬНАЯ позиция!
             .attachedTo(tokenId)
             .layer("ATTACHMENT")
             .locked(true)
@@ -591,6 +604,7 @@ class TokenBarService {
           maxMana,
           useManaAsHp,
           barWidth,
+          tokenHeight: token.height,
         });
         
         console.log(`[TokenBarService] ✓ Created ${shapes.length} shapes`);
@@ -640,7 +654,7 @@ class TokenBarService {
       const manaPercent = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const showHpBar = !useManaAsHp;
 
-      const positions = this.calculateBarPositions(token, barWidth, showHpBar);
+      const positions = this.calculateRelativePositions(token.height, barWidth, showHpBar);
 
       // Обновляем состояние
       this.barStates.set(tokenId, {
@@ -651,6 +665,7 @@ class TokenBarService {
         maxMana,
         useManaAsHp,
         barWidth,
+        tokenHeight: token.height,
       });
 
       const hpFillWidth = Math.max(0, (barWidth - 2) * hpPercent);
@@ -782,19 +797,15 @@ class TokenBarService {
   }
 
   // ==========================================================================
-  // ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ (для дебага)
+  // ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ
   // ==========================================================================
 
   async forceRefresh(): Promise<void> {
     console.log("[TokenBarService] 🔄 Force refreshing all bars...");
     
-    // Сохраняем состояния
     const states = new Map(this.barStates);
-    
-    // Удаляем всё
     await this.removeAllBars();
     
-    // Пересоздаём
     for (const [tokenId, state] of states) {
       await this.createBars(
         tokenId,
@@ -838,7 +849,6 @@ class TokenBarService {
   }
 
   private async onItemsChange(items: Item[]): Promise<void> {
-    // Синхронизация видимости
     try {
       for (const [tokenId, ids] of this.bars.entries()) {
         const token = items.find(i => i.id === tokenId);
