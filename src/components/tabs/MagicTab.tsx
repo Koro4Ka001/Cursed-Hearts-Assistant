@@ -50,8 +50,8 @@ function getElementBonuses(
 
 /** Вычислить итоговую стоимость маны */
 function calculateManaCost(baseCost: number, bonuses: ElementBonuses): number {
-  // Сначала процентное снижение
   let cost = baseCost;
+  // Сначала процентное снижение
   if (bonuses.manaReductionPercent > 0) {
     cost = cost * (1 - bonuses.manaReductionPercent / 100);
   }
@@ -78,7 +78,7 @@ function calculateDamageWithBonuses(baseDamage: number, bonuses: ElementBonuses)
 export function MagicTab() {
   const { 
     units, selectedUnitId, 
-    spendMana, setHP, setMana,
+    spendMana, setHP,
     triggerEffect, addCombatLog, addNotification,
     nextRollModifier, setNextRollModifier 
   } = useGameStore();
@@ -642,3 +642,18 @@ export function MagicTab() {
               
               if (parts.length === 0) return null;
               
+              return (
+                <div key={mod.id} className="flex items-center justify-between text-xs p-1 bg-obsidian rounded">
+                  <span className="text-ancient">
+                    {ELEMENT_ICONS[mod.element] ?? '✨'} {ELEMENT_NAMES[mod.element] ?? mod.element}
+                  </span>
+                  <span className="text-gold">{parts.join(' ')}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}
