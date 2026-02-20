@@ -15,33 +15,31 @@ export type WeaponType = 'melee' | 'ranged';
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// МОДИФИКАТОР ЭЛЕМЕНТА (НОВАЯ ГИБКАЯ СИСТЕМА)
+// МОДИФИКАТОР ЭЛЕМЕНТА
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface ElementModifier {
   id: string;
-  element: string;          // 'fire', 'ice', 'lightning', etc.
-  isActive: boolean;        // Можно временно выключить
+  element: string;
+  isActive: boolean;
   
-  // ═══ АТАКА (при касте заклинаний с этим элементом) ═══
-  castBonus: number;        // +к d20 на каст/попадание
-  damageBonus: number;      // +к урону (фиксированный)
-  damageBonusPercent: number; // +% к урону (множитель)
-  manaReduction: number;    // −к стоимости маны (абсолютное)
-  manaReductionPercent: number; // −% к стоимости маны
+  // Атака
+  castBonus: number;
+  damageBonus: number;
+  damageBonusPercent: number;
+  manaReduction: number;
+  manaReductionPercent: number;
   
-  // ═══ ЗАЩИТА (при получении урона этого элемента) ═══
-  resistance: number;           // Фиксированное снижение урона
-  damageMultiplier: number;     // 1 = норма, 0.5 = резист, 1.5 = уязвимость, 0 = иммунитет
+  // Защита
+  resistance: number;
+  damageMultiplier: number;
   
-  // ═══ ДОПОЛНИТЕЛЬНО ═══
   notes?: string;
 }
 
-// Хелпер для создания пустого модификатора
 export function createEmptyElementModifier(element: string): ElementModifier {
   return {
-    id: '',  // Будет сгенерирован
+    id: '',
     element,
     isActive: true,
     castBonus: 0,
@@ -56,13 +54,13 @@ export function createEmptyElementModifier(element: string): ElementModifier {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// СТАРЫЕ ТИПЫ (для миграции, потом можно убрать)
+// СТАРЫЕ ТИПЫ (для миграции)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** @deprecated Используй ElementModifier */
+/** @deprecated */
 export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
 
-/** @deprecated Используй ElementModifier */
+/** @deprecated */
 export interface ElementAffinity {
   id: string;
   element: string;
@@ -89,7 +87,231 @@ export interface Weapon {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ЗАКЛИНАНИЯ
+// 🔮 КОНСТРУКТОР ЗАКЛИНАНИЙ V2
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Типы шагов (действий) в цепочке заклинания */
+export type SpellActionType = 
+  | 'roll_check'       // d20 + бонус vs порог (каст, попадание)
+  | 'roll_dice'        // Просто бросить кубик
+  | 'roll_table'       // Бросок → таблица → результат
+  | 'roll_damage'      // Бросок кубиков урона
+  | 'damage_tiers'     // Бросок → урон зависит от диапазона
+  | 'set_value'        // Установить переменную в контекст
+  | 'modify_resource'  // Потратить/восстановить ресурс
+  | 'apply_damage'     // Применить накопленный урон
+  | 'message'          // Показать сообщение
+  | 'branch'           // Условный переход
+  | 'goto'             // Безусловный переход
+  | 'stop';            // Остановка цепочки
+
+/** Условие перехода */
+export type TransitionCondition = 
+  | 'always'           // Всегда
+  | 'crit'             // При крите (20)
+  | 'crit_fail'        // При провале (1)
+  | 'success'          // Успех (>= порога)
+  | 'fail'             // Провал (< порога)
+  | 'value_equals'     // Значение равно
+  | 'value_gte'        // Значение >=
+  | 'value_lte'        // Значение <=
+  | 'value_in_range';  // Значение в диапазоне
+
+/** Переход после выполнения шага */
+export interface StepTransition {
+  id: string;
+  condition: TransitionCondition;
+  conditionKey?: string;
+  conditionValue?: number | string;
+  conditionValueMax?: number;
+  targetStepId: string;
+  priority: number;
+}
+
+/** Элемент таблицы результатов */
+export interface TableResultEntry {
+  id: string;
+  min: number;
+  max: number;
+  resultValue: string;
+  resultLabel?: string;
+  resultIcon?: string;
+}
+
+/** Tier урона */
+export interface DamageTierEntry {
+  id: string;
+  minRoll: number;
+  maxRoll: number;
+  formula: string;
+  label?: string;
+}
+
+/** Бонус к броску */
+export interface RollBonus {
+  type: 'stat' | 'proficiency' | 'flat' | 'from_context' | 'from_elements';
+  statKey?: string;
+  proficiencyKey?: string;
+  flatValue?: number;
+  contextKey?: string;
+  elementBonusType?: 'cast';
+  multiplier?: number;
+}
+
+/** Один шаг в цепочке заклинания */
+export interface SpellAction {
+  id: string;
+  type: SpellActionType;
+  label: string;
+  description?: string;
+  order: number;
+  
+  // Условие выполнения шага
+  condition?: {
+    type: 'always' | 'value_equals' | 'value_gte' | 'value_lte' | 'value_exists';
+    key?: string;
+    value?: number | string;
+  };
+  
+  // Для roll_check
+  diceFormula?: string;
+  bonuses?: RollBonus[];
+  successThreshold?: number;
+  useThresholdFromContext?: string;
+  
+  // Для roll_table
+  resultTable?: TableResultEntry[];
+  saveResultAs?: string;
+  
+  // Для damage_tiers
+  damageTiers?: DamageTierEntry[];
+  
+  // Для roll_damage / apply_damage
+  damageFormula?: string;
+  damageType?: DamageType | 'from_context';
+  damageTypeContextKey?: string;
+  critMultiplier?: number;
+  addDamageBonus?: boolean;
+  saveDamageAs?: string;
+  
+  // Для set_value
+  setKey?: string;
+  setValue?: string | number | boolean;
+  setValueFromContext?: string;
+  setValueFormula?: string;
+  
+  // Для modify_resource
+  resourceType?: 'mana' | 'health' | 'resource';
+  resourceId?: string;
+  resourceAmount?: number;
+  resourceAmountFormula?: string;
+  resourceOperation?: 'spend' | 'restore';
+  
+  // Для message
+  messageTemplate?: string;
+  messageType?: 'info' | 'success' | 'warning' | 'damage' | 'crit';
+  
+  // Для branch
+  branchCondition?: {
+    type: 'value_equals' | 'value_gte' | 'value_lte' | 'value_exists' | 'value_in_range';
+    key: string;
+    value?: number | string;
+    valueMax?: number;
+  };
+  branchTrueStepId?: string;
+  branchFalseStepId?: string;
+  
+  // Для goto
+  gotoStepId?: string;
+  
+  // Переходы (для roll_check и других)
+  transitions?: StepTransition[];
+  
+  // Если нет transitions — по умолчанию
+  defaultNextStepId?: string;
+}
+
+/** Глобальный модификатор заклинания */
+export interface SpellModifier {
+  id: string;
+  name?: string;
+  condition: 'always' | 'crit' | 'crit_fail' | 'roll_gte' | 'roll_lte' | 'element_is' | 'value_equals';
+  conditionKey?: string;
+  conditionValue?: number | string;
+  
+  effect: 'change_damage_type' | 'add_flat_damage' | 'multiply_damage' | 'heal_caster' | 'set_value' | 'add_message';
+  effectValue?: string | number;
+  effectKey?: string;
+}
+
+/** Контекст выполнения заклинания */
+export interface CastContext {
+  casterId: string;
+  casterName: string;
+  targetCount: number;
+  currentTargetIndex: number;
+  currentProjectileIndex: number;
+  
+  values: Record<string, any>;
+  log: string[];
+  
+  rolls: Array<{
+    stepId: string;
+    formula: string;
+    rolls: number[];
+    total: number;
+    rawD20?: number;
+    isCrit?: boolean;
+    isCritFail?: boolean;
+  }>;
+  
+  totalDamage: number;
+  damageType?: string;
+  damageBreakdown: Array<{
+    formula: string;
+    result: number;
+    type?: string;
+    isCrit?: boolean;
+  }>;
+  
+  isCrit: boolean;
+  isCritFail: boolean;
+  lastRoll?: number;
+  lastD20?: number;
+  
+  currentStepIndex: number;
+  currentStepId?: string;
+  stopped: boolean;
+  success: boolean;
+  error?: string;
+}
+
+/** Заклинание V2 (с конструктором) */
+export interface SpellV2 {
+  id: string;
+  name: string;
+  version: 2;
+  
+  cost: number;
+  costResource: 'mana' | 'health' | 'resource';
+  costResourceId?: string;
+  
+  spellType: 'targeted' | 'aoe' | 'self' | 'utility' | 'summon';
+  projectiles: string;
+  elements: string[];
+  description?: string;
+  
+  actions: SpellAction[];
+  modifiers?: SpellModifier[];
+}
+
+/** Проверка версии заклинания */
+export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
+  return 'version' in spell && spell.version === 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ЗАКЛИНАНИЯ (СТАРАЯ ВЕРСИЯ — для совместимости)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface DamageTier {
@@ -99,6 +321,7 @@ export interface DamageTier {
   label?: string;
 }
 
+/** @deprecated Используй SpellV2 */
 export interface Spell {
   id: string;
   name: string;
@@ -112,7 +335,6 @@ export interface Spell {
   description?: string;
   equipmentBonus?: number;
   
-  // Многошаговый режим
   isMultiStep?: boolean;
   elementTable?: Record<number, DamageType>;
   damageTiers?: DamageTier[];
@@ -131,7 +353,6 @@ export interface Resource {
   resourceType: 'generic' | 'ammo';
   syncWithDocs?: boolean;
   
-  // Для боеприпасов
   damageFormula?: string;
   damageType?: DamageType;
   extraDamageFormula?: string;
@@ -168,19 +389,15 @@ export interface Unit {
     piercing: number;
     bludgeoning: number;
     chopping: number;
-    magicBase: number;        // Базовая магическая защита (fallback)
+    magicBase: number;
     undead: number;
-    // magicOverrides убран — теперь в elementModifiers
   };
   
-  // ═══ НОВАЯ СИСТЕМА МОДИФИКАТОРОВ ЭЛЕМЕНТОВ ═══
   elementModifiers: ElementModifier[];
-  
-  // Физические множители (уязвимости к физ. урону)
-  physicalMultipliers?: Record<string, number>;  // 'slashing': 1.5, etc.
+  physicalMultipliers?: Record<string, number>;
   
   weapons: Weapon[];
-  spells: Spell[];
+  spells: (Spell | SpellV2)[];
   resources: Resource[];
   
   useManaAsHp: boolean;
@@ -189,12 +406,11 @@ export interface Unit {
   hasDoubleShot?: boolean;
   doubleShotThreshold?: number;
   
-  // ═══ DEPRECATED (для миграции) ═══
-  /** @deprecated Перенесено в elementModifiers */
+  /** @deprecated */
   magicBonuses?: Record<string, number>;
-  /** @deprecated Перенесено в elementModifiers */
+  /** @deprecated */
   elementAffinities?: ElementAffinity[];
-  /** @deprecated Физические в physicalMultipliers, магические в elementModifiers */
+  /** @deprecated */
   damageMultipliers?: Record<string, number>;
 }
 
@@ -296,7 +512,25 @@ export const ELEMENT_NAMES: Record<string, string> = {
   time: 'Время',
   space: 'Пространство',
   chaos: 'Хаос',
-  order: 'Порядок'
+  order: 'Порядок',
+  // Русские названия из constants/elements.ts
+  'огонь': 'Огонь',
+  'вода': 'Вода',
+  'земля': 'Земля',
+  'воздух': 'Воздух',
+  'свет': 'Свет',
+  'тьма': 'Тьма',
+  'электричество': 'Электричество',
+  'мороз': 'Мороз',
+  'природа': 'Природа',
+  'пустота': 'Пустота',
+  'скверна': 'Скверна',
+  'смерть': 'Смерть',
+  'жизнь': 'Жизнь',
+  'кровь': 'Кровь',
+  'астрал': 'Астрал',
+  'пространство': 'Пространство',
+  'трансцендентность': 'Трансцендентность'
 };
 
 export const PROFICIENCY_NAMES: Record<ProficiencyType, string> = {
@@ -317,7 +551,7 @@ export const STAT_NAMES: Record<string, string> = {
   initiative: 'Инициатива'
 };
 
-/** @deprecated Используй ElementModifier */
+/** @deprecated */
 export const AFFINITY_BONUS_NAMES: Record<AffinityBonusType, string> = {
   castHit: '+к касту/попаданию',
   manaCost: '−к затрате маны',
@@ -352,3 +586,87 @@ export const MULTIPLIER_OPTIONS = [
   { value: 2, label: '×2 (Сильная уязв.)' },
   { value: 3, label: '×3 (Крит. уязв.)' }
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ТИПЫ ШАГОВ ЗАКЛИНАНИЙ — МЕТАДАННЫЕ
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const SPELL_ACTION_TYPE_META: Record<SpellActionType, {
+  name: string;
+  icon: string;
+  description: string;
+  color: string;
+}> = {
+  roll_check: {
+    name: 'Проверка',
+    icon: '🎯',
+    description: 'd20 + бонусы против порога',
+    color: 'text-gold'
+  },
+  roll_dice: {
+    name: 'Бросок',
+    icon: '🎲',
+    description: 'Бросить кубики и сохранить результат',
+    color: 'text-ancient'
+  },
+  roll_table: {
+    name: 'Таблица',
+    icon: '📋',
+    description: 'Бросок → результат из таблицы',
+    color: 'text-mana-bright'
+  },
+  roll_damage: {
+    name: 'Урон',
+    icon: '💥',
+    description: 'Бросок кубиков урона',
+    color: 'text-blood-bright'
+  },
+  damage_tiers: {
+    name: 'Tier-урон',
+    icon: '⚔️',
+    description: 'Урон зависит от броска',
+    color: 'text-blood-bright'
+  },
+  set_value: {
+    name: 'Установить',
+    icon: '📝',
+    description: 'Сохранить значение в контекст',
+    color: 'text-faded'
+  },
+  modify_resource: {
+    name: 'Ресурс',
+    icon: '💠',
+    description: 'Изменить ресурс (мана/HP)',
+    color: 'text-mana-bright'
+  },
+  apply_damage: {
+    name: 'Применить',
+    icon: '🩸',
+    description: 'Применить накопленный урон',
+    color: 'text-blood'
+  },
+  message: {
+    name: 'Сообщение',
+    icon: '💬',
+    description: 'Показать сообщение в логе',
+    color: 'text-bone'
+  },
+  branch: {
+    name: 'Ветвление',
+    icon: '🔀',
+    description: 'Условный переход',
+    color: 'text-purple-400'
+  },
+  goto: {
+    name: 'Переход',
+    icon: '➡️',
+    description: 'Перейти к шагу',
+    color: 'text-purple-400'
+  },
+  stop: {
+    name: 'Стоп',
+    icon: '🛑',
+    description: 'Остановить выполнение',
+    color: 'text-blood'
+  }
+};
