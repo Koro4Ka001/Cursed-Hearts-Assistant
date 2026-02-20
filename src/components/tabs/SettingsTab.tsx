@@ -8,12 +8,12 @@ import { docsService } from '../../services/docsService';
 import { selectToken } from '../../services/hpTrackerService';
 import type { 
   Unit, Weapon, Spell, Resource, DamageType, ProficiencyType, WeaponType,
-  ElementAffinity, AffinityBonusType
+  ElementModifier
 } from '../../types';
 import { 
   DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES, 
-  ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS,
-  ELEMENT_NAMES, AFFINITY_BONUS_NAMES
+  ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS, PHYSICAL_DAMAGE_TYPES,
+  ELEMENT_NAMES, createEmptyElementModifier
 } from '../../types';
 import { MAGIC_ELEMENTS, SPELL_TYPES, ELEMENT_ICONS, DEFAULT_ELEMENT_TABLE, DEFAULT_DAMAGE_TIERS } from '../../constants/elements';
 
@@ -230,7 +230,9 @@ export function SettingsTab() {
   );
 }
 
-// === РЕДАКТОР ЮНИТА ===
+// ═══════════════════════════════════════════════════════════════════════════
+// РЕДАКТОР ЮНИТА
+// ═══════════════════════════════════════════════════════════════════════════
 
 interface UnitEditorProps {
   unit: Unit;
@@ -242,8 +244,7 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   const [editorTab, setEditorTab] = useState('basic');
   const [localUnit, setLocalUnit] = useState<Unit>({ 
     ...unit,
-    // Миграция: добавляем elementAffinities если их нет
-    elementAffinities: unit.elementAffinities ?? []
+    elementModifiers: unit.elementModifiers ?? []
   });
   
   const update = (partial: Partial<Unit>) => {
@@ -253,7 +254,7 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   const editorTabs = [
     { id: 'basic', label: 'Основное' },
     { id: 'stats', label: 'Статы' },
-    { id: 'affinity', label: '🔮 Предрасп.' },  // НОВАЯ ВКЛАДКА
+    { id: 'elements', label: '🔮 Элементы' },  // НОВАЯ ВКЛАДКА
     { id: 'armor', label: 'Броня' },
     { id: 'weapons', label: 'Оружие' },
     { id: 'spells', label: 'Заклинания' },
@@ -419,36 +420,17 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
               />
             ))}
           </div>
-          
-          <div className="text-xs text-faded uppercase mb-2 mt-4">Магические бонусы (к касту)</div>
-          <MagicBonusesEditor
-            bonuses={localUnit.magicBonuses ?? {}}
-            onChange={(magicBonuses) => update({ magicBonuses })}
-          />
         </div>
       )}
       
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* НОВАЯ ВКЛАДКА: ПРЕДРАСПОЛОЖЕННОСТИ */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {editorTab === 'affinity' && (
-        <div className="space-y-3">
-          <div className="p-2 bg-obsidian rounded border border-edge-bone">
-            <div className="text-xs text-faded mb-2">
-              🔮 <strong>Предрасположенности к элементам</strong> дают бонусы при касте заклинаний с этими элементами:
-            </div>
-            <ul className="text-xs text-faded space-y-1 ml-4">
-              <li>• <span className="text-gold">+к касту/попаданию</span> — добавляется к броску d20</li>
-              <li>• <span className="text-mana-bright">−к затрате маны</span> — снижает стоимость заклинания</li>
-              <li>• <span className="text-blood-bright">+к урону</span> — добавляется к урону</li>
-            </ul>
-          </div>
-          
-          <ElementAffinitiesEditor
-            affinities={localUnit.elementAffinities ?? []}
-            onChange={(elementAffinities) => update({ elementAffinities })}
-          />
-        </div>
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* НОВАЯ ВКЛАДКА: МОДИФИКАТОРЫ ЭЛЕМЕНТОВ */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {editorTab === 'elements' && (
+        <ElementModifiersEditor
+          modifiers={localUnit.elementModifiers ?? []}
+          onChange={(elementModifiers) => update({ elementModifiers })}
+        />
       )}
       
       {/* БРОНЯ */}
@@ -481,21 +463,15 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
           </div>
           
           <div>
-            <div className="text-xs text-faded uppercase mb-2">Магическая защита</div>
+            <div className="text-xs text-faded uppercase mb-2">Магическая защита (базовая)</div>
             <NumberStepper
-              label="Базовая"
+              label="Все магические элементы"
               value={localUnit.armor?.magicBase ?? 0}
               onChange={(v) => update({ armor: { ...(localUnit.armor ?? {}), magicBase: v } })}
             />
-            
-            <div className="mt-2">
-              <MagicArmorEditor
-                overrides={localUnit.armor?.magicOverrides ?? {}}
-                onChange={(magicOverrides) => update({ 
-                  armor: { ...(localUnit.armor ?? {}), magicOverrides } 
-                })}
-              />
-            </div>
+            <p className="text-xs text-faded mt-1">
+              💡 Точечная настройка защиты по элементам — во вкладке "🔮 Элементы"
+            </p>
           </div>
           
           <NumberStepper
@@ -505,10 +481,10 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
           />
           
           <div>
-            <div className="text-xs text-faded uppercase mb-2">Множители урона</div>
-            <DamageMultipliersEditor
-              multipliers={localUnit.damageMultipliers ?? {}}
-              onChange={(damageMultipliers) => update({ damageMultipliers })}
+            <div className="text-xs text-faded uppercase mb-2">Физические уязвимости/резисты</div>
+            <PhysicalMultipliersEditor
+              multipliers={localUnit.physicalMultipliers ?? {}}
+              onChange={(physicalMultipliers) => update({ physicalMultipliers })}
             />
           </div>
         </div>
@@ -551,301 +527,278 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// НОВЫЙ КОМПОНЕНТ: РЕДАКТОР ПРЕДРАСПОЛОЖЕННОСТЕЙ
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// НОВЫЙ КОМПОНЕНТ: РЕДАКТОР МОДИФИКАТОРОВ ЭЛЕМЕНТОВ
+// ═══════════════════════════════════════════════════════════════════════════
 
-function ElementAffinitiesEditor({
-  affinities,
+function ElementModifiersEditor({
+  modifiers,
   onChange
 }: {
-  affinities: ElementAffinity[];
-  onChange: (affinities: ElementAffinity[]) => void;
+  modifiers: ElementModifier[];
+  onChange: (modifiers: ElementModifier[]) => void;
 }) {
-  const [newElement, setNewElement] = useState('');
-  const [newBonusType, setNewBonusType] = useState<AffinityBonusType>('castHit');
-  const [newValue, setNewValue] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   
-  const addAffinity = () => {
-    if (!newElement) return;
-    
-    const newAff: ElementAffinity = {
-      id: generateId(),
-      element: newElement,
-      bonusType: newBonusType,
-      value: newValue
+  const addModifier = (element: string) => {
+    const newMod: ElementModifier = {
+      ...createEmptyElementModifier(element),
+      id: generateId()
     };
-    onChange([...affinities, newAff]);
-    setNewElement('');
-    setNewValue(1);
+    onChange([...modifiers, newMod]);
+    setExpandedId(newMod.id);
   };
   
-  const updateAffinity = (id: string, updates: Partial<ElementAffinity>) => {
-    onChange(affinities.map(a => a.id === id ? { ...a, ...updates } : a));
+  const updateModifier = (id: string, updates: Partial<ElementModifier>) => {
+    onChange(modifiers.map(m => m.id === id ? { ...m, ...updates } : m));
   };
   
-  const deleteAffinity = (id: string) => {
-    onChange(affinities.filter(a => a.id !== id));
+  const deleteModifier = (id: string) => {
+    onChange(modifiers.filter(m => m.id !== id));
+    if (expandedId === id) setExpandedId(null);
   };
   
-  // Группируем по элементам для удобства
-  const groupedByElement = affinities.reduce((acc, aff) => {
-    if (!acc[aff.element]) acc[aff.element] = [];
-    acc[aff.element]!.push(aff);
-    return acc;
-  }, {} as Record<string, ElementAffinity[]>);
-  
-  const getBonusColor = (type: AffinityBonusType): string => {
-    switch (type) {
-      case 'castHit': return 'text-gold';
-      case 'manaCost': return 'text-mana-bright';
-      case 'damage': return 'text-blood-bright';
-      default: return 'text-bone';
+  const toggleActive = (id: string) => {
+    const mod = modifiers.find(m => m.id === id);
+    if (mod) {
+      updateModifier(id, { isActive: !mod.isActive });
     }
   };
   
-  const getBonusIcon = (type: AffinityBonusType): string => {
-    switch (type) {
-      case 'castHit': return '🎯';
-      case 'manaCost': return '💠';
-      case 'damage': return '💥';
-      default: return '✨';
-    }
+  // Элементы, которые ещё не добавлены
+  const usedElements = new Set(modifiers.map(m => m.element));
+  const availableElements = MAGIC_ELEMENTS.filter(e => !usedElements.has(e));
+  
+  // Хелпер для отображения бонусов
+  const getBonusSummary = (mod: ElementModifier): string => {
+    const parts: string[] = [];
+    
+    if (mod.castBonus !== 0) parts.push(`🎯${mod.castBonus > 0 ? '+' : ''}${mod.castBonus}`);
+    if (mod.damageBonus !== 0) parts.push(`💥${mod.damageBonus > 0 ? '+' : ''}${mod.damageBonus}`);
+    if (mod.damageBonusPercent !== 0) parts.push(`💥${mod.damageBonusPercent > 0 ? '+' : ''}${mod.damageBonusPercent}%`);
+    if (mod.manaReduction !== 0) parts.push(`💠−${mod.manaReduction}`);
+    if (mod.manaReductionPercent !== 0) parts.push(`💠−${mod.manaReductionPercent}%`);
+    if (mod.resistance !== 0) parts.push(`🛡️${mod.resistance}`);
+    if (mod.damageMultiplier !== 1) parts.push(`×${mod.damageMultiplier}`);
+    
+    return parts.length > 0 ? parts.join(' ') : 'Нет эффектов';
+  };
+  
+  const getMultiplierColor = (mult: number): string => {
+    if (mult === 0) return 'text-green-400';  // Иммунитет
+    if (mult < 1) return 'text-green-500';    // Резист
+    if (mult > 1) return 'text-blood-bright'; // Уязвимость
+    return 'text-faded';
   };
   
   return (
     <div className="space-y-3">
-      {/* Список существующих предрасположенностей */}
-      {Object.entries(groupedByElement).map(([element, affs]) => (
-        <div key={element} className="p-2 bg-obsidian rounded border border-edge-bone">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">{ELEMENT_ICONS[element] ?? '✨'}</span>
-            <span className="text-ancient font-cinzel uppercase text-sm">
-              {ELEMENT_NAMES[element] ?? element}
-            </span>
-          </div>
-          
-          <div className="space-y-2">
-            {affs.map(aff => (
-              <div key={aff.id} className="flex items-center gap-2 pl-6">
-                <span className={`text-sm ${getBonusColor(aff.bonusType)}`}>
-                  {getBonusIcon(aff.bonusType)} {AFFINITY_BONUS_NAMES[aff.bonusType]}
-                </span>
-                <NumberStepper
-                  value={aff.value}
-                  onChange={(v) => updateAffinity(aff.id, { value: v })}
-                  min={1}
-                  max={30}
-                />
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => deleteAffinity(aff.id)}
+      {/* Инструкция */}
+      <div className="p-2 bg-obsidian rounded border border-edge-bone">
+        <div className="text-xs text-faded space-y-1">
+          <p>🔮 <strong>Модификаторы элементов</strong> — всё в одном месте:</p>
+          <ul className="ml-4 space-y-0.5">
+            <li>• <span className="text-gold">Атака</span>: бонусы при касте заклинаний с этим элементом</li>
+            <li>• <span className="text-mana-bright">Защита</span>: сопротивление/уязвимость к урону этого элемента</li>
+          </ul>
+        </div>
+      </div>
+      
+      {/* Список модификаторов */}
+      {modifiers.length === 0 ? (
+        <div className="text-center text-faded text-sm py-6">
+          <div className="text-3xl mb-2">✨</div>
+          <p>Нет модификаторов элементов</p>
+          <p className="text-xs mt-1">Добавьте элемент ниже</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {modifiers.map(mod => {
+            const isExpanded = expandedId === mod.id;
+            const icon = ELEMENT_ICONS[mod.element] ?? '✨';
+            const name = ELEMENT_NAMES[mod.element] ?? mod.element;
+            
+            return (
+              <div
+                key={mod.id}
+                className={`rounded border transition-all ${
+                  mod.isActive 
+                    ? 'border-gold/50 bg-panel' 
+                    : 'border-edge-bone bg-obsidian opacity-60'
+                }`}
+              >
+                {/* Заголовок карточки */}
+                <div 
+                  className="flex items-center gap-2 p-2 cursor-pointer"
+                  onClick={() => setExpandedId(isExpanded ? null : mod.id)}
                 >
-                  ×
-                </Button>
+                  <span className="text-xl">{icon}</span>
+                  <span className="font-cinzel text-bone flex-1">{name}</span>
+                  
+                  {/* Краткая сводка */}
+                  {!isExpanded && (
+                    <span className="text-xs text-ancient">
+                      {getBonusSummary(mod)}
+                    </span>
+                  )}
+                  
+                  {/* Кнопки */}
+                  <button
+                    className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                      mod.isActive 
+                        ? 'bg-green-500/20 text-green-400' 
+                        : 'bg-red-500/20 text-red-400'
+                    }`}
+                    onClick={(e) => { e.stopPropagation(); toggleActive(mod.id); }}
+                  >
+                    {mod.isActive ? '✓' : '✗'}
+                  </button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); deleteModifier(mod.id); }}
+                  >
+                    🗑️
+                  </Button>
+                  <span className="text-faded">{isExpanded ? '▲' : '▼'}</span>
+                </div>
+                
+                {/* Развёрнутое содержимое */}
+                {isExpanded && (
+                  <div className="px-3 pb-3 space-y-4 border-t border-edge-bone pt-3">
+                    
+                    {/* ═══ АТАКА ═══ */}
+                    <div>
+                      <div className="text-xs text-gold uppercase mb-2 flex items-center gap-1">
+                        ⚔️ АТАКА
+                        <span className="text-faded font-normal normal-case">(при касте заклинаний {name})</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <NumberStepper
+                          label="🎯 К касту/попаданию"
+                          value={mod.castBonus}
+                          onChange={(v) => updateModifier(mod.id, { castBonus: v })}
+                          min={-30}
+                          max={30}
+                        />
+                        <NumberStepper
+                          label="💥 К урону (фикс)"
+                          value={mod.damageBonus}
+                          onChange={(v) => updateModifier(mod.id, { damageBonus: v })}
+                          min={-100}
+                          max={100}
+                        />
+                        <NumberStepper
+                          label="💥 К урону (%)"
+                          value={mod.damageBonusPercent}
+                          onChange={(v) => updateModifier(mod.id, { damageBonusPercent: v })}
+                          min={-100}
+                          max={500}
+                        />
+                        <NumberStepper
+                          label="💠 −Мана (фикс)"
+                          value={mod.manaReduction}
+                          onChange={(v) => updateModifier(mod.id, { manaReduction: v })}
+                          min={0}
+                          max={100}
+                        />
+                        <NumberStepper
+                          label="💠 −Мана (%)"
+                          value={mod.manaReductionPercent}
+                          onChange={(v) => updateModifier(mod.id, { manaReductionPercent: v })}
+                          min={0}
+                          max={100}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* ═══ ЗАЩИТА ═══ */}
+                    <div>
+                      <div className="text-xs text-mana-bright uppercase mb-2 flex items-center gap-1">
+                        🛡️ ЗАЩИТА
+                        <span className="text-faded font-normal normal-case">(при получении урона {name})</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <NumberStepper
+                          label="🛡️ Сопротивление (фикс)"
+                          value={mod.resistance}
+                          onChange={(v) => updateModifier(mod.id, { resistance: v })}
+                          min={0}
+                          max={999}
+                        />
+                        
+                        <div>
+                          <div className="text-xs text-faded mb-1">⚡ Множитель урона</div>
+                          <Select
+                            value={mod.damageMultiplier.toString()}
+                            onChange={(e) => updateModifier(mod.id, { 
+                              damageMultiplier: parseFloat(e.target.value) 
+                            })}
+                            options={MULTIPLIER_OPTIONS.map(o => ({ 
+                              value: o.value.toString(), 
+                              label: o.label 
+                            }))}
+                            className={getMultiplierColor(mod.damageMultiplier)}
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Подсказка по множителю */}
+                      <div className="mt-2 text-xs text-faded">
+                        {mod.damageMultiplier === 0 && '🟢 Полный иммунитет к урону этого элемента'}
+                        {mod.damageMultiplier > 0 && mod.damageMultiplier < 1 && '🟢 Сопротивление: урон снижен'}
+                        {mod.damageMultiplier === 1 && '⚪ Нормальный урон'}
+                        {mod.damageMultiplier > 1 && '🔴 Уязвимость: урон увеличен'}
+                      </div>
+                    </div>
+                    
+                    {/* ═══ ЗАМЕТКИ ═══ */}
+                    <div>
+                      <Input
+                        label="📝 Заметки"
+                        value={mod.notes ?? ''}
+                        onChange={(e) => updateModifier(mod.id, { notes: e.target.value })}
+                        placeholder="Откуда этот бонус (предмет, талант, и т.д.)"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
+            );
+          })}
+        </div>
+      )}
+      
+      {/* Добавление нового элемента */}
+      {availableElements.length > 0 && (
+        <div className="pt-2 border-t border-edge-bone">
+          <div className="text-xs text-faded uppercase mb-2">+ Добавить элемент</div>
+          <div className="flex flex-wrap gap-1">
+            {availableElements.map(element => (
+              <button
+                key={element}
+                onClick={() => addModifier(element)}
+                className="px-2 py-1 rounded text-xs border border-edge-bone bg-obsidian 
+                           text-faded hover:border-gold hover:text-gold transition-colors"
+                title={ELEMENT_NAMES[element] ?? element}
+              >
+                {ELEMENT_ICONS[element] ?? '✨'} {ELEMENT_NAMES[element] ?? element}
+              </button>
             ))}
           </div>
         </div>
-      ))}
-      
-      {affinities.length === 0 && (
-        <div className="text-center text-faded text-sm py-4">
-          Нет предрасположенностей. Добавьте ниже.
-        </div>
-      )}
-      
-      {/* Форма добавления новой предрасположенности */}
-      <div className="p-3 bg-panel rounded border border-gold/30">
-        <div className="text-xs text-gold uppercase mb-2">+ Добавить предрасположенность</div>
-        
-        <div className="space-y-2">
-          <Select
-            label="Элемент"
-            value={newElement}
-            onChange={(e) => setNewElement(e.target.value)}
-            options={[
-              { value: '', label: '-- Выберите элемент --' },
-              ...MAGIC_ELEMENTS.map(e => ({
-                value: e,
-                label: `${ELEMENT_ICONS[e] ?? '✨'} ${ELEMENT_NAMES[e] ?? e}`
-              }))
-            ]}
-          />
-          
-          <Select
-            label="Тип бонуса"
-            value={newBonusType}
-            onChange={(e) => setNewBonusType(e.target.value as AffinityBonusType)}
-            options={[
-              { value: 'castHit', label: '🎯 +к касту/попаданию' },
-              { value: 'manaCost', label: '💠 −к затрате маны' },
-              { value: 'damage', label: '💥 +к урону' }
-            ]}
-          />
-          
-          <NumberStepper
-            label="Значение"
-            value={newValue}
-            onChange={setNewValue}
-            min={1}
-            max={30}
-          />
-          
-          <Button
-            variant="gold"
-            onClick={addAffinity}
-            disabled={!newElement}
-            className="w-full"
-          >
-            + Добавить
-          </Button>
-        </div>
-      </div>
-      
-      {/* Подсказка */}
-      <div className="text-xs text-faded">
-        💡 Можно добавить несколько бонусов на один элемент (например, +2 к касту И −3 к мане для огня)
-      </div>
-    </div>
-  );
-}
-
-// === РЕДАКТОР МАГИЧЕСКИХ БОНУСОВ ===
-
-function MagicBonusesEditor({
-  bonuses,
-  onChange
-}: {
-  bonuses: Record<string, number>;
-  onChange: (bonuses: Record<string, number>) => void;
-}) {
-  const [newElement, setNewElement] = useState('');
-  
-  const addBonus = () => {
-    if (newElement && !bonuses[newElement]) {
-      onChange({ ...bonuses, [newElement]: 0 });
-      setNewElement('');
-    }
-  };
-  
-  const updateBonus = (element: string, value: number) => {
-    onChange({ ...bonuses, [element]: value });
-  };
-  
-  const removeBonus = (element: string) => {
-    const { [element]: _, ...rest } = bonuses;
-    onChange(rest);
-  };
-  
-  const availableElements = MAGIC_ELEMENTS.filter(e => !bonuses[e]);
-  
-  return (
-    <div className="space-y-2">
-      {Object.entries(bonuses).map(([element, value]) => (
-        <div key={element} className="flex items-center gap-2">
-          <span className="text-ancient flex-1">
-            {ELEMENT_ICONS[element] ?? '✨'} {ELEMENT_NAMES[element] ?? element}
-          </span>
-          <NumberStepper
-            value={value}
-            onChange={(v) => updateBonus(element, v)}
-            min={-10}
-            max={30}
-          />
-          <Button variant="danger" size="sm" onClick={() => removeBonus(element)}>×</Button>
-        </div>
-      ))}
-      
-      {availableElements.length > 0 && (
-        <div className="flex gap-2">
-          <Select
-            value={newElement}
-            onChange={(e) => setNewElement(e.target.value)}
-            options={[
-              { value: '', label: '+ Добавить элемент' },
-              ...availableElements.map(e => ({
-                value: e,
-                label: `${ELEMENT_ICONS[e] ?? '✨'} ${ELEMENT_NAMES[e] ?? e}`
-              }))
-            ]}
-            className="flex-1"
-          />
-          {newElement && (
-            <Button variant="gold" size="sm" onClick={addBonus}>+</Button>
-          )}
-        </div>
       )}
     </div>
   );
 }
 
-// === РЕДАКТОР МАГИЧЕСКОЙ ЗАЩИТЫ ===
+// ═══════════════════════════════════════════════════════════════════════════
+// ФИЗИЧЕСКИЕ МНОЖИТЕЛИ
+// ═══════════════════════════════════════════════════════════════════════════
 
-function MagicArmorEditor({
-  overrides,
-  onChange
-}: {
-  overrides: Record<string, number>;
-  onChange: (overrides: Record<string, number>) => void;
-}) {
-  const [newElement, setNewElement] = useState('');
-  
-  const magicalTypes = ALL_DAMAGE_TYPES.filter(t => 
-    !['slashing', 'piercing', 'bludgeoning', 'chopping', 'pure'].includes(t)
-  );
-  const availableElements = magicalTypes.filter(e => overrides[e] === undefined);
-  
-  const addOverride = () => {
-    if (newElement && overrides[newElement] === undefined) {
-      onChange({ ...overrides, [newElement]: 0 });
-      setNewElement('');
-    }
-  };
-  
-  return (
-    <div className="space-y-2">
-      <div className="text-xs text-faded">Защита по элементам:</div>
-      {Object.entries(overrides).map(([element, value]) => (
-        <div key={element} className="flex items-center gap-2">
-          <span className="text-ancient flex-1">{DAMAGE_TYPE_NAMES[element as DamageType] ?? element}</span>
-          <NumberStepper
-            value={value}
-            onChange={(v) => onChange({ ...overrides, [element]: v })}
-            min={0}
-            max={999}
-          />
-          <Button variant="danger" size="sm" onClick={() => {
-            const { [element]: _, ...rest } = overrides;
-            onChange(rest);
-          }}>×</Button>
-        </div>
-      ))}
-      
-      {availableElements.length > 0 && (
-        <div className="flex gap-2">
-          <Select
-            value={newElement}
-            onChange={(e) => setNewElement(e.target.value)}
-            options={[
-              { value: '', label: '+ Добавить элемент' },
-              ...availableElements.map(e => ({ value: e, label: DAMAGE_TYPE_NAMES[e] ?? e }))
-            ]}
-            className="flex-1"
-          />
-          {newElement && (
-            <Button variant="gold" size="sm" onClick={addOverride}>+</Button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// === РЕДАКТОР МНОЖИТЕЛЕЙ УРОНА ===
-
-function DamageMultipliersEditor({
+function PhysicalMultipliersEditor({
   multipliers,
   onChange
 }: {
@@ -853,7 +806,7 @@ function DamageMultipliersEditor({
   onChange: (multipliers: Record<string, number>) => void;
 }) {
   const [newType, setNewType] = useState('');
-  const availableTypes = ALL_DAMAGE_TYPES.filter(t => multipliers[t] === undefined);
+  const availableTypes = PHYSICAL_DAMAGE_TYPES.filter(t => multipliers[t] === undefined);
   
   const addMultiplier = () => {
     if (newType && multipliers[newType] === undefined) {
@@ -879,7 +832,7 @@ function DamageMultipliersEditor({
             value={value.toString()}
             onChange={(e) => onChange({ ...multipliers, [type]: parseFloat(e.target.value) })}
             options={MULTIPLIER_OPTIONS.map(o => ({ value: o.value.toString(), label: o.label }))}
-            className="w-32"
+            className="w-40"
           />
           <Button variant="danger" size="sm" onClick={() => {
             const { [type]: _, ...rest } = multipliers;
@@ -904,11 +857,19 @@ function DamageMultipliersEditor({
           )}
         </div>
       )}
+      
+      {Object.keys(multipliers).length === 0 && availableTypes.length === PHYSICAL_DAMAGE_TYPES.length && (
+        <div className="text-xs text-faded">
+          Нет физических уязвимостей/резистов. Выберите тип выше.
+        </div>
+      )}
     </div>
   );
 }
 
-// === ВЫБОР ЭЛЕМЕНТОВ ЗАКЛИНАНИЯ ===
+// ═══════════════════════════════════════════════════════════════════════════
+// ВЫБОР ЭЛЕМЕНТОВ ЗАКЛИНАНИЯ
+// ═══════════════════════════════════════════════════════════════════════════
 
 function ElementsPicker({
   selected,
@@ -958,7 +919,9 @@ function ElementsPicker({
   );
 }
 
-// === РЕДАКТОР ОРУЖИЯ ===
+// ═══════════════════════════════════════════════════════════════════════════
+// РЕДАКТОР ОРУЖИЯ
+// ═══════════════════════════════════════════════════════════════════════════
 
 function WeaponsEditor({
   weapons,
@@ -1117,7 +1080,9 @@ function WeaponsEditor({
   );
 }
 
-// === РЕДАКТОР ЗАКЛИНАНИЙ ===
+// ═══════════════════════════════════════════════════════════════════════════
+// РЕДАКТОР ЗАКЛИНАНИЙ
+// ═══════════════════════════════════════════════════════════════════════════
 
 function SpellsEditor({
   spells,
@@ -1382,7 +1347,9 @@ function SpellsEditor({
   );
 }
 
-// === РЕДАКТОР РЕСУРСОВ ===
+// ═══════════════════════════════════════════════════════════════════════════
+// РЕДАКТОР РЕСУРСОВ
+// ═══════════════════════════════════════════════════════════════════════════
 
 function ResourcesEditor({
   resources,
