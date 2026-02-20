@@ -2,12 +2,12 @@
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { 
-  Button, Section, Select, NumberStepper, Checkbox, 
+  Button, Section, Select, NumberStepper,
   DiceResultDisplay, EmptyState, RollModifierSelector 
 } from '../ui';
 import { diceService } from '../../services/diceService';
-import { rollDice, parseFormula } from '../../utils/dice';
-import type { DiceRollResult, Spell, DamageType, AffinityBonusType } from '../../types';
+import { rollDice } from '../../utils/dice';
+import type { DiceRollResult, Spell, ElementModifier } from '../../types';
 import { DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../../types';
 import { ELEMENT_ICONS, SPELL_TYPES } from '../../constants/elements';
 
@@ -15,34 +15,60 @@ import { ELEMENT_ICONS, SPELL_TYPES } from '../../constants/elements';
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Получить бонусы от предрасположенностей для элементов заклинания */
-function getAffinityBonuses(
-  elements: string[],
-  affinities: { element: string; bonusType: AffinityBonusType; value: number }[]
-): { castBonus: number; manaReduction: number; damageBonus: number } {
-  let castBonus = 0;
-  let manaReduction = 0;
-  let damageBonus = 0;
+interface ElementBonuses {
+  castBonus: number;
+  damageBonus: number;
+  damageBonusPercent: number;
+  manaReduction: number;
+  manaReductionPercent: number;
+}
 
-  for (const element of elements) {
-    for (const aff of affinities) {
-      if (aff.element === element) {
-        switch (aff.bonusType) {
-          case 'castHit':
-            castBonus += aff.value;
-            break;
-          case 'manaCost':
-            manaReduction += aff.value;
-            break;
-          case 'damage':
-            damageBonus += aff.value;
-            break;
-        }
-      }
+/** Получить все бонусы от модификаторов элементов для заклинания */
+function getElementBonuses(
+  spellElements: string[],
+  modifiers: ElementModifier[]
+): ElementBonuses {
+  let castBonus = 0;
+  let damageBonus = 0;
+  let damageBonusPercent = 0;
+  let manaReduction = 0;
+  let manaReductionPercent = 0;
+
+  for (const element of spellElements) {
+    const mod = modifiers.find(m => m.element === element && m.isActive);
+    if (mod) {
+      castBonus += mod.castBonus;
+      damageBonus += mod.damageBonus;
+      damageBonusPercent += mod.damageBonusPercent;
+      manaReduction += mod.manaReduction;
+      manaReductionPercent += mod.manaReductionPercent;
     }
   }
 
-  return { castBonus, manaReduction, damageBonus };
+  return { castBonus, damageBonus, damageBonusPercent, manaReduction, manaReductionPercent };
+}
+
+/** Вычислить итоговую стоимость маны */
+function calculateManaCost(baseCost: number, bonuses: ElementBonuses): number {
+  // Сначала процентное снижение
+  let cost = baseCost;
+  if (bonuses.manaReductionPercent > 0) {
+    cost = cost * (1 - bonuses.manaReductionPercent / 100);
+  }
+  // Потом абсолютное снижение
+  cost = cost - bonuses.manaReduction;
+  return Math.max(0, Math.round(cost));
+}
+
+/** Вычислить итоговый урон с бонусами */
+function calculateDamageWithBonuses(baseDamage: number, bonuses: ElementBonuses): number {
+  // Сначала фиксированный бонус
+  let damage = baseDamage + bonuses.damageBonus;
+  // Потом процентный бонус
+  if (bonuses.damageBonusPercent > 0) {
+    damage = damage * (1 + bonuses.damageBonusPercent / 100);
+  }
+  return Math.round(damage);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -70,7 +96,6 @@ export function MagicTab() {
   // Многошаговый режим
   const [multiStepPhase, setMultiStepPhase] = useState<'idle' | 'element' | 'power' | 'done'>('idle');
   const [multiStepElement, setMultiStepElement] = useState<string>('');
-  const [multiStepPowerRoll, setMultiStepPowerRoll] = useState<number>(0);
   
   // ─────────────────────────────────────────────────────────────────────────
   // ПРОВЕРКИ
@@ -88,25 +113,19 @@ export function MagicTab() {
   
   const spells = unit.spells ?? [];
   const selectedSpell = spells.find(s => s.id === selectedSpellId) ?? spells[0];
-  const affinities = unit.elementAffinities ?? [];
-  const magicBonuses = unit.magicBonuses ?? {};
+  const elementModifiers = unit.elementModifiers ?? [];
   
-  // Бонусы от предрасположенностей
+  // Бонусы от модификаторов элементов
   const spellElements = selectedSpell?.elements ?? [];
-  const affBonuses = getAffinityBonuses(spellElements, affinities);
-  
-  // Бонус к касту от магических бонусов персонажа
-  let magicCastBonus = 0;
-  for (const el of spellElements) {
-    magicCastBonus += magicBonuses[el] ?? 0;
-  }
+  const elementBonuses = getElementBonuses(spellElements, elementModifiers);
   
   // Итоговая стоимость маны
   const baseCost = selectedSpell?.manaCost ?? 0;
-  const finalCost = Math.max(0, baseCost - affBonuses.manaReduction);
+  const finalCost = calculateManaCost(baseCost, elementBonuses);
+  const costSaved = baseCost - finalCost;
   
-  // Итоговый бонус к касту
-  const totalCastBonus = affBonuses.castBonus + magicCastBonus + (selectedSpell?.equipmentBonus ?? 0);
+  // Итоговый бонус к касту (+ бонус от экипировки)
+  const totalCastBonus = elementBonuses.castBonus + (selectedSpell?.equipmentBonus ?? 0);
   
   // ─────────────────────────────────────────────────────────────────────────
   // ОБЫЧНЫЙ КАСТ
@@ -148,6 +167,14 @@ export function MagicTab() {
     
     const log: string[] = [];
     
+    // Лог бонусов
+    if (costSaved > 0) {
+      log.push(`💠 Мана: ${baseCost} − ${costSaved} = ${finalCost}`);
+    }
+    if (totalCastBonus !== 0) {
+      log.push(`🎯 Бонус к касту: ${totalCastBonus >= 0 ? '+' : ''}${totalCastBonus}`);
+    }
+    
     try {
       const newCastResults: DiceRollResult[] = [];
       const newDamageResults: DiceRollResult[] = [];
@@ -158,7 +185,6 @@ export function MagicTab() {
         if (/^\d+$/.test(selectedSpell.projectiles)) {
           projectileCount = parseInt(selectedSpell.projectiles, 10);
         } else {
-          // Формула типа "d4" или "2d6+1"
           const projResult = rollDice(selectedSpell.projectiles);
           projectileCount = projResult.total;
           log.push(`🎲 Снарядов: ${selectedSpell.projectiles} = ${projectileCount}`);
@@ -207,23 +233,26 @@ export function MagicTab() {
           
           // Урон (если есть формула)
           if (selectedSpell.damageFormula) {
-            // Добавляем бонус от предрасположенности к урону
-            let dmgFormula = selectedSpell.damageFormula;
-            if (affBonuses.damageBonus > 0) {
-              dmgFormula = `${dmgFormula}+${affBonuses.damageBonus}`;
-            }
-            
             const damageResult = await diceService.rollDamage(
-              dmgFormula,
+              selectedSpell.damageFormula,
               `Урон ${selectedSpell.name}`,
               unit.shortName ?? unit.name,
               isCrit
             );
-            newDamageResults.push(damageResult);
+            
+            // Применяем бонусы от элементов
+            const baseDmg = damageResult.total;
+            const finalDmg = calculateDamageWithBonuses(baseDmg, elementBonuses);
+            
+            newDamageResults.push({
+              ...damageResult,
+              total: finalDmg
+            });
             
             const critText = isCrit ? ' ×2' : '';
             const typeText = selectedSpell.damageType ? DAMAGE_TYPE_NAMES[selectedSpell.damageType] : '';
-            log.push(`   💥 ${damageResult.total}${critText} ${typeText}`);
+            const bonusText = finalDmg !== baseDmg ? ` (${baseDmg}+${finalDmg - baseDmg})` : '';
+            log.push(`   💥 ${finalDmg}${critText} ${typeText}${bonusText}`);
           }
         }
       }
@@ -246,7 +275,7 @@ export function MagicTab() {
   };
   
   // ─────────────────────────────────────────────────────────────────────────
-  // МНОГОШАГОВЫЙ КАСТ (d20 → d12 элемент → d20 сила → урон)
+  // МНОГОШАГОВЫЙ КАСТ
   // ─────────────────────────────────────────────────────────────────────────
   
   const handleMultiStepCast = async () => {
@@ -344,8 +373,6 @@ export function MagicTab() {
           unit.shortName ?? unit.name
         );
         
-        setMultiStepPowerRoll(powerResult.total);
-        
         // Находим tier по броску
         const tiers = selectedSpell.damageTiers ?? [];
         const tier = tiers.find(t => powerResult.total >= t.minRoll && powerResult.total <= t.maxRoll);
@@ -359,29 +386,29 @@ export function MagicTab() {
         setCastLog(prev => [...prev, `🎲 Сила: [${powerResult.total}] → ${tier.label ?? tier.formula}`]);
         
         // Бросаем урон
-        let dmgFormula = tier.formula;
-        if (affBonuses.damageBonus > 0) {
-          dmgFormula = `${dmgFormula}+${affBonuses.damageBonus}`;
-        }
-        
         const damageResult = await diceService.rollDamage(
-          dmgFormula,
+          tier.formula,
           `Урон ${selectedSpell.name}`,
           unit.shortName ?? unit.name,
           powerResult.isCrit
         );
         
-        setDamageResults([damageResult]);
+        // Применяем бонусы
+        const baseDmg = damageResult.total;
+        const finalDmg = calculateDamageWithBonuses(baseDmg, elementBonuses);
+        
+        setDamageResults([{ ...damageResult, total: finalDmg }]);
         
         const elementName = ELEMENT_NAMES[multiStepElement] ?? multiStepElement;
         const critText = powerResult.isCrit ? ' ×2 КРИТ!' : '';
-        setCastLog(prev => [...prev, `💥 Урон: ${damageResult.total}${critText} (${elementName})`]);
+        const bonusText = finalDmg !== baseDmg ? ` (${baseDmg}+${finalDmg - baseDmg})` : '';
+        setCastLog(prev => [...prev, `💥 Урон: ${finalDmg}${bonusText}${critText} (${elementName})`]);
         
         if (powerResult.isCrit) {
           triggerEffect('crit-gold');
         }
         
-        addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${damageResult.total} ${elementName}`);
+        addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${finalDmg} ${elementName}`);
         
         setMultiStepPhase('done');
       } finally {
@@ -394,7 +421,6 @@ export function MagicTab() {
   const resetMultiStep = () => {
     setMultiStepPhase('idle');
     setMultiStepElement('');
-    setMultiStepPowerRoll(0);
     setCastResults([]);
     setDamageResults([]);
     setCastLog([]);
@@ -442,11 +468,24 @@ export function MagicTab() {
                 {/* Элементы */}
                 {spellElements.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {spellElements.map(el => (
-                      <span key={el} className="px-2 py-0.5 bg-panel rounded text-xs text-ancient">
-                        {ELEMENT_ICONS[el] ?? '✨'} {ELEMENT_NAMES[el] ?? el}
-                      </span>
-                    ))}
+                    {spellElements.map(el => {
+                      const mod = elementModifiers.find(m => m.element === el && m.isActive);
+                      const hasBonus = mod && (mod.castBonus !== 0 || mod.damageBonus !== 0 || mod.manaReduction !== 0);
+                      return (
+                        <span 
+                          key={el} 
+                          className={`px-2 py-0.5 rounded text-xs ${
+                            hasBonus 
+                              ? 'bg-gold/20 border border-gold/30 text-gold' 
+                              : 'bg-panel text-ancient'
+                          }`}
+                          title={hasBonus ? `Есть бонусы от ${ELEMENT_NAMES[el]}` : undefined}
+                        >
+                          {ELEMENT_ICONS[el] ?? '✨'} {ELEMENT_NAMES[el] ?? el}
+                          {hasBonus && ' ★'}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
                 
@@ -465,8 +504,11 @@ export function MagicTab() {
                     {selectedSpell.damageType && (
                       <span className="text-faded ml-1">({DAMAGE_TYPE_NAMES[selectedSpell.damageType]})</span>
                     )}
-                    {affBonuses.damageBonus > 0 && (
-                      <span className="text-gold ml-1">+{affBonuses.damageBonus} от предрасп.</span>
+                    {elementBonuses.damageBonus > 0 && (
+                      <span className="text-gold ml-1">+{elementBonuses.damageBonus}</span>
+                    )}
+                    {elementBonuses.damageBonusPercent > 0 && (
+                      <span className="text-gold ml-1">+{elementBonuses.damageBonusPercent}%</span>
                     )}
                   </div>
                 )}
@@ -476,8 +518,8 @@ export function MagicTab() {
                   <span className={selectedSpell.costType === 'health' ? 'text-blood-bright' : 'text-mana-bright'}>
                     Стоимость: {finalCost} {selectedSpell.costType === 'health' ? 'HP' : 'маны'}
                   </span>
-                  {affBonuses.manaReduction > 0 && (
-                    <span className="text-green-500 ml-1">(−{affBonuses.manaReduction} от предрасп.)</span>
+                  {costSaved > 0 && (
+                    <span className="text-green-500 ml-1">(−{costSaved})</span>
                   )}
                 </div>
                 
@@ -504,7 +546,7 @@ export function MagicTab() {
               </div>
             )}
             
-            {/* Количество целей (не для многошаговых) */}
+            {/* Количество целей */}
             {selectedSpell && !selectedSpell.isMultiStep && (
               <NumberStepper
                 label="Количество целей"
@@ -583,6 +625,20 @@ export function MagicTab() {
           </div>
         )}
       </Section>
-    </div>
-  );
-}
+      
+      {/* Активные модификаторы элементов */}
+      {elementModifiers.filter(m => m.isActive).length > 0 && (
+        <Section title="Активные модификаторы" icon="🔮">
+          <div className="space-y-1">
+            {elementModifiers.filter(m => m.isActive).map(mod => {
+              const parts: string[] = [];
+              if (mod.castBonus !== 0) parts.push(`🎯${mod.castBonus > 0 ? '+' : ''}${mod.castBonus}`);
+              if (mod.damageBonus !== 0) parts.push(`💥${mod.damageBonus > 0 ? '+' : ''}${mod.damageBonus}`);
+              if (mod.damageBonusPercent !== 0) parts.push(`💥${mod.damageBonusPercent > 0 ? '+' : ''}${mod.damageBonusPercent}%`);
+              if (mod.manaReduction !== 0) parts.push(`💠−${mod.manaReduction}`);
+              if (mod.manaReductionPercent !== 0) parts.push(`💠−${mod.manaReductionPercent}%`);
+              if (mod.resistance !== 0) parts.push(`🛡️${mod.resistance}`);
+              if (mod.damageMultiplier !== 1) parts.push(`×${mod.damageMultiplier}`);
+              
+              if (parts.length === 0) return null;
+              
