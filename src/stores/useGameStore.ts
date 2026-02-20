@@ -1,9 +1,8 @@
 // src/stores/useGameStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Unit, AppSettings, RollModifier, ElementModifier, ElementAffinity } from '../types';
+import type { Unit, AppSettings, RollModifier, ElementModifier } from '../types';
 import { tokenBarService } from '../services/tokenBarService';
-import { docsService } from '../services/docsService';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ГЕНЕРАТОР ID
@@ -24,12 +23,10 @@ function migrateUnit(unit: Unit): Unit {
   const hasOldData = (
     (unit.elementAffinities && unit.elementAffinities.length > 0) ||
     (unit.magicBonuses && Object.keys(unit.magicBonuses).length > 0) ||
-    (unit.armor?.magicOverrides && Object.keys(unit.armor.magicOverrides).length > 0) ||
     (unit.damageMultipliers && Object.keys(unit.damageMultipliers).some(k => !PHYSICAL_TYPES.includes(k)))
   );
   
   if (!hasOldData) {
-    // Просто убеждаемся что elementModifiers есть
     return {
       ...unit,
       elementModifiers: unit.elementModifiers ?? []
@@ -41,12 +38,10 @@ function migrateUnit(unit: Unit): Unit {
   const modifiers: ElementModifier[] = [...(unit.elementModifiers ?? [])];
   const modifierMap = new Map<string, ElementModifier>();
   
-  // Индексируем существующие
   for (const mod of modifiers) {
     modifierMap.set(mod.element, mod);
   }
   
-  // Хелпер: получить или создать модификатор
   const getOrCreateModifier = (element: string): ElementModifier => {
     if (!modifierMap.has(element)) {
       const newMod: ElementModifier = {
@@ -68,25 +63,19 @@ function migrateUnit(unit: Unit): Unit {
     return modifierMap.get(element)!;
   };
   
-  // 1. Миграция из elementAffinities
+  // Миграция из elementAffinities
   if (unit.elementAffinities) {
     for (const aff of unit.elementAffinities) {
       const mod = getOrCreateModifier(aff.element);
       switch (aff.bonusType) {
-        case 'castHit':
-          mod.castBonus += aff.value;
-          break;
-        case 'damage':
-          mod.damageBonus += aff.value;
-          break;
-        case 'manaCost':
-          mod.manaReduction += aff.value;
-          break;
+        case 'castHit': mod.castBonus += aff.value; break;
+        case 'damage': mod.damageBonus += aff.value; break;
+        case 'manaCost': mod.manaReduction += aff.value; break;
       }
     }
   }
   
-  // 2. Миграция из magicBonuses (добавляем к castBonus)
+  // Миграция из magicBonuses
   if (unit.magicBonuses) {
     for (const [element, bonus] of Object.entries(unit.magicBonuses)) {
       const mod = getOrCreateModifier(element);
@@ -94,18 +83,9 @@ function migrateUnit(unit: Unit): Unit {
     }
   }
   
-  // 3. Миграция из armor.magicOverrides
-  if (unit.armor?.magicOverrides) {
-    for (const [element, value] of Object.entries(unit.armor.magicOverrides)) {
-      const mod = getOrCreateModifier(element);
-      mod.resistance = value;
-    }
-  }
-  
-  // 4. Миграция из damageMultipliers (только магические)
+  // Миграция из damageMultipliers (только магические)
   if (unit.damageMultipliers) {
     const physicalMults: Record<string, number> = {};
-    
     for (const [type, mult] of Object.entries(unit.damageMultipliers)) {
       if (PHYSICAL_TYPES.includes(type)) {
         physicalMults[type] = mult;
@@ -114,8 +94,6 @@ function migrateUnit(unit: Unit): Unit {
         mod.damageMultiplier = mult;
       }
     }
-    
-    // Физические множители сохраняем отдельно
     if (Object.keys(physicalMults).length > 0) {
       unit.physicalMultipliers = physicalMults;
     }
@@ -123,26 +101,19 @@ function migrateUnit(unit: Unit): Unit {
   
   console.log(`[MIGRATION] Created ${modifiers.length} element modifiers for "${unit.name}"`);
   
-  // Убираем старые поля (но TypeScript их оставит для совместимости)
-  const migratedUnit: Unit = {
+  return {
     ...unit,
     elementModifiers: modifiers,
-    // Очищаем старые данные
     elementAffinities: undefined,
-    magicBonuses: undefined,
-    damageMultipliers: unit.physicalMultipliers ? undefined : unit.damageMultipliers,
-    armor: {
-      ...unit.armor,
-      magicOverrides: undefined
-    }
+    magicBonuses: undefined
   };
-  
-  return migratedUnit;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ИНТЕРФЕЙС STORE
+// ТИПЫ
 // ═══════════════════════════════════════════════════════════════════════════
+
+type TabId = 'combat' | 'magic' | 'cards' | 'actions' | 'notes' | 'settings';
 
 interface Notification {
   id: string;
@@ -155,14 +126,25 @@ interface CombatLogEntry {
   id: string;
   unitName: string;
   action: string;
-  result: string;
+  details: string;  // ← App.tsx использует details, не result!
   timestamp: number;
+}
+
+interface Connections {
+  docs: boolean;
+  owlbear: boolean;
+  dice: boolean;
+  lastSyncTime?: number;
 }
 
 interface GameState {
   // Юниты
   units: Unit[];
   selectedUnitId: string | null;
+  
+  // UI - ВАЖНО! Эти поля используются в App.tsx
+  activeTab: TabId;
+  setActiveTab: (tab: TabId) => void;
   
   // Настройки
   settings: AppSettings;
@@ -174,10 +156,7 @@ interface GameState {
   nextRollModifier: RollModifier;
   
   // Соединения
-  connections: {
-    docs: boolean;
-    owlbear: boolean;
-  };
+  connections: Connections;
   
   // Экшены — юниты
   addUnit: () => void;
@@ -201,17 +180,17 @@ interface GameState {
   // Экшены — UI
   addNotification: (message: string, type?: Notification['type']) => void;
   clearNotification: (id: string) => void;
-  addCombatLog: (unitName: string, action: string, result: string) => void;
+  addCombatLog: (unitName: string, action: string, details: string) => void;
   triggerEffect: (effect: string) => void;
   setNextRollModifier: (mod: RollModifier) => void;
   
   // Соединения
-  setConnection: (type: 'docs' | 'owlbear', connected: boolean) => void;
+  setConnection: (type: keyof Omit<Connections, 'lastSyncTime'>, connected: boolean) => void;
   startAutoSync: () => void;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// СОЗДАНИЕ STORE
+// DEFAULT UNIT
 // ═══════════════════════════════════════════════════════════════════════════
 
 function createDefaultUnit(): Unit {
@@ -254,12 +233,17 @@ function createDefaultUnit(): Unit {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// STORE
+// ═══════════════════════════════════════════════════════════════════════════
+
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
       // ═══ СОСТОЯНИЕ ═══
       units: [],
       selectedUnitId: null,
+      activeTab: 'combat',  // ← ДОБАВЛЕНО
       settings: {
         syncHP: true,
         syncMana: true,
@@ -274,11 +258,15 @@ export const useGameStore = create<GameState>()(
       nextRollModifier: 'normal',
       connections: {
         docs: false,
-        owlbear: false
+        owlbear: false,
+        dice: false,
+        lastSyncTime: undefined
       },
       
-      // ═══ ЮНИТЫ ═══
+      // ═══ TAB ═══
+      setActiveTab: (tab) => set({ activeTab: tab }),  // ← ДОБАВЛЕНО
       
+      // ═══ ЮНИТЫ ═══
       addUnit: () => {
         const newUnit = createDefaultUnit();
         set(state => ({
@@ -300,12 +288,9 @@ export const useGameStore = create<GameState>()(
         }));
       },
       
-      selectUnit: (id) => {
-        set({ selectedUnitId: id });
-      },
+      selectUnit: (id) => set({ selectedUnitId: id }),
       
       // ═══ HP/MANA ═══
-      
       setHP: async (unitId, value) => {
         const { units, settings } = get();
         const unit = units.find(u => u.id === unitId);
@@ -321,12 +306,15 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        // Обновляем бары на сцене
         if (settings.showTokenBars && unit.owlbearTokenId) {
-          await tokenBarService.updateBars(unit.owlbearTokenId, {
-            hp: { current: newHP, max: unit.health.max },
-            mana: unit.useManaAsHp ? undefined : { current: unit.mana.current, max: unit.mana.max }
-          });
+          try {
+            await tokenBarService.updateBars(unit.owlbearTokenId, {
+              hp: { current: newHP, max: unit.health.max },
+              mana: unit.useManaAsHp ? undefined : { current: unit.mana.current, max: unit.mana.max }
+            });
+          } catch (e) {
+            console.warn('[Store] Failed to update token bars:', e);
+          }
         }
       },
       
@@ -345,12 +333,17 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        // Обновляем бары
         if (settings.showTokenBars && unit.owlbearTokenId) {
-          await tokenBarService.updateBars(unit.owlbearTokenId, {
-            hp: unit.useManaAsHp ? { current: newMana, max: unit.mana.max } : { current: unit.health.current, max: unit.health.max },
-            mana: unit.useManaAsHp ? undefined : { current: newMana, max: unit.mana.max }
-          });
+          try {
+            await tokenBarService.updateBars(unit.owlbearTokenId, {
+              hp: unit.useManaAsHp 
+                ? { current: newMana, max: unit.mana.max } 
+                : { current: unit.health.current, max: unit.health.max },
+              mana: unit.useManaAsHp ? undefined : { current: newMana, max: unit.mana.max }
+            });
+          } catch (e) {
+            console.warn('[Store] Failed to update token bars:', e);
+          }
         }
       },
       
@@ -358,7 +351,6 @@ export const useGameStore = create<GameState>()(
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
-        
         const newMana = Math.max(0, unit.mana.current - amount);
         await get().setMana(unitId, newMana);
       },
@@ -367,7 +359,6 @@ export const useGameStore = create<GameState>()(
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
-        
         if (unit.useManaAsHp) {
           await get().setMana(unitId, unit.mana.current + amount);
         } else {
@@ -379,7 +370,6 @@ export const useGameStore = create<GameState>()(
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
-        
         if (unit.useManaAsHp) {
           await get().setMana(unitId, unit.mana.current - amount);
         } else {
@@ -388,7 +378,6 @@ export const useGameStore = create<GameState>()(
       },
       
       // ═══ РЕСУРСЫ ═══
-      
       updateResource: (unitId, resourceId, current) => {
         set(state => ({
           units: state.units.map(u => {
@@ -404,7 +393,6 @@ export const useGameStore = create<GameState>()(
       },
       
       // ═══ НАСТРОЙКИ ═══
-      
       updateSettings: (updates) => {
         set(state => ({
           settings: { ...state.settings, ...updates }
@@ -412,7 +400,6 @@ export const useGameStore = create<GameState>()(
       },
       
       // ═══ UI ═══
-      
       addNotification: (message, type = 'info') => {
         const notification: Notification = {
           id: generateId(),
@@ -423,8 +410,6 @@ export const useGameStore = create<GameState>()(
         set(state => ({
           notifications: [...state.notifications, notification].slice(-5)
         }));
-        
-        // Автоудаление через 4 сек
         setTimeout(() => {
           get().clearNotification(notification.id);
         }, 4000);
@@ -436,16 +421,20 @@ export const useGameStore = create<GameState>()(
         }));
       },
       
-      addCombatLog: (unitName, action, result) => {
+      addCombatLog: (unitName, action, details) => {  // ← details вместо result
         const entry: CombatLogEntry = {
           id: generateId(),
           unitName,
           action,
-          result,
+          details,  // ← details
           timestamp: Date.now()
         };
         set(state => ({
-          combatLog: [...state.combatLog, entry].slice(-50)
+          combatLog: [...state.combatLog, entry].slice(-50),
+          connections: {
+            ...state.connections,
+            lastSyncTime: Date.now()
+          }
         }));
       },
       
@@ -456,49 +445,50 @@ export const useGameStore = create<GameState>()(
         }, 500);
       },
       
-      setNextRollModifier: (mod) => {
-        set({ nextRollModifier: mod });
-      },
+      setNextRollModifier: (mod) => set({ nextRollModifier: mod }),
       
       // ═══ СОЕДИНЕНИЯ ═══
-      
       setConnection: (type, connected) => {
         set(state => ({
-          connections: { ...state.connections, [type]: connected }
+          connections: { 
+            ...state.connections, 
+            [type]: connected,
+            lastSyncTime: Date.now()
+          }
         }));
       },
       
       startAutoSync: () => {
         const { settings } = get();
         if (!settings.googleDocsUrl) return;
-        
-        // TODO: Implement auto-sync
         console.log('Auto-sync started with interval:', settings.autoSyncInterval);
       }
     }),
     {
       name: 'cursed-hearts-storage',
-      version: 2, // Увеличиваем версию для миграции
+      version: 2,
       
-      // Миграция при загрузке
       migrate: (persistedState: unknown, version: number) => {
         console.log(`[STORE] Migrating from version ${version} to 2`);
-        
         const state = persistedState as GameState;
         
         if (version < 2) {
-          // Мигрируем все юниты
-          const migratedUnits = state.units.map(migrateUnit);
+          const migratedUnits = state.units?.map(migrateUnit) ?? [];
           return {
             ...state,
-            units: migratedUnits
+            units: migratedUnits,
+            activeTab: state.activeTab ?? 'combat',
+            connections: {
+              docs: state.connections?.docs ?? false,
+              owlbear: state.connections?.owlbear ?? false,
+              dice: false,
+              lastSyncTime: undefined
+            }
           };
         }
-        
         return state;
       },
       
-      // После загрузки тоже проверяем миграцию (на всякий случай)
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.units = state.units.map(migrateUnit);
