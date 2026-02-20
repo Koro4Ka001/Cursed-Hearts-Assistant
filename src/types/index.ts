@@ -1,61 +1,146 @@
 // src/types/index.ts
 
-// ═══════════════════════════════════════════════════════════════
-// ROLL MODIFIER — Преимущество / Помеха
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// БАЗОВЫЕ ТИПЫ
+// ═══════════════════════════════════════════════════════════════════════════
 
+export type DamageType = 
+  | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'  // Физические
+  | 'fire' | 'ice' | 'lightning' | 'acid'                 // Стихии
+  | 'poison' | 'necrotic' | 'radiant' | 'psychic'         // Магические
+  | 'force' | 'thunder' | 'void' | 'pure';                // Особые
+
+export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
+export type WeaponType = 'melee' | 'ranged';
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
 
-export const ROLL_MODIFIER_NAMES: Record<RollModifier, string> = {
-  normal: 'Обычный',
-  advantage: 'Преимущество',
-  disadvantage: 'Помеха'
-};
+// ═══════════════════════════════════════════════════════════════════════════
+// МОДИФИКАТОР ЭЛЕМЕНТА (НОВАЯ ГИБКАЯ СИСТЕМА)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════
-// ELEMENT AFFINITY — Сродство со стихиями
-// ═══════════════════════════════════════════════════════════════
-
-export interface ElementAffinity {
-  element: string;
-  bonus: number;
+export interface ElementModifier {
+  id: string;
+  element: string;          // 'fire', 'ice', 'lightning', etc.
+  isActive: boolean;        // Можно временно выключить
+  
+  // ═══ АТАКА (при касте заклинаний с этим элементом) ═══
+  castBonus: number;        // +к d20 на каст/попадание
+  damageBonus: number;      // +к урону (фиксированный)
+  damageBonusPercent: number; // +% к урону (множитель)
+  manaReduction: number;    // −к стоимости маны (абсолютное)
+  manaReductionPercent: number; // −% к стоимости маны
+  
+  // ═══ ЗАЩИТА (при получении урона этого элемента) ═══
+  resistance: number;           // Фиксированное снижение урона
+  damageMultiplier: number;     // 1 = норма, 0.5 = резист, 1.5 = уязвимость, 0 = иммунитет
+  
+  // ═══ ДОПОЛНИТЕЛЬНО ═══
+  notes?: string;
 }
 
-export const ELEMENT_NAMES: Record<string, string> = {
-  fire: 'Огонь',
-  water: 'Вода',
-  earth: 'Земля',
-  air: 'Воздух',
-  light: 'Свет',
-  darkness: 'Тьма',
-  electricity: 'Электричество',
-  frost: 'Мороз',
-  nature: 'Природа',
-  corruption: 'Скверна',
-  life: 'Жизнь',
-  death: 'Смерть',
-  blood: 'Кровь',
-  void: 'Пустота',
-  astral: 'Астрал',
-  space: 'Пространство',
-  transcendence: 'Трансцендентность'
-};
+// Хелпер для создания пустого модификатора
+export function createEmptyElementModifier(element: string): ElementModifier {
+  return {
+    id: '',  // Будет сгенерирован
+    element,
+    isActive: true,
+    castBonus: 0,
+    damageBonus: 0,
+    damageBonusPercent: 0,
+    manaReduction: 0,
+    manaReductionPercent: 0,
+    resistance: 0,
+    damageMultiplier: 1,
+    notes: ''
+  };
+}
 
-export const AFFINITY_BONUS_NAMES: Record<number, string> = {
-  [-3]: '−3 (Проклятие)',
-  [-2]: '−2 (Слабость)',
-  [-1]: '−1 (Отторжение)',
-  [0]: '0 (Нет сродства)',
-  [1]: '+1 (Начальное)',
-  [2]: '+2 (Развитое)',
-  [3]: '+3 (Сильное)',
-  [4]: '+4 (Мастерское)',
-  [5]: '+5 (Абсолютное)'
-};
+// ═══════════════════════════════════════════════════════════════════════════
+// СТАРЫЕ ТИПЫ (для миграции, потом можно убрать)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════
-// UNIT
-// ═══════════════════════════════════════════════════════════════
+/** @deprecated Используй ElementModifier */
+export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
+
+/** @deprecated Используй ElementModifier */
+export interface ElementAffinity {
+  id: string;
+  element: string;
+  bonusType: AffinityBonusType;
+  value: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ОРУЖИЕ
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface Weapon {
+  id: string;
+  name: string;
+  type: WeaponType;
+  damageFormula?: string;
+  damageType: DamageType;
+  proficiencyType: ProficiencyType;
+  statBonus: 'physicalPower' | 'dexterity' | 'none';
+  hitBonus: number;
+  multishot?: number;
+  ammoPerShot?: number;
+  notes?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ЗАКЛИНАНИЯ
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface DamageTier {
+  minRoll: number;
+  maxRoll: number;
+  formula: string;
+  label?: string;
+}
+
+export interface Spell {
+  id: string;
+  name: string;
+  manaCost: number;
+  costType: 'mana' | 'health';
+  elements: string[];
+  type: 'targeted' | 'aoe' | 'self' | 'utility' | 'summon';
+  projectiles?: string;
+  damageFormula?: string;
+  damageType?: DamageType;
+  description?: string;
+  equipmentBonus?: number;
+  
+  // Многошаговый режим
+  isMultiStep?: boolean;
+  elementTable?: Record<number, DamageType>;
+  damageTiers?: DamageTier[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// РЕСУРСЫ
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface Resource {
+  id: string;
+  name: string;
+  icon: string;
+  current: number;
+  max: number;
+  resourceType: 'generic' | 'ammo';
+  syncWithDocs?: boolean;
+  
+  // Для боеприпасов
+  damageFormula?: string;
+  damageType?: DamageType;
+  extraDamageFormula?: string;
+  extraDamageType?: DamageType;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ЮНИТ (ПЕРСОНАЖ)
+// ═══════════════════════════════════════════════════════════════════════════
 
 export interface Unit {
   id: string;
@@ -63,8 +148,10 @@ export interface Unit {
   shortName: string;
   googleDocsHeader: string;
   owlbearTokenId?: string;
+  
   health: { current: number; max: number };
   mana: { current: number; max: number };
+  
   stats: {
     physicalPower: number;
     dexterity: number;
@@ -73,221 +160,99 @@ export interface Unit {
     charisma: number;
     initiative: number;
   };
-  proficiencies: {
-    swords: number;
-    axes: number;
-    hammers: number;
-    polearms: number;
-    unarmed: number;
-    bows: number;
-  };
-  magicBonuses: Record<string, number>;
-  elementAffinities: ElementAffinity[];
+  
+  proficiencies: Record<ProficiencyType, number>;
+  
   armor: {
     slashing: number;
     piercing: number;
     bludgeoning: number;
     chopping: number;
-    magicBase: number;
-    magicOverrides: Record<string, number>;
+    magicBase: number;        // Базовая магическая защита (fallback)
     undead: number;
+    // magicOverrides убран — теперь в elementModifiers
   };
-  damageMultipliers: Record<string, number>;
+  
+  // ═══ НОВАЯ СИСТЕМА МОДИФИКАТОРОВ ЭЛЕМЕНТОВ ═══
+  elementModifiers: ElementModifier[];
+  
+  // Физические множители (уязвимости к физ. урону)
+  physicalMultipliers?: Record<string, number>;  // 'slashing': 1.5, etc.
+  
   weapons: Weapon[];
   spells: Spell[];
   resources: Resource[];
-  customActions: CustomAction[];
-  hasRokCards: boolean;
-  rokDeckResourceId?: string;
-  hasDoubleShot: boolean;
-  doubleShotThreshold: number;
-  notes: string;
+  
   useManaAsHp: boolean;
+  hasRokCards?: boolean;
+  rokDeckResourceId?: string;
+  hasDoubleShot?: boolean;
+  doubleShotThreshold?: number;
+  
+  // ═══ DEPRECATED (для миграции) ═══
+  /** @deprecated Перенесено в elementModifiers */
+  magicBonuses?: Record<string, number>;
+  /** @deprecated Перенесено в elementModifiers */
+  elementAffinities?: ElementAffinity[];
+  /** @deprecated Физические в physicalMultipliers, магические в elementModifiers */
+  damageMultipliers?: Record<string, number>;
 }
 
-export type WeaponType = 'melee' | 'ranged';
-export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
-
-export interface Weapon {
-  id: string;
-  name: string;
-  type: WeaponType;
-  damageFormula: string;
-  damageType: DamageType;
-  proficiencyType: ProficiencyType;
-  statBonus: 'physicalPower' | 'dexterity' | 'none';
-  hitBonus: number;
-  multishot: number;
-  ammoPerShot?: number;
-  extraDamageFormula?: string;
-  extraDamageType?: DamageType;
-  notes?: string;
-}
-
-export type SpellCostType = 'mana' | 'health';
-
-export interface Spell {
-  id: string;
-  name: string;
-  manaCost: number;
-  costType: SpellCostType;
-  elements: string[];
-  type: 'targeted' | 'aoe' | 'self' | 'summon';
-  projectiles: string;
-  damageFormula?: string;
-  damageType?: DamageType;
-  description?: string;
-  equipmentBonus?: number;
-  isMultiStep?: boolean;
-  elementTable?: Record<number, DamageType>;
-  damageTiers?: Array<{
-    minRoll: number;
-    maxRoll: number;
-    formula: string;
-    label?: string;
-  }>;
-}
-
-export type ResourceType = 'generic' | 'ammo';
-
-export interface Resource {
-  id: string;
-  name: string;
-  icon: string;
-  current: number;
-  max: number;
-  resourceType: ResourceType;
-  damageFormula?: string;
-  damageType?: DamageType;
-  extraDamageFormula?: string;
-  extraDamageType?: DamageType;
-  syncWithDocs: boolean;
-}
-
-export type StatKey = keyof Unit['stats'];
-
-// ═══════════════════════════════════════════════════════════════
-// CUSTOM ACTIONS
-// ═══════════════════════════════════════════════════════════════
-
-export interface ActionStep {
-  id: string;
-  label: string;
-  roll: {
-    dice: string;
-    bonuses: ActionBonus[];
-  };
-  threshold?: number;
-  rollModifier?: RollModifier;
-  onSuccess?: ActionOutcome;
-  onFailure?: ActionOutcome;
-}
-
-export interface ActionBonus {
-  type: 'stat' | 'proficiency' | 'flat';
-  stat?: StatKey;
-  proficiency?: ProficiencyType;
-  flatValue?: number;
-  label?: string;
-}
-
-export interface ActionOutcome {
-  type: 'message' | 'next_step' | 'damage' | 'heal' | 'mana_cost' | 'health_cost';
-  message?: string;
-  nextStepId?: string;
-  damageFormula?: string;
-  damageType?: DamageType;
-  healFormula?: string;
-  amount?: number;
-}
-
-export interface CustomAction {
-  id: string;
-  name: string;
-  icon: string;
-  steps: ActionStep[];
-}
-
-// ═══════════════════════════════════════════════════════════════
-// DAMAGE TYPES
-// ═══════════════════════════════════════════════════════════════
-
-export type PhysicalDamageType = 'slashing' | 'piercing' | 'bludgeoning' | 'chopping';
-export type MagicalDamageType = 'fire' | 'water' | 'earth' | 'air' | 'light' | 'space' |
-  'astral' | 'corruption' | 'electricity' | 'darkness' | 'void' | 'life' |
-  'blood' | 'frost' | 'death' | 'nature' | 'transcendence';
-export type DamageType = PhysicalDamageType | MagicalDamageType | 'pure';
-export type DamageCategory = 'physical' | 'magical' | 'pure';
-
-// ═══════════════════════════════════════════════════════════════
-// DICE ROLL RESULT
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// РЕЗУЛЬТАТЫ БРОСКОВ
+// ═══════════════════════════════════════════════════════════════════════════
 
 export interface DiceRollResult {
   formula: string;
   rolls: number[];
   bonus: number;
   total: number;
-  isCrit: boolean;
-  isCritFail: boolean;
   rawD20?: number;
-  label?: string;
+  isCrit?: boolean;
+  isCritFail?: boolean;
   rollModifier?: RollModifier;
   allD20Rolls?: number[];
+  label?: string;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ROK CARDS
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// BROADCAST СООБЩЕНИЯ
+// ═══════════════════════════════════════════════════════════════════════════
 
-export interface RokCardResult {
-  cardIndex: number;
-  hitRoll: number;
-  isHit: boolean;
-  effectRoll: number;
-  effectDescription: string;
-  additionalRolls: DiceRollResult[];
-  subEffects?: string[];
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SETTINGS & STATE
-// ═══════════════════════════════════════════════════════════════
-
-export interface Settings {
-  googleDocsUrl: string;
-  syncHP: boolean;
-  syncMana: boolean;
-  syncResources: boolean;
-  autoSyncInterval: number;
-  writeLogs: boolean;
-  showTokenBars: boolean;
-}
-
-export interface ConnectionStatus {
-  owlbear: boolean;
-  docs: boolean;
-  dice: 'local';
-  lastSyncTime?: number;
-}
-
-export interface Notification {
+export interface BroadcastMessage {
   id: string;
-  message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-  timestamp: number;
-}
-
-export interface CombatLogEntry {
-  timestamp: number;
+  type: 'roll' | 'damage' | 'hit' | 'miss' | 'spell' | 'heal' | 'death' | 'rok-card' | 'custom';
   unitName: string;
-  action: string;
-  details: string;
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  rolls?: number[];
+  total?: number;
+  isCrit?: boolean;
+  isCritFail?: boolean;
+  color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white';
+  hpBar?: { current: number; max: number };
+  details?: string[];
+  timestamp: number;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// НАСТРОЙКИ
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface AppSettings {
+  googleDocsUrl?: string;
+  syncHP?: boolean;
+  syncMana?: boolean;
+  syncResources?: boolean;
+  writeLogs?: boolean;
+  showTokenBars?: boolean;
+  autoSyncInterval?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// КОНСТАНТЫ И МАППИНГИ
+// ═══════════════════════════════════════════════════════════════════════════
 
 export const DAMAGE_TYPE_NAMES: Record<DamageType, string> = {
   slashing: 'Режущий',
@@ -295,23 +260,43 @@ export const DAMAGE_TYPE_NAMES: Record<DamageType, string> = {
   bludgeoning: 'Дробящий',
   chopping: 'Рубящий',
   fire: 'Огонь',
+  ice: 'Лёд',
+  lightning: 'Молния',
+  acid: 'Кислота',
+  poison: 'Яд',
+  necrotic: 'Некротика',
+  radiant: 'Свет',
+  psychic: 'Психика',
+  force: 'Сила',
+  thunder: 'Гром',
+  void: 'Пустота',
+  pure: 'Чистый'
+};
+
+export const ELEMENT_NAMES: Record<string, string> = {
+  fire: 'Огонь',
+  ice: 'Лёд',
+  lightning: 'Молния',
+  acid: 'Кислота',
+  poison: 'Яд',
+  necrotic: 'Некротика',
+  radiant: 'Свет',
+  psychic: 'Психика',
+  force: 'Сила',
+  thunder: 'Гром',
+  void: 'Пустота',
   water: 'Вода',
   earth: 'Земля',
-  air: 'Воздух',
-  light: 'Свет',
-  space: 'Пространство',
-  astral: 'Астрал',
-  corruption: 'Скверна',
-  electricity: 'Электричество',
-  darkness: 'Тьма',
-  void: 'Пустота',
-  life: 'Жизнь',
-  blood: 'Кровь',
-  frost: 'Мороз',
-  death: 'Смерть',
+  wind: 'Ветер',
   nature: 'Природа',
-  transcendence: 'Трансцендентность',
-  pure: 'Чистый'
+  shadow: 'Тень',
+  holy: 'Святость',
+  arcane: 'Аркана',
+  blood: 'Кровь',
+  time: 'Время',
+  space: 'Пространство',
+  chaos: 'Хаос',
+  order: 'Порядок'
 };
 
 export const PROFICIENCY_NAMES: Record<ProficiencyType, string> = {
@@ -323,7 +308,7 @@ export const PROFICIENCY_NAMES: Record<ProficiencyType, string> = {
   bows: 'Луки'
 };
 
-export const STAT_NAMES: Record<StatKey, string> = {
+export const STAT_NAMES: Record<string, string> = {
   physicalPower: 'Физ. сила',
   dexterity: 'Ловкость',
   vitality: 'Живучесть',
@@ -332,20 +317,38 @@ export const STAT_NAMES: Record<StatKey, string> = {
   initiative: 'Инициатива'
 };
 
-export const MULTIPLIER_OPTIONS = [
-  { value: 0, label: '×0 (Иммунитет)' },
-  { value: 0.25, label: '×0.25' },
-  { value: 0.5, label: '×0.5 (Резист)' },
-  { value: 0.75, label: '×0.75' },
-  { value: 1, label: '×1 (Обычный)' },
-  { value: 1.5, label: '×1.5' },
-  { value: 2, label: '×2 (Уязвимость)' },
-  { value: 3, label: '×3' }
-];
+/** @deprecated Используй ElementModifier */
+export const AFFINITY_BONUS_NAMES: Record<AffinityBonusType, string> = {
+  castHit: '+к касту/попаданию',
+  manaCost: '−к затрате маны',
+  damage: '+к урону'
+};
 
 export const ALL_DAMAGE_TYPES: DamageType[] = [
   'slashing', 'piercing', 'bludgeoning', 'chopping',
-  'fire', 'water', 'earth', 'air', 'light', 'darkness',
-  'electricity', 'frost', 'nature', 'corruption', 'life', 'death',
-  'blood', 'void', 'astral', 'space', 'transcendence', 'pure'
+  'fire', 'ice', 'lightning', 'acid',
+  'poison', 'necrotic', 'radiant', 'psychic',
+  'force', 'thunder', 'void', 'pure'
+];
+
+export const PHYSICAL_DAMAGE_TYPES: DamageType[] = [
+  'slashing', 'piercing', 'bludgeoning', 'chopping'
+];
+
+export const MAGICAL_DAMAGE_TYPES: DamageType[] = [
+  'fire', 'ice', 'lightning', 'acid',
+  'poison', 'necrotic', 'radiant', 'psychic',
+  'force', 'thunder', 'void'
+];
+
+export const MULTIPLIER_OPTIONS = [
+  { value: 0, label: '×0 (Иммунитет)' },
+  { value: 0.25, label: '×0.25 (Сильный резист)' },
+  { value: 0.5, label: '×0.5 (Резист)' },
+  { value: 0.75, label: '×0.75 (Слабый резист)' },
+  { value: 1, label: '×1 (Норма)' },
+  { value: 1.25, label: '×1.25 (Слабая уязв.)' },
+  { value: 1.5, label: '×1.5 (Уязвимость)' },
+  { value: 2, label: '×2 (Сильная уязв.)' },
+  { value: 3, label: '×3 (Крит. уязв.)' }
 ];
