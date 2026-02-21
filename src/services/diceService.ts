@@ -472,6 +472,35 @@ class DiceService {
     });
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // НОВЫЙ МЕТОД: broadcastSpell (для spellExecutor)
+  // ═══════════════════════════════════════════════════════════════
+  
+  async broadcastSpell(
+    spellName: string,
+    unitName: string,
+    damage: number,
+    damageType?: string,
+    isCrit?: boolean
+  ): Promise<void> {
+    const subtitle = damageType 
+      ? `${damage} ${damageType}` 
+      : `${damage} урона`;
+    
+    await broadcast({
+      id: msgId(),
+      type: 'spell',
+      unitName,
+      title: spellName,
+      subtitle: isCrit ? `✨ КРИТ! ${subtitle}` : subtitle,
+      icon: '✨',
+      total: damage,
+      isCrit,
+      color: isCrit ? 'gold' : 'purple',
+      timestamp: Date.now()
+    });
+  }
+
   async showNotification(message: string): Promise<void> {
     await OBR.notification.show(message);
   }
