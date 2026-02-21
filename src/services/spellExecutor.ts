@@ -8,7 +8,6 @@ import type {
   RollModifier,
   DamageType
 } from '../types';
-import { rollDice, parseFormula } from '../utils/dice';
 import { ELEMENT_ICONS } from '../constants/elements';
 import { DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../types';
 
@@ -32,6 +31,57 @@ export interface ExecuteSpellResult {
   damageType?: string;
   manaCost: number;
   log: string[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ЛОКАЛЬНЫЙ ПАРСЕР КУБИКОВ (чтобы не зависеть от внешнего модуля)
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface DiceGroup {
+  count: number;
+  sides: number;
+}
+
+interface ParsedFormula {
+  dice: DiceGroup[];
+  bonus: number;
+}
+
+function parseFormula(formula: string): ParsedFormula {
+  const dice: DiceGroup[] = [];
+  let bonus = 0;
+  
+  const tokens = formula.toLowerCase().replace(/\s/g, '').match(/[+-]?(\d*d\d+|\d+)/g) || [];
+  
+  for (const token of tokens) {
+    const diceMatch = token.match(/([+-]?)(\d*)d(\d+)/);
+    if (diceMatch) {
+      const sign = diceMatch[1] === '-' ? -1 : 1;
+      const count = parseInt(diceMatch[2] || '1', 10) * sign;
+      const sides = parseInt(diceMatch[3]!, 10);
+      dice.push({ count: Math.abs(count), sides });
+    } else {
+      const num = parseInt(token, 10);
+      if (!isNaN(num)) bonus += num;
+    }
+  }
+  
+  return { dice, bonus };
+}
+
+function rollDice(formula: string): { formula: string; rolls: number[]; bonus: number; total: number } {
+  const { dice, bonus } = parseFormula(formula);
+  const rolls: number[] = [];
+  
+  for (const { count, sides } of dice) {
+    for (let i = 0; i < count; i++) {
+      rolls.push(Math.floor(Math.random() * sides) + 1);
+    }
+  }
+  
+  const total = rolls.reduce((sum, r) => sum + r, 0) + bonus;
+  
+  return { formula, rolls, bonus, total };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -584,7 +634,7 @@ function evaluateTransitions(action: SpellAction, context: CastContext): string 
   return action.defaultNextStepId ?? null;
 }
 
-function checkTransitionCondition(transition: StepTransition, context: CastContext): boolean {
+function checkTransitionCondition(transition: { condition: string; conditionKey?: string; conditionValue?: any; conditionValueMax?: number }, context: CastContext): boolean {
   switch (transition.condition) {
     case 'always':
       return true;
