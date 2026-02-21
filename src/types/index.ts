@@ -5,14 +5,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type DamageType = 
-  | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'  // Физические
-  | 'fire' | 'ice' | 'lightning' | 'acid'                 // Стихии
-  | 'poison' | 'necrotic' | 'radiant' | 'psychic'         // Магические
-  | 'force' | 'thunder' | 'void' | 'pure';                // Особые
+  | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'
+  | 'fire' | 'ice' | 'lightning' | 'acid'
+  | 'poison' | 'necrotic' | 'radiant' | 'psychic'
+  | 'force' | 'thunder' | 'void' | 'pure';
 
 export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
 export type WeaponType = 'melee' | 'ranged';
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
+export type StatKey = 'physicalPower' | 'dexterity' | 'vitality' | 'intelligence' | 'charisma' | 'initiative';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // МОДИФИКАТОР ЭЛЕМЕНТА
@@ -22,18 +23,13 @@ export interface ElementModifier {
   id: string;
   element: string;
   isActive: boolean;
-  
-  // Атака
   castBonus: number;
   damageBonus: number;
   damageBonusPercent: number;
   manaReduction: number;
   manaReductionPercent: number;
-  
-  // Защита
   resistance: number;
   damageMultiplier: number;
-  
   notes?: string;
 }
 
@@ -90,34 +86,31 @@ export interface Weapon {
 // 🔮 КОНСТРУКТОР ЗАКЛИНАНИЙ V2
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Типы шагов (действий) в цепочке заклинания */
 export type SpellActionType = 
-  | 'roll_check'       // d20 + бонус vs порог (каст, попадание)
-  | 'roll_dice'        // Просто бросить кубик
-  | 'roll_table'       // Бросок → таблица → результат
-  | 'roll_damage'      // Бросок кубиков урона
-  | 'damage_tiers'     // Бросок → урон зависит от диапазона
-  | 'set_value'        // Установить переменную в контекст
-  | 'modify_resource'  // Потратить/восстановить ресурс
-  | 'apply_damage'     // Применить накопленный урон
-  | 'message'          // Показать сообщение
-  | 'branch'           // Условный переход
-  | 'goto'             // Безусловный переход
-  | 'stop';            // Остановка цепочки
+  | 'roll_check'
+  | 'roll_dice'
+  | 'roll_table'
+  | 'roll_damage'
+  | 'damage_tiers'
+  | 'set_value'
+  | 'modify_resource'
+  | 'apply_damage'
+  | 'message'
+  | 'branch'
+  | 'goto'
+  | 'stop';
 
-/** Условие перехода */
 export type TransitionCondition = 
-  | 'always'           // Всегда
-  | 'crit'             // При крите (20)
-  | 'crit_fail'        // При провале (1)
-  | 'success'          // Успех (>= порога)
-  | 'fail'             // Провал (< порога)
-  | 'value_equals'     // Значение равно
-  | 'value_gte'        // Значение >=
-  | 'value_lte'        // Значение <=
-  | 'value_in_range';  // Значение в диапазоне
+  | 'always'
+  | 'crit'
+  | 'crit_fail'
+  | 'success'
+  | 'fail'
+  | 'value_equals'
+  | 'value_gte'
+  | 'value_lte'
+  | 'value_in_range';
 
-/** Переход после выполнения шага */
 export interface StepTransition {
   id: string;
   condition: TransitionCondition;
@@ -128,7 +121,6 @@ export interface StepTransition {
   priority: number;
 }
 
-/** Элемент таблицы результатов */
 export interface TableResultEntry {
   id: string;
   min: number;
@@ -138,7 +130,6 @@ export interface TableResultEntry {
   resultIcon?: string;
 }
 
-/** Tier урона */
 export interface DamageTierEntry {
   id: string;
   minRoll: number;
@@ -147,7 +138,6 @@ export interface DamageTierEntry {
   label?: string;
 }
 
-/** Бонус к броску */
 export interface RollBonus {
   type: 'stat' | 'proficiency' | 'flat' | 'from_context' | 'from_elements';
   statKey?: string;
@@ -158,7 +148,6 @@ export interface RollBonus {
   multiplier?: number;
 }
 
-/** Один шаг в цепочке заклинания */
 export interface SpellAction {
   id: string;
   type: SpellActionType;
@@ -166,27 +155,22 @@ export interface SpellAction {
   description?: string;
   order: number;
   
-  // Условие выполнения шага
   condition?: {
     type: 'always' | 'value_equals' | 'value_gte' | 'value_lte' | 'value_exists';
     key?: string;
     value?: number | string;
   };
   
-  // Для roll_check
   diceFormula?: string;
   bonuses?: RollBonus[];
   successThreshold?: number;
   useThresholdFromContext?: string;
   
-  // Для roll_table
   resultTable?: TableResultEntry[];
   saveResultAs?: string;
   
-  // Для damage_tiers
   damageTiers?: DamageTierEntry[];
   
-  // Для roll_damage / apply_damage
   damageFormula?: string;
   damageType?: DamageType | 'from_context';
   damageTypeContextKey?: string;
@@ -194,24 +178,20 @@ export interface SpellAction {
   addDamageBonus?: boolean;
   saveDamageAs?: string;
   
-  // Для set_value
   setKey?: string;
   setValue?: string | number | boolean;
   setValueFromContext?: string;
   setValueFormula?: string;
   
-  // Для modify_resource
   resourceType?: 'mana' | 'health' | 'resource';
   resourceId?: string;
   resourceAmount?: number;
   resourceAmountFormula?: string;
   resourceOperation?: 'spend' | 'restore';
   
-  // Для message
   messageTemplate?: string;
   messageType?: 'info' | 'success' | 'warning' | 'damage' | 'crit';
   
-  // Для branch
   branchCondition?: {
     type: 'value_equals' | 'value_gte' | 'value_lte' | 'value_exists' | 'value_in_range';
     key: string;
@@ -221,40 +201,31 @@ export interface SpellAction {
   branchTrueStepId?: string;
   branchFalseStepId?: string;
   
-  // Для goto
   gotoStepId?: string;
   
-  // Переходы (для roll_check и других)
   transitions?: StepTransition[];
-  
-  // Если нет transitions — по умолчанию
   defaultNextStepId?: string;
 }
 
-/** Глобальный модификатор заклинания */
 export interface SpellModifier {
   id: string;
   name?: string;
   condition: 'always' | 'crit' | 'crit_fail' | 'roll_gte' | 'roll_lte' | 'element_is' | 'value_equals';
   conditionKey?: string;
   conditionValue?: number | string;
-  
   effect: 'change_damage_type' | 'add_flat_damage' | 'multiply_damage' | 'heal_caster' | 'set_value' | 'add_message';
   effectValue?: string | number;
   effectKey?: string;
 }
 
-/** Контекст выполнения заклинания */
 export interface CastContext {
   casterId: string;
   casterName: string;
   targetCount: number;
   currentTargetIndex: number;
   currentProjectileIndex: number;
-  
   values: Record<string, any>;
   log: string[];
-  
   rolls: Array<{
     stepId: string;
     formula: string;
@@ -264,7 +235,6 @@ export interface CastContext {
     isCrit?: boolean;
     isCritFail?: boolean;
   }>;
-  
   totalDamage: number;
   damageType?: string;
   damageBreakdown: Array<{
@@ -273,12 +243,10 @@ export interface CastContext {
     type?: string;
     isCrit?: boolean;
   }>;
-  
   isCrit: boolean;
   isCritFail: boolean;
   lastRoll?: number;
   lastD20?: number;
-  
   currentStepIndex: number;
   currentStepId?: string;
   stopped: boolean;
@@ -286,32 +254,27 @@ export interface CastContext {
   error?: string;
 }
 
-/** Заклинание V2 (с конструктором) */
 export interface SpellV2 {
   id: string;
   name: string;
   version: 2;
-  
   cost: number;
   costResource: 'mana' | 'health' | 'resource';
   costResourceId?: string;
-  
   spellType: 'targeted' | 'aoe' | 'self' | 'utility' | 'summon';
   projectiles: string;
   elements: string[];
   description?: string;
-  
   actions: SpellAction[];
   modifiers?: SpellModifier[];
 }
 
-/** Проверка версии заклинания */
 export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
   return 'version' in spell && spell.version === 2;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ЗАКЛИНАНИЯ (СТАРАЯ ВЕРСИЯ — для совместимости)
+// ЗАКЛИНАНИЯ (СТАРАЯ ВЕРСИЯ)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface DamageTier {
@@ -334,10 +297,137 @@ export interface Spell {
   damageType?: DamageType;
   description?: string;
   equipmentBonus?: number;
-  
   isMultiStep?: boolean;
   elementTable?: Record<number, DamageType>;
   damageTiers?: DamageTier[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎬 КАСТОМНЫЕ ДЕЙСТВИЯ V2
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Категория действия */
+export type ActionCategory = 
+  | 'check'       // Проверки характеристик
+  | 'social'      // Социальные взаимодействия
+  | 'exploration' // Исследование
+  | 'item'        // Использование предметов
+  | 'ability'     // Особые способности
+  | 'reaction'    // Реакции
+  | 'other';      // Прочее
+
+export const ACTION_CATEGORY_NAMES: Record<ActionCategory, string> = {
+  check: 'Проверка',
+  social: 'Социальное',
+  exploration: 'Исследование',
+  item: 'Предмет',
+  ability: 'Способность',
+  reaction: 'Реакция',
+  other: 'Прочее'
+};
+
+export const ACTION_CATEGORY_ICONS: Record<ActionCategory, string> = {
+  check: '🎲',
+  social: '🗣️',
+  exploration: '🔍',
+  item: '🧪',
+  ability: '⚡',
+  reaction: '🛡️',
+  other: '✨'
+};
+
+/** Стоимость действия */
+export interface ActionCost {
+  id: string;
+  type: 'mana' | 'health' | 'resource';
+  resourceId?: string;
+  amount: number;
+}
+
+/** Кастомное действие V2 */
+export interface CustomActionV2 {
+  id: string;
+  name: string;
+  version: 2;
+  
+  // Визуальное
+  icon: string;
+  category: ActionCategory;
+  description?: string;
+  
+  // Стоимость (может быть несколько или пусто)
+  costs: ActionCost[];
+  
+  // Модификатор броска по умолчанию
+  defaultRollModifier: RollModifier;
+  
+  // ⛓️ Цепочка действий (переиспользуем SpellAction!)
+  actions: SpellAction[];
+}
+
+/** Проверка версии действия */
+export function isCustomActionV2(action: CustomAction | CustomActionV2): action is CustomActionV2 {
+  return 'version' in action && action.version === 2;
+}
+
+/** Создать пустое действие V2 */
+export function createEmptyCustomActionV2(): CustomActionV2 {
+  return {
+    id: '',
+    name: 'Новое действие',
+    version: 2,
+    icon: '⚡',
+    category: 'check',
+    description: '',
+    costs: [],
+    defaultRollModifier: 'normal',
+    actions: []
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// КАСТОМНЫЕ ДЕЙСТВИЯ (СТАРАЯ ВЕРСИЯ — для миграции)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** @deprecated Используй CustomActionV2 */
+export interface ActionBonus {
+  type: 'stat' | 'proficiency' | 'flat';
+  stat?: StatKey;
+  proficiency?: ProficiencyType;
+  flatValue?: number;
+  label?: string;
+}
+
+/** @deprecated Используй CustomActionV2 */
+export interface ActionOutcome {
+  type: 'message' | 'next_step' | 'damage' | 'heal' | 'mana_cost' | 'health_cost';
+  message?: string;
+  nextStepId?: string;
+  damageFormula?: string;
+  healFormula?: string;
+  amount?: number;
+}
+
+/** @deprecated Используй CustomActionV2 */
+export interface ActionStep {
+  id: string;
+  label: string;
+  roll?: {
+    dice: string;
+    bonuses: ActionBonus[];
+  };
+  threshold?: number;
+  rollModifier?: RollModifier;
+  onSuccess?: ActionOutcome;
+  onFailure?: ActionOutcome;
+}
+
+/** @deprecated Используй CustomActionV2 */
+export interface CustomAction {
+  id: string;
+  name: string;
+  icon: string;
+  steps: ActionStep[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -352,7 +442,6 @@ export interface Resource {
   max: number;
   resourceType: 'generic' | 'ammo';
   syncWithDocs?: boolean;
-  
   damageFormula?: string;
   damageType?: DamageType;
   extraDamageFormula?: string;
@@ -399,6 +488,9 @@ export interface Unit {
   weapons: Weapon[];
   spells: (Spell | SpellV2)[];
   resources: Resource[];
+  
+  // Действия — поддержка обеих версий
+  customActions?: (CustomAction | CustomActionV2)[];
   
   useManaAsHp: boolean;
   hasRokCards?: boolean;
@@ -513,7 +605,6 @@ export const ELEMENT_NAMES: Record<string, string> = {
   space: 'Пространство',
   chaos: 'Хаос',
   order: 'Порядок',
-  // Русские названия из constants/elements.ts
   'огонь': 'Огонь',
   'вода': 'Вода',
   'земля': 'Земля',
@@ -549,6 +640,12 @@ export const STAT_NAMES: Record<string, string> = {
   intelligence: 'Интеллект',
   charisma: 'Харизма',
   initiative: 'Инициатива'
+};
+
+export const ROLL_MODIFIER_NAMES: Record<RollModifier, string> = {
+  normal: 'Обычный',
+  advantage: 'Преимущество',
+  disadvantage: 'Помеха'
 };
 
 /** @deprecated */
@@ -588,7 +685,7 @@ export const MULTIPLIER_OPTIONS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ТИПЫ ШАГОВ ЗАКЛИНАНИЙ — МЕТАДАННЫЕ
+// ТИПЫ ШАГОВ — МЕТАДАННЫЕ
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const SPELL_ACTION_TYPE_META: Record<SpellActionType, {
