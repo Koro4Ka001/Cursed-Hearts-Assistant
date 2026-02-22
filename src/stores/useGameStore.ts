@@ -20,7 +20,7 @@ interface UndoEntry {
   id: string;
   timestamp: number;
   description: string;
-  type: 'hp' | 'mana' | 'resource' | 'damage' | 'heal';
+  type: 'hp' | 'mana' | 'resource';
   unitId: string;
   unitName: string;
   resourceId?: string;
@@ -150,60 +150,39 @@ interface Connections {
 }
 
 interface GameState {
-  // Юниты
   units: Unit[];
   selectedUnitId: string | null;
-  
-  // UI
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
-  
-  // Настройки
   settings: AppSettings;
-  
-  // UI состояние
   notifications: Notification[];
   combatLog: CombatLogEntry[];
   activeEffect: string | null;
   nextRollModifier: RollModifier;
-  
-  // Undo история
   undoHistory: UndoEntry[];
-  
-  // Соединения
   connections: Connections;
   
-  // Экшены — юниты
   addUnit: () => void;
   updateUnit: (id: string, updates: Partial<Unit>) => void;
   deleteUnit: (id: string) => void;
   selectUnit: (id: string | null) => void;
   
-  // Экшены — HP/Mana
   setHP: (unitId: string, value: number) => Promise<void>;
   setMana: (unitId: string, value: number) => Promise<void>;
   spendMana: (unitId: string, amount: number) => Promise<void>;
   heal: (unitId: string, amount: number) => Promise<void>;
   takeDamage: (unitId: string, amount: number) => Promise<void>;
-  
-  // Экшены — ресурсы
   setResource: (unitId: string, resourceId: string, current: number) => Promise<void>;
   
-  // Экшены — Undo
   undo: () => Promise<void>;
   clearUndoHistory: () => void;
   
-  // Экшены — настройки
   updateSettings: (updates: Partial<AppSettings>) => void;
-  
-  // Экшены — UI
   addNotification: (message: string, type?: Notification['type']) => void;
   clearNotification: (id: string) => void;
   addCombatLog: (unitName: string, action: string, details: string) => void;
   triggerEffect: (effect: string) => void;
   setNextRollModifier: (mod: RollModifier) => void;
-  
-  // Соединения
   setConnection: (type: keyof Omit<Connections, 'lastSyncTime'>, connected: boolean) => void;
   startAutoSync: () => void;
 }
@@ -227,23 +206,6 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
   } catch (e) {
     console.warn('[Store] Failed to update token bars:', e);
   }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// HELPER: Добавить undo запись
-// ═══════════════════════════════════════════════════════════════════════════
-
-function addUndoEntry(
-  state: GameState,
-  entry: Omit<UndoEntry, 'id' | 'timestamp'>
-): UndoEntry[] {
-  const newEntry: UndoEntry = {
-    ...entry,
-    id: generateId(),
-    timestamp: Date.now()
-  };
-  
-  return [newEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -297,7 +259,6 @@ function createDefaultUnit(): Unit {
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
-      // ═══ СОСТОЯНИЕ ═══
       units: [],
       selectedUnitId: null,
       activeTab: 'combat',
@@ -321,10 +282,8 @@ export const useGameStore = create<GameState>()(
         lastSyncTime: undefined
       },
       
-      // ═══ TAB ═══
       setActiveTab: (tab) => set({ activeTab: tab }),
       
-      // ═══ ЮНИТЫ ═══
       addUnit: () => {
         const newUnit = createDefaultUnit();
         set(state => ({
@@ -359,7 +318,6 @@ export const useGameStore = create<GameState>()(
       
       selectUnit: (id) => set({ selectedUnitId: id }),
       
-      // ═══ HP/MANA ═══
       setHP: async (unitId, value) => {
         const { units, settings } = get();
         const unit = units.find(u => u.id === unitId);
@@ -368,21 +326,25 @@ export const useGameStore = create<GameState>()(
         const previousValue = unit.health.current;
         const newHP = Math.max(0, Math.min(value, unit.health.max));
         
-        // Добавляем в undo историю
+        // Добавляем undo запись
+        const undoEntry: UndoEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          description: `${unit.shortName}: HP ${previousValue} → ${newHP}`,
+          type: 'hp',
+          unitId,
+          unitName: unit.shortName ?? unit.name,
+          previousValue,
+          newValue: newHP
+        };
+        
         set(state => ({
           units: state.units.map(u => 
             u.id === unitId 
               ? { ...u, health: { ...u.health, current: newHP } }
               : u
           ),
-          undoHistory: addUndoEntry(state, {
-            type: 'hp',
-            description: `${unit.shortName}: HP ${previousValue} → ${newHP}`,
-            unitId,
-            unitName: unit.shortName ?? unit.name,
-            previousValue,
-            newValue: newHP
-          })
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY)
         }));
         
         const updatedUnit = { ...unit, health: { ...unit.health, current: newHP } };
@@ -397,20 +359,24 @@ export const useGameStore = create<GameState>()(
         const previousValue = unit.mana.current;
         const newMana = Math.max(0, Math.min(value, unit.mana.max));
         
+        const undoEntry: UndoEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          description: `${unit.shortName}: Мана ${previousValue} → ${newMana}`,
+          type: 'mana',
+          unitId,
+          unitName: unit.shortName ?? unit.name,
+          previousValue,
+          newValue: newMana
+        };
+        
         set(state => ({
           units: state.units.map(u => 
             u.id === unitId 
               ? { ...u, mana: { ...u.mana, current: newMana } }
               : u
           ),
-          undoHistory: addUndoEntry(state, {
-            type: 'mana',
-            description: `${unit.shortName}: Мана ${previousValue} → ${newMana}`,
-            unitId,
-            unitName: unit.shortName ?? unit.name,
-            previousValue,
-            newValue: newMana
-          })
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY)
         }));
         
         const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
@@ -449,7 +415,6 @@ export const useGameStore = create<GameState>()(
         }
       },
       
-      // ═══ РЕСУРСЫ ═══
       setResource: async (unitId, resourceId, current) => {
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
@@ -459,6 +424,18 @@ export const useGameStore = create<GameState>()(
         if (!resource) return;
         
         const previousValue = resource.current;
+        
+        const undoEntry: UndoEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          description: `${unit.shortName}: ${resource.name} ${previousValue} → ${current}`,
+          type: 'resource',
+          unitId,
+          unitName: unit.shortName ?? unit.name,
+          resourceId,
+          previousValue,
+          newValue: current
+        };
         
         set(state => ({
           units: state.units.map(u => {
@@ -470,19 +447,10 @@ export const useGameStore = create<GameState>()(
               )
             };
           }),
-          undoHistory: addUndoEntry(state, {
-            type: 'resource',
-            description: `${unit.shortName}: ${resource.name} ${previousValue} → ${current}`,
-            unitId,
-            unitName: unit.shortName ?? unit.name,
-            resourceId,
-            previousValue,
-            newValue: current
-          })
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY)
         }));
       },
       
-      // ═══ UNDO ═══
       undo: async () => {
         const { undoHistory, units, settings, addNotification } = get();
         
@@ -495,13 +463,11 @@ export const useGameStore = create<GameState>()(
         const unit = units.find(u => u.id === lastEntry.unitId);
         
         if (!unit) {
-          // Юнит удалён, пропускаем
           set({ undoHistory: restHistory });
           addNotification('Юнит не найден, пропущено', 'warning');
           return;
         }
         
-        // Выполняем откат
         switch (lastEntry.type) {
           case 'hp':
             set(state => ({
@@ -513,7 +479,6 @@ export const useGameStore = create<GameState>()(
               undoHistory: restHistory
             }));
             
-            // Обновляем бары
             const updatedUnitHP = { ...unit, health: { ...unit.health, current: lastEntry.previousValue } };
             await updateTokenBars(updatedUnitHP, settings);
             break;
@@ -561,7 +526,6 @@ export const useGameStore = create<GameState>()(
         get().addNotification('История отмены очищена', 'info');
       },
       
-      // ═══ НАСТРОЙКИ ═══
       updateSettings: (updates) => {
         set(state => ({
           settings: { ...state.settings, ...updates }
@@ -577,7 +541,6 @@ export const useGameStore = create<GameState>()(
         }
       },
       
-      // ═══ UI ═══
       addNotification: (message, type = 'info') => {
         const notification: Notification = {
           id: generateId(),
@@ -625,7 +588,6 @@ export const useGameStore = create<GameState>()(
       
       setNextRollModifier: (mod) => set({ nextRollModifier: mod }),
       
-      // ═══ СОЕДИНЕНИЯ ═══
       setConnection: (type, connected) => {
         set(state => ({
           connections: { 
@@ -644,19 +606,18 @@ export const useGameStore = create<GameState>()(
     }),
     {
       name: 'cursed-hearts-storage',
-      version: 3,  // Увеличиваем версию для undo
+      version: 3,
       
       migrate: (persistedState: unknown, version: number) => {
         console.log(`[STORE] Migrating from version ${version} to 3`);
         const state = persistedState as GameState;
         
-        if (version < 2) {
-          const migratedUnits = state.units?.map(migrateUnit) ?? [];
+        if (version < 3) {
           return {
             ...state,
-            units: migratedUnits,
-            activeTab: state.activeTab ?? 'combat',
+            units: state.units?.map(migrateUnit) ?? [],
             undoHistory: [],
+            activeTab: state.activeTab ?? 'combat',
             connections: {
               docs: state.connections?.docs ?? false,
               owlbear: state.connections?.owlbear ?? false,
@@ -665,22 +626,13 @@ export const useGameStore = create<GameState>()(
             }
           };
         }
-        
-        if (version < 3) {
-          return {
-            ...state,
-            undoHistory: state.undoHistory ?? []
-          };
-        }
-        
         return state;
       },
       
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.units = state.units.map(migrateUnit);
-          // Очищаем undo историю при загрузке (опционально)
-          // state.undoHistory = [];
+          state.undoHistory = state.undoHistory ?? [];
         }
       }
     }
