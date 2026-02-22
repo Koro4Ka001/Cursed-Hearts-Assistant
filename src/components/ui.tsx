@@ -1,7 +1,7 @@
 // src/components/ui.tsx
 import React, { useState, useCallback, Component, type ReactNode, type ChangeEvent } from 'react';
 import { cn } from '../utils/cn';
-import type { DiceRollResult, RollModifier } from '../types';
+import type { DiceRollResult } from '../types';
 
 // ════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -158,7 +158,64 @@ export function Input({ label, error, className, ...props }: InputProps) {
 // FORMULA INPUT — Поле ввода формулы с валидацией
 // ════════════════════════════════════════════════════════════
 
-import { validateFormula, formatFormulaRange } from '../utils/formulaValidator';
+// Встроенная валидация (чтобы не зависеть от отдельного файла)
+function validateFormulaInternal(formula: string): { isValid: boolean; error?: string; min?: number; max?: number } {
+  if (!formula || formula.trim().length === 0) {
+    return { isValid: true }; // Пустая формула - ок
+  }
+  
+  const cleaned = formula.replace(/\s+/g, '');
+  
+  // Проверяем на недопустимые символы
+  if (!/^[0-9d+\-]+$/i.test(cleaned)) {
+    return { isValid: false, error: 'Недопустимые символы' };
+  }
+  
+  // Разбиваем на термы
+  const normalized = cleaned.replace(/-/g, '+-');
+  const terms = normalized.split('+').filter(t => t.length > 0);
+  
+  let min = 0;
+  let max = 0;
+  
+  for (const term of terms) {
+    // Dice терм: 2d6, d20, -3d8
+    const diceMatch = term.match(/^(-)?(\d+)?d(\d+)$/i);
+    if (diceMatch) {
+      const isNegative = diceMatch[1] === '-';
+      const count = parseInt(diceMatch[2] || '1', 10);
+      const sides = parseInt(diceMatch[3], 10);
+      
+      if (count < 1 || count > 100) {
+        return { isValid: false, error: `Кубиков: 1-100` };
+      }
+      if (sides < 1 || sides > 1000) {
+        return { isValid: false, error: `Грани: 1-1000` };
+      }
+      
+      if (isNegative) {
+        min -= count * sides;
+        max -= count;
+      } else {
+        min += count;
+        max += count * sides;
+      }
+      continue;
+    }
+    
+    // Число
+    if (/^-?\d+$/.test(term)) {
+      const num = parseInt(term, 10);
+      min += num;
+      max += num;
+      continue;
+    }
+    
+    return { isValid: false, error: `Непонятно: "${term}"` };
+  }
+  
+  return { isValid: true, min, max };
+}
 
 interface FormulaInputProps {
   label?: string;
@@ -177,9 +234,11 @@ export function FormulaInput({
   placeholder,
   className
 }: FormulaInputProps) {
-  const validation = validateFormula(value || '');
-  const range = showRange && value ? formatFormulaRange(value) : '';
+  const validation = validateFormulaInternal(value || '');
   const hasValue = value && value.length > 0;
+  const rangeText = validation.isValid && hasValue && validation.min !== undefined
+    ? `${validation.min}–${validation.max}`
+    : '';
   
   return (
     <div className="flex flex-col gap-1">
@@ -197,7 +256,8 @@ export function FormulaInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className={cn(
-            'w-full bg-obsidian border text-bone rounded px-2.5 py-1.5 pr-16',
+            'w-full bg-obsidian border text-bone rounded px-2.5 py-1.5',
+            showRange && rangeText ? 'pr-16' : 'pr-8',
             'font-garamond text-sm placeholder:text-dim',
             'focus:outline-none transition-all duration-200',
             !hasValue || validation.isValid 
@@ -207,9 +267,9 @@ export function FormulaInput({
           )}
         />
         {/* Индикатор диапазона */}
-        {validation.isValid && range && (
+        {validation.isValid && showRange && rangeText && (
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ancient pointer-events-none">
-            {range}
+            {rangeText}
           </span>
         )}
         {/* Индикатор ошибки */}
@@ -220,7 +280,7 @@ export function FormulaInput({
         )}
       </div>
       {/* Сообщение об ошибке */}
-      {hasValue && !validation.isValid && (
+      {hasValue && !validation.isValid && validation.error && (
         <span className="text-[10px] text-blood-bright font-garamond">
           {validation.error}
         </span>
