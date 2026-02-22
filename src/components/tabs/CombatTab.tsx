@@ -1,17 +1,17 @@
 // src/components/tabs/CombatTab.tsx
+
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState, RollModifierSelector } from '../ui';
+import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState } from '../ui';
 import { isHit } from '../../utils/dice';
 import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
-import type { DiceRollResult, DamageType, DamageCategory, RollModifier } from '../../types';
+import type { DiceRollResult, DamageType, DamageCategory } from '../../types';
 import { DAMAGE_TYPE_NAMES } from '../../types';
 
 export function CombatTab() {
   const {
-    units, selectedUnitId, takeDamage, heal: healUnit, setResource, triggerEffect,
-    nextRollModifier, setNextRollModifier
+    units, selectedUnitId, takeDamage, heal: healUnit, setResource, triggerEffect, addCombatLog
   } = useGameStore();
   const unit = units.find(u => u.id === selectedUnitId);
   
@@ -72,33 +72,24 @@ export function CombatTab() {
     setMeleeAttackResults([]);
     setMeleeDamageResults([]);
     
-    // Забираем модификатор (и сбрасываем на normal)
-    const modifier = nextRollModifier;
-    setNextRollModifier('normal');
-    
     const newAttackResults: DiceRollResult[] = [];
     const newDamageResults: DiceRollResult[] = [];
     
     try {
       for (let target = 0; target < meleeTargetCount; target++) {
-        // Бросок на попадание (с модификатором!)
         const profKey = selectedMeleeWeapon.proficiencyType;
         const profBonus = proficiencies[profKey] ?? 0;
         const hitBonus = profBonus + (selectedMeleeWeapon.hitBonus ?? 0);
         const hitFormula = hitBonus >= 0 ? `d20+${hitBonus}` : `d20${hitBonus}`;
         
-        // Модификатор применяется ТОЛЬКО к первой цели, потом сбрасывается
-        const useModifier = target === 0 ? modifier : 'normal';
-        
         const hitResult = await diceService.roll(
           hitFormula,
           `Попадание ${selectedMeleeWeapon.name}`,
           unit.shortName ?? unit.name,
-          useModifier
+          'normal'
         );
         newAttackResults.push(hitResult);
         
-        // Крит промах — пропускаем
         if (hitResult.isCritFail) {
           continue;
         }
@@ -106,7 +97,6 @@ export function CombatTab() {
         const hit = isHit(hitResult);
         if (!hit) continue;
         
-        // ═══ КРИТ 20 = УДВОЕНИЕ КУБИКОВ УРОНА ═══
         const isCrit = hitResult.isCrit;
         const statBonus = getStatDamageBonus(unit, selectedMeleeWeapon.statBonus);
         
@@ -115,7 +105,6 @@ export function CombatTab() {
           ? `${baseDamageFormula}+${statBonus}`
           : baseDamageFormula;
         
-        // rollDamage НЕ проверяет крит, просто удваивает кубики если isCrit=true
         const damageResult = await diceService.rollDamage(
           damageFormula,
           `Урон ${selectedMeleeWeapon.name}`,
@@ -124,7 +113,13 @@ export function CombatTab() {
         );
         newDamageResults.push(damageResult);
         
-        // Дополнительный урон
+        // Логируем в боевой журнал
+        addCombatLog(
+          unit.shortName ?? unit.name,
+          selectedMeleeWeapon.name,
+          `${isCrit ? '✨КРИТ ' : ''}${damageResult.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`
+        );
+        
         if (selectedMeleeWeapon.extraDamageFormula && selectedMeleeWeapon.extraDamageType) {
           const extraResult = await diceService.rollDamage(
             selectedMeleeWeapon.extraDamageFormula,
@@ -163,13 +158,8 @@ export function CombatTab() {
     setRangedDamageResults([]);
     setRangedLog([]);
     
-    // Забираем модификатор
-    const modifier = nextRollModifier;
-    setNextRollModifier('normal');
-    
     const newDamageResults: DiceRollResult[] = [];
     const log: string[] = [];
-    let firstShot = true;
     
     try {
       for (let shot = 0; shot < rangedShotCount; shot++) {
@@ -182,37 +172,27 @@ export function CombatTab() {
           const hitBonus = bowsProf + (selectedRangedWeapon.hitBonus ?? 0);
           const hitFormula = hitBonus >= 0 ? `d20+${hitBonus}` : `d20${hitBonus}`;
           
-          // Модификатор только на первый выстрел первой стрелы
-          const useModifier = (firstShot && arrow === 0) ? modifier : 'normal';
-          if (arrow === 0) firstShot = false;
-          
           const hitResult = await diceService.roll(
             hitFormula,
             `Стрела ${arrow + 1}`,
             unit.shortName ?? unit.name,
-            useModifier
+            'normal'
           );
           
           const hit = isHit(hitResult);
           const isCrit = hitResult.isCrit;
           const isCritFail = hitResult.isCritFail;
           
-          // Показываем модификатор в логе
-          const modText = hitResult.allD20Rolls && hitResult.allD20Rolls.length > 1
-            ? ` (${hitResult.rollModifier === 'advantage' ? '🎯' : '💨'}[${hitResult.allD20Rolls.join(',')}])`
-            : '';
-          
           if (isCritFail) {
-            log.push(`💀 Стрела ${arrow + 1}: [${hitResult.rawD20}]${modText} = КРИТ ПРОМАХ!`);
+            log.push(`💀 Стрела ${arrow + 1}: [${hitResult.rawD20}] = КРИТ ПРОМАХ!`);
             continue;
           }
           
           if (!hit) {
-            log.push(`❌ Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total}${modText} — Промах`);
+            log.push(`❌ Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total} — Промах`);
             continue;
           }
           
-          // Попадание
           if (selectedAmmo.damageFormula && selectedAmmo.damageType) {
             const dexBonus = getStatDamageBonus(unit, 'dexterity');
             const ammoFormula = selectedAmmo.damageFormula;
@@ -227,9 +207,15 @@ export function CombatTab() {
             newDamageResults.push(damageResult);
             
             const critText = isCrit ? '✨ КРИТ! ×2 ' : '';
-            log.push(`🎯 Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total}${modText} ${critText}→ 💥 ${damageResult.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? 'физ'}`);
+            log.push(`🎯 Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total} ${critText}→ 💥 ${damageResult.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? 'физ'}`);
             
-            // Дополнительный урон
+            // Логируем
+            addCombatLog(
+              unit.shortName ?? unit.name,
+              `${selectedRangedWeapon.name} (${selectedAmmo.name})`,
+              `${isCrit ? '✨КРИТ ' : ''}${damageResult.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`
+            );
+            
             if (selectedAmmo.extraDamageFormula && selectedAmmo.extraDamageType) {
               const extraResult = await diceService.rollDamage(
                 selectedAmmo.extraDamageFormula,
@@ -246,7 +232,6 @@ export function CombatTab() {
         }
       }
       
-      // Списываем боеприпасы
       const totalSpent = rangedShotCount * ammoConsumed;
       await setResource(unit.id, selectedAmmo.id, ammoCurrent - totalSpent);
       log.push(`📦 Списано ${totalSpent} ${selectedAmmo.name}`);
@@ -274,6 +259,13 @@ export function CombatTab() {
     
     await takeDamage(unit.id, damagePreview.finalDamage);
     triggerEffect('shake');
+    
+    // Логируем
+    addCombatLog(
+      unit.shortName ?? unit.name,
+      `Получил урон`,
+      `${damagePreview.finalDamage} ${DAMAGE_TYPE_NAMES[damageType] ?? damageType}`
+    );
     
     if (unit.useManaAsHp) {
       const curMana = unit.mana?.current ?? 0;
@@ -309,6 +301,13 @@ export function CombatTab() {
     await healUnit(unit.id, healAmount);
     triggerEffect('heal');
     
+    // Логируем
+    addCombatLog(
+      unit.shortName ?? unit.name,
+      `Исцеление`,
+      `+${healAmount} HP`
+    );
+    
     if (unit.useManaAsHp) {
       const curMana = unit.mana?.current ?? 0;
       const mxMana = unit.mana?.max ?? 1;
@@ -332,8 +331,7 @@ export function CombatTab() {
   
   // Опции типов урона
   const physicalTypes: DamageType[] = ['slashing', 'piercing', 'bludgeoning', 'chopping'];
-  const magicalTypes: DamageType[] = ['fire', 'water', 'earth', 'air', 'light', 'darkness',
-    'electricity', 'frost', 'nature', 'corruption', 'life', 'death', 'blood', 'void', 'astral'];
+  const magicalTypes: DamageType[] = ['fire', 'ice', 'lightning', 'acid', 'poison', 'necrotic', 'radiant', 'psychic', 'force', 'thunder', 'void'];
   
   const getDamageTypeOptions = () => {
     if (damageCategory === 'pure') {
@@ -348,21 +346,8 @@ export function CombatTab() {
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       
-      {/* ═══ МОДИФИКАТОР БРОСКА ═══ */}
-      <Section title="Модификатор следующего броска" icon="🎲">
-        <RollModifierSelector
-          value={nextRollModifier}
-          onChange={setNextRollModifier}
-        />
-        <p className="text-[10px] text-faded mt-2">
-          {nextRollModifier === 'advantage' && '🎯 Преимущество: бросаете 2d20, берёте больший'}
-          {nextRollModifier === 'disadvantage' && '💨 Помеха: бросаете 2d20, берёте меньший'}
-          {nextRollModifier === 'normal' && 'Обычный бросок d20'}
-        </p>
-      </Section>
-      
       {/* ═══ БЛИЖНИЙ БОЙ ═══ */}
-      <Section title="Ближний бой" icon="⚔️">
+      <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true}>
         {meleeWeapons.length === 0 ? (
           <p className="text-faded text-sm">Добавьте оружие ближнего боя в настройках</p>
         ) : (
@@ -398,7 +383,7 @@ export function CombatTab() {
               disabled={!selectedMeleeWeapon}
               className="w-full"
             >
-              ⚔️ АТАКОВАТЬ {nextRollModifier !== 'normal' && (nextRollModifier === 'advantage' ? '🎯' : '💨')}
+              ⚔️ АТАКОВАТЬ
             </Button>
             
             {meleeAttackResults.length > 0 && (
@@ -419,7 +404,7 @@ export function CombatTab() {
       </Section>
       
       {/* ═══ ДАЛЬНИЙ БОЙ ═══ */}
-      <Section title="Дальний бой" icon="🏹">
+      <Section title="Дальний бой" icon="🏹" collapsible defaultOpen={true}>
         {rangedWeapons.length === 0 ? (
           <p className="text-faded text-sm">Добавьте оружие дальнего боя в настройках</p>
         ) : ammoResources.length === 0 ? (
@@ -473,7 +458,7 @@ export function CombatTab() {
               disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)}
               className="w-full"
             >
-              🏹 ВЫСТРЕЛИТЬ {nextRollModifier !== 'normal' && (nextRollModifier === 'advantage' ? '🎯' : '💨')}
+              🏹 ВЫСТРЕЛИТЬ
             </Button>
             
             {rangedLog.length > 0 && (
@@ -495,7 +480,7 @@ export function CombatTab() {
       </Section>
       
       {/* ═══ ПОЛУЧЕНИЕ УРОНА ═══ */}
-      <Section title="Получение урона" icon="💀">
+      <Section title="Получение урона" icon="💀" collapsible defaultOpen={true}>
         <div className="space-y-3">
           <NumberStepper
             label="Входящий урон"
@@ -559,7 +544,7 @@ export function CombatTab() {
       </Section>
       
       {/* ═══ ИСЦЕЛЕНИЕ ═══ */}
-      <Section title="Исцеление" icon="💚">
+      <Section title="Исцеление" icon="💚" collapsible defaultOpen={true}>
         <div className="space-y-3">
           <NumberStepper
             label="Количество HP"
