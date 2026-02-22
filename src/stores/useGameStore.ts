@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Unit, AppSettings, RollModifier, ElementModifier } from '../types';
 import { tokenBarService } from '../services/tokenBarService';
+import { docsService } from '../services/docsService';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ГЕНЕРАТОР ID
@@ -50,7 +51,7 @@ function migrateUnit(unit: Unit): Unit {
     };
   }
   
-  console.log(`[MIGRATION] Migrating unit "${unit.name}" to new ElementModifier system...`);
+  console.log(`[MIGRATION] Migrating unit "${unit.name}"...`);
   
   const modifiers: ElementModifier[] = [...(unit.elementModifiers ?? [])];
   const modifierMap = new Map<string, ElementModifier>();
@@ -173,6 +174,7 @@ interface GameState {
   heal: (unitId: string, amount: number) => Promise<void>;
   takeDamage: (unitId: string, amount: number) => Promise<void>;
   setResource: (unitId: string, resourceId: string, current: number) => Promise<void>;
+  spendResource: (unitId: string, resourceId: string, amount: number) => Promise<void>;
   
   undo: () => Promise<void>;
   clearUndoHistory: () => void;
@@ -185,10 +187,11 @@ interface GameState {
   setNextRollModifier: (mod: RollModifier) => void;
   setConnection: (type: keyof Omit<Connections, 'lastSyncTime'>, connected: boolean) => void;
   startAutoSync: () => void;
+  syncUnitToDocs: (unit: Unit) => Promise<void>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HELPER: Обновить бары токена
+// HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
@@ -284,6 +287,7 @@ export const useGameStore = create<GameState>()(
       
       setActiveTab: (tab) => set({ activeTab: tab }),
       
+      // ═══ ЮНИТЫ ═══
       addUnit: () => {
         const newUnit = createDefaultUnit();
         set(state => ({
@@ -318,15 +322,16 @@ export const useGameStore = create<GameState>()(
       
       selectUnit: (id) => set({ selectedUnitId: id }),
       
+      // ═══ HP ═══
       setHP: async (unitId, value) => {
-        const { units, settings } = get();
+        const { units, settings, connections } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
         
         const previousValue = unit.health.current;
         const newHP = Math.max(0, Math.min(value, unit.health.max));
         
-        // Добавляем undo запись
+        // Undo entry
         const undoEntry: UndoEntry = {
           id: generateId(),
           timestamp: Date.now(),
@@ -344,15 +349,28 @@ export const useGameStore = create<GameState>()(
               ? { ...u, health: { ...u.health, current: newHP } }
               : u
           ),
-          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY)
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
+          connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
+        // Token bars
         const updatedUnit = { ...unit, health: { ...unit.health, current: newHP } };
         await updateTokenBars(updatedUnit, settings);
+        
+        // Google Docs sync
+        if (connections.docs && settings.syncHP && unit.googleDocsHeader) {
+          try {
+            await docsService.setHealth(unit.googleDocsHeader, newHP, unit.health.max);
+            console.log(`[Store] 📄 Synced HP to Docs: ${unit.shortName} = ${newHP}`);
+          } catch (e) {
+            console.warn('[Store] Docs sync HP failed:', e);
+          }
+        }
       },
       
+      // ═══ MANA ═══
       setMana: async (unitId, value) => {
-        const { units, settings } = get();
+        const { units, settings, connections } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
         
@@ -376,11 +394,22 @@ export const useGameStore = create<GameState>()(
               ? { ...u, mana: { ...u.mana, current: newMana } }
               : u
           ),
-          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY)
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
+          connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
         const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
         await updateTokenBars(updatedUnit, settings);
+        
+        // Google Docs sync
+        if (connections.docs && settings.syncMana && unit.googleDocsHeader) {
+          try {
+            await docsService.setMana(unit.googleDocsHeader, newMana, unit.mana.max);
+            console.log(`[Store] 📄 Synced Mana to Docs: ${unit.shortName} = ${newMana}`);
+          } catch (e) {
+            console.warn('[Store] Docs sync Mana failed:', e);
+          }
+        }
       },
       
       spendMana: async (unitId, amount) => {
@@ -415,8 +444,9 @@ export const useGameStore = create<GameState>()(
         }
       },
       
+      // ═══ RESOURCES ═══
       setResource: async (unitId, resourceId, current) => {
-        const { units } = get();
+        const { units, settings, connections } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
         
@@ -424,17 +454,18 @@ export const useGameStore = create<GameState>()(
         if (!resource) return;
         
         const previousValue = resource.current;
+        const newValue = Math.max(0, Math.min(current, resource.max));
         
         const undoEntry: UndoEntry = {
           id: generateId(),
           timestamp: Date.now(),
-          description: `${unit.shortName}: ${resource.name} ${previousValue} → ${current}`,
+          description: `${unit.shortName}: ${resource.name} ${previousValue} → ${newValue}`,
           type: 'resource',
           unitId,
           unitName: unit.shortName ?? unit.name,
           resourceId,
           previousValue,
-          newValue: current
+          newValue
         };
         
         set(state => ({
@@ -443,14 +474,38 @@ export const useGameStore = create<GameState>()(
             return {
               ...u,
               resources: u.resources.map(r => 
-                r.id === resourceId ? { ...r, current } : r
+                r.id === resourceId ? { ...r, current: newValue } : r
               )
             };
           }),
-          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY)
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
+          connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
+        
+        // Google Docs sync
+        if (connections.docs && settings.syncResources && unit.googleDocsHeader && resource.syncWithDocs) {
+          try {
+            await docsService.setResource(unit.googleDocsHeader, resource.name, newValue, resource.max);
+            console.log(`[Store] 📄 Synced Resource to Docs: ${resource.name} = ${newValue}`);
+          } catch (e) {
+            console.warn('[Store] Docs sync Resource failed:', e);
+          }
+        }
       },
       
+      spendResource: async (unitId, resourceId, amount) => {
+        const { units } = get();
+        const unit = units.find(u => u.id === unitId);
+        if (!unit) return;
+        
+        const resource = unit.resources.find(r => r.id === resourceId);
+        if (!resource) return;
+        
+        const newValue = Math.max(0, resource.current - amount);
+        await get().setResource(unitId, resourceId, newValue);
+      },
+      
+      // ═══ UNDO ═══
       undo: async () => {
         const { undoHistory, units, settings, addNotification } = get();
         
@@ -468,6 +523,7 @@ export const useGameStore = create<GameState>()(
           return;
         }
         
+        // Откатываем БЕЗ добавления в undo историю
         switch (lastEntry.type) {
           case 'hp':
             set(state => ({
@@ -481,6 +537,13 @@ export const useGameStore = create<GameState>()(
             
             const updatedUnitHP = { ...unit, health: { ...unit.health, current: lastEntry.previousValue } };
             await updateTokenBars(updatedUnitHP, settings);
+            
+            // Синхронизируем откат в Docs
+            if (get().connections.docs && settings.syncHP && unit.googleDocsHeader) {
+              try {
+                await docsService.setHealth(unit.googleDocsHeader, lastEntry.previousValue, unit.health.max);
+              } catch {}
+            }
             break;
             
           case 'mana':
@@ -495,9 +558,17 @@ export const useGameStore = create<GameState>()(
             
             const updatedUnitMana = { ...unit, mana: { ...unit.mana, current: lastEntry.previousValue } };
             await updateTokenBars(updatedUnitMana, settings);
+            
+            if (get().connections.docs && settings.syncMana && unit.googleDocsHeader) {
+              try {
+                await docsService.setMana(unit.googleDocsHeader, lastEntry.previousValue, unit.mana.max);
+              } catch {}
+            }
             break;
             
           case 'resource':
+            const resource = unit.resources.find(r => r.id === lastEntry.resourceId);
+            
             set(state => ({
               units: state.units.map(u => {
                 if (u.id !== lastEntry.unitId) return u;
@@ -512,6 +583,12 @@ export const useGameStore = create<GameState>()(
               }),
               undoHistory: restHistory
             }));
+            
+            if (get().connections.docs && settings.syncResources && unit.googleDocsHeader && resource?.syncWithDocs) {
+              try {
+                await docsService.setResource(unit.googleDocsHeader, resource.name, lastEntry.previousValue, resource.max);
+              } catch {}
+            }
             break;
             
           default:
@@ -526,6 +603,33 @@ export const useGameStore = create<GameState>()(
         get().addNotification('История отмены очищена', 'info');
       },
       
+      // ═══ SYNC UNIT TO DOCS ═══
+      syncUnitToDocs: async (unit: Unit) => {
+        const { settings, connections } = get();
+        
+        if (!connections.docs || !unit.googleDocsHeader) return;
+        
+        try {
+          if (settings.syncHP) {
+            await docsService.setHealth(unit.googleDocsHeader, unit.health.current, unit.health.max);
+          }
+          if (settings.syncMana) {
+            await docsService.setMana(unit.googleDocsHeader, unit.mana.current, unit.mana.max);
+          }
+          if (settings.syncResources) {
+            for (const resource of unit.resources) {
+              if (resource.syncWithDocs) {
+                await docsService.setResource(unit.googleDocsHeader, resource.name, resource.current, resource.max);
+              }
+            }
+          }
+          console.log(`[Store] 📄 Full sync to Docs: ${unit.shortName}`);
+        } catch (e) {
+          console.warn('[Store] Full sync failed:', e);
+        }
+      },
+      
+      // ═══ SETTINGS ═══
       updateSettings: (updates) => {
         set(state => ({
           settings: { ...state.settings, ...updates }
@@ -541,6 +645,7 @@ export const useGameStore = create<GameState>()(
         }
       },
       
+      // ═══ UI ═══
       addNotification: (message, type = 'info') => {
         const notification: Notification = {
           id: generateId(),
@@ -563,6 +668,8 @@ export const useGameStore = create<GameState>()(
       },
       
       addCombatLog: (unitName, action, details) => {
+        const { settings, connections } = get();
+        
         const entry: CombatLogEntry = {
           id: generateId(),
           unitName,
@@ -570,6 +677,7 @@ export const useGameStore = create<GameState>()(
           details,
           timestamp: Date.now()
         };
+        
         set(state => ({
           combatLog: [...state.combatLog, entry].slice(-50),
           connections: {
@@ -577,6 +685,15 @@ export const useGameStore = create<GameState>()(
             lastSyncTime: Date.now()
           }
         }));
+        
+        // Логируем в Google Docs
+        if (connections.docs && settings.writeLogs) {
+          const units = get().units;
+          const unit = units.find(u => u.shortName === unitName || u.name === unitName);
+          if (unit?.googleDocsHeader) {
+            docsService.log(unit.googleDocsHeader, `${action}: ${details}`).catch(() => {});
+          }
+        }
       },
       
       triggerEffect: (effect) => {
@@ -588,6 +705,7 @@ export const useGameStore = create<GameState>()(
       
       setNextRollModifier: (mod) => set({ nextRollModifier: mod }),
       
+      // ═══ CONNECTIONS ═══
       setConnection: (type, connected) => {
         set(state => ({
           connections: { 
@@ -601,7 +719,18 @@ export const useGameStore = create<GameState>()(
       startAutoSync: () => {
         const { settings } = get();
         if (!settings.googleDocsUrl) return;
-        console.log('Auto-sync started with interval:', settings.autoSyncInterval);
+        
+        console.log('[Store] Starting auto-sync with interval:', settings.autoSyncInterval, 'min');
+        
+        // Синхронизируем сразу
+        const { units, connections } = get();
+        if (connections.docs) {
+          for (const unit of units) {
+            if (unit.googleDocsHeader) {
+              get().syncUnitToDocs(unit);
+            }
+          }
+        }
       }
     }),
     {
