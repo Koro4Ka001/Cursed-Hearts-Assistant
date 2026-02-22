@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { 
   Button, Section, Select, Input, NumberStepper, 
-  EmptyState, DiceResultDisplay, RollModifierSelector 
+  EmptyState, DiceResultDisplay 
 } from '../ui';
 import { ActionEditorModal } from '../action-editor';
 import { spellExecutor } from '../../services/spellExecutor';
@@ -13,7 +13,6 @@ import type {
   CustomAction, 
   CustomActionV2, 
   DiceRollResult, 
-  RollModifier,
   CastContext
 } from '../../types';
 import { 
@@ -43,7 +42,8 @@ export function ActionsTab() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingAction, setEditingAction] = useState<CustomAction | CustomActionV2 | null>(null);
   
-  const [rollModifier, setRollModifier] = useState<RollModifier>('normal');
+  // Состояние сворачивания категорий
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   
   // Защита
   if (!unit) {
@@ -58,6 +58,22 @@ export function ActionsTab() {
   
   const customActions = unit.customActions ?? [];
   const resources = unit.resources ?? [];
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // СВОРАЧИВАНИЕ КАТЕГОРИЙ
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
   
   // ─────────────────────────────────────────────────────────────────────────
   // ВЫПОЛНЕНИЕ ДЕЙСТВИЯ V2
@@ -110,8 +126,8 @@ export function ActionsTab() {
       }
     }
     
-    // Используем модификатор броска (или дефолтный из действия)
-    const useModifier = rollModifier !== 'normal' ? rollModifier : action.defaultRollModifier;
+    // Используем модификатор из самого действия
+    const useModifier = action.defaultRollModifier;
     
     try {
       // Создаём фейковый SpellV2 для исполнителя
@@ -172,7 +188,6 @@ export function ActionsTab() {
       addNotification(`Ошибка: ${err}`, 'error');
     } finally {
       setIsExecuting(false);
-      setRollModifier('normal');
     }
   };
   
@@ -262,14 +277,6 @@ export function ActionsTab() {
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       
-      {/* Модификатор броска */}
-      <Section title="Модификатор" icon="🎲">
-        <RollModifierSelector
-          value={rollModifier}
-          onChange={setRollModifier}
-        />
-      </Section>
-      
       {/* Быстрые броски */}
       <Section title="Быстрые броски" icon="🎲">
         <div className="grid grid-cols-3 gap-2">
@@ -277,11 +284,10 @@ export function ActionsTab() {
             variant="secondary"
             onClick={async () => {
               setIsExecuting(true);
-              const result = await diceService.roll('d20', 'd20', unit.shortName ?? unit.name, rollModifier);
+              const result = await diceService.roll('d20', 'd20', unit.shortName ?? unit.name, 'normal');
               setActionResults([result]);
               setActionLog([`🎲 d20: [${result.rawD20}] = ${result.total}`]);
               setIsExecuting(false);
-              setRollModifier('normal');
             }}
             loading={isExecuting}
           >
@@ -323,37 +329,59 @@ export function ActionsTab() {
             <p className="text-faded text-sm mb-3">Нет настроенных действий</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {Object.entries(actionsByCategory).map(([category, actions]) => (
-              <div key={category}>
-                <div className="text-xs text-faded uppercase mb-1 flex items-center gap-1">
-                  <span>{ACTION_CATEGORY_ICONS[category as keyof typeof ACTION_CATEGORY_ICONS] ?? '✨'}</span>
-                  <span>{ACTION_CATEGORY_NAMES[category as keyof typeof ACTION_CATEGORY_NAMES] ?? category}</span>
+          <div className="space-y-2">
+            {Object.entries(actionsByCategory).map(([category, actions]) => {
+              const isCollapsed = collapsedCategories.has(category);
+              
+              return (
+                <div key={category} className="border border-edge-bone rounded overflow-hidden">
+                  {/* Заголовок категории (кликабельный) */}
+                  <button
+                    onClick={() => toggleCategory(category)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 bg-obsidian hover:bg-panel transition-colors text-left"
+                  >
+                    <span className="text-sm">
+                      {ACTION_CATEGORY_ICONS[category as keyof typeof ACTION_CATEGORY_ICONS] ?? '✨'}
+                    </span>
+                    <span className="text-xs text-faded uppercase flex-1">
+                      {ACTION_CATEGORY_NAMES[category as keyof typeof ACTION_CATEGORY_NAMES] ?? category}
+                    </span>
+                    <span className="text-xs text-ancient">
+                      {actions.length}
+                    </span>
+                    <span className={`text-faded text-xs transition-transform ${isCollapsed ? '-rotate-90' : ''}`}>
+                      ▾
+                    </span>
+                  </button>
+                  
+                  {/* Содержимое категории */}
+                  {!isCollapsed && (
+                    <div className="p-2 grid grid-cols-2 gap-2 bg-panel/30">
+                      {actions.map(action => {
+                        const isV2 = isCustomActionV2(action);
+                        const hasCost = isV2 && action.costs.length > 0;
+                        
+                        return (
+                          <Button
+                            key={action.id}
+                            variant="secondary"
+                            onClick={() => executeAction(action)}
+                            loading={isExecuting}
+                            className="text-left flex items-center gap-1"
+                          >
+                            <span>{action.icon}</span>
+                            <span className="truncate flex-1">{action.name}</span>
+                            {hasCost && <span className="text-xs text-mana-bright">💰</span>}
+                            {isV2 && action.defaultRollModifier === 'advantage' && <span className="text-xs">🎯</span>}
+                            {isV2 && action.defaultRollModifier === 'disadvantage' && <span className="text-xs">💨</span>}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {actions.map(action => {
-                    const isV2 = isCustomActionV2(action);
-                    const hasCost = isV2 && action.costs.length > 0;
-                    
-                    return (
-                      <Button
-                        key={action.id}
-                        variant="secondary"
-                        onClick={() => executeAction(action)}
-                        loading={isExecuting}
-                        className="text-left flex items-center gap-1"
-                      >
-                        <span>{action.icon}</span>
-                        <span className="truncate flex-1">{action.name}</span>
-                        {hasCost && <span className="text-xs text-mana-bright">💰</span>}
-                        {isV2 && action.defaultRollModifier === 'advantage' && <span className="text-xs">🎯</span>}
-                        {isV2 && action.defaultRollModifier === 'disadvantage' && <span className="text-xs">💨</span>}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         
