@@ -19,7 +19,6 @@ function generateId(): string {
 const PHYSICAL_TYPES = ['slashing', 'piercing', 'bludgeoning', 'chopping', 'pure'];
 
 function migrateUnit(unit: Unit): Unit {
-  // Если уже есть elementModifiers и нет старых данных — ничего не делаем
   const hasOldData = (
     (unit.elementAffinities && unit.elementAffinities.length > 0) ||
     (unit.magicBonuses && Object.keys(unit.magicBonuses).length > 0) ||
@@ -63,7 +62,6 @@ function migrateUnit(unit: Unit): Unit {
     return modifierMap.get(element)!;
   };
   
-  // Миграция из elementAffinities
   if (unit.elementAffinities) {
     for (const aff of unit.elementAffinities) {
       const mod = getOrCreateModifier(aff.element);
@@ -75,7 +73,6 @@ function migrateUnit(unit: Unit): Unit {
     }
   }
   
-  // Миграция из magicBonuses
   if (unit.magicBonuses) {
     for (const [element, bonus] of Object.entries(unit.magicBonuses)) {
       const mod = getOrCreateModifier(element);
@@ -83,7 +80,6 @@ function migrateUnit(unit: Unit): Unit {
     }
   }
   
-  // Миграция из damageMultipliers (только магические)
   if (unit.damageMultipliers) {
     const physicalMults: Record<string, number> = {};
     for (const [type, mult] of Object.entries(unit.damageMultipliers)) {
@@ -126,7 +122,7 @@ interface CombatLogEntry {
   id: string;
   unitName: string;
   action: string;
-  details: string;  // ← App.tsx использует details, не result!
+  details: string;
   timestamp: number;
 }
 
@@ -142,7 +138,7 @@ interface GameState {
   units: Unit[];
   selectedUnitId: string | null;
   
-  // UI - ВАЖНО! Эти поля используются в App.tsx
+  // UI
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
   
@@ -168,11 +164,11 @@ interface GameState {
   setHP: (unitId: string, value: number) => Promise<void>;
   setMana: (unitId: string, value: number) => Promise<void>;
   spendMana: (unitId: string, amount: number) => Promise<void>;
-  healUnit: (unitId: string, amount: number) => Promise<void>;
-  damageUnit: (unitId: string, amount: number) => Promise<void>;
+  heal: (unitId: string, amount: number) => Promise<void>;
+  takeDamage: (unitId: string, amount: number) => Promise<void>;
   
   // Экшены — ресурсы
-  updateResource: (unitId: string, resourceId: string, current: number) => void;
+  setResource: (unitId: string, resourceId: string, current: number) => Promise<void>;
   
   // Экшены — настройки
   updateSettings: (updates: Partial<AppSettings>) => void;
@@ -187,6 +183,28 @@ interface GameState {
   // Соединения
   setConnection: (type: keyof Omit<Connections, 'lastSyncTime'>, connected: boolean) => void;
   startAutoSync: () => void;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER: Обновить бары токена
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
+  if (!settings.showTokenBars || !unit.owlbearTokenId) return;
+  
+  try {
+    // ✅ ИСПРАВЛЕНО: передаём отдельные параметры, не объект!
+    await tokenBarService.updateBars(
+      unit.owlbearTokenId,
+      unit.useManaAsHp ? unit.mana.current : unit.health.current,
+      unit.useManaAsHp ? unit.mana.max : unit.health.max,
+      unit.mana.current,
+      unit.mana.max,
+      unit.useManaAsHp
+    );
+  } catch (e) {
+    console.warn('[Store] Failed to update token bars:', e);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -243,7 +261,7 @@ export const useGameStore = create<GameState>()(
       // ═══ СОСТОЯНИЕ ═══
       units: [],
       selectedUnitId: null,
-      activeTab: 'combat',  // ← ДОБАВЛЕНО
+      activeTab: 'combat',
       settings: {
         syncHP: true,
         syncMana: true,
@@ -264,7 +282,7 @@ export const useGameStore = create<GameState>()(
       },
       
       // ═══ TAB ═══
-      setActiveTab: (tab) => set({ activeTab: tab }),  // ← ДОБАВЛЕНО
+      setActiveTab: (tab) => set({ activeTab: tab }),
       
       // ═══ ЮНИТЫ ═══
       addUnit: () => {
@@ -279,9 +297,22 @@ export const useGameStore = create<GameState>()(
         set(state => ({
           units: state.units.map(u => u.id === id ? { ...u, ...updates } : u)
         }));
+        
+        // Обновляем бары если изменились HP/Mana
+        const { units, settings } = get();
+        const unit = units.find(u => u.id === id);
+        if (unit && (updates.health || updates.mana)) {
+          updateTokenBars(unit, settings);
+        }
       },
       
       deleteUnit: (id) => {
+        // Удаляем бары перед удалением юнита
+        const unit = get().units.find(u => u.id === id);
+        if (unit?.owlbearTokenId) {
+          tokenBarService.removeBars(unit.owlbearTokenId);
+        }
+        
         set(state => ({
           units: state.units.filter(u => u.id !== id),
           selectedUnitId: state.selectedUnitId === id ? null : state.selectedUnitId
@@ -306,16 +337,9 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        if (settings.showTokenBars && unit.owlbearTokenId) {
-          try {
-            await tokenBarService.updateBars(unit.owlbearTokenId, {
-              hp: { current: newHP, max: unit.health.max },
-              mana: unit.useManaAsHp ? undefined : { current: unit.mana.current, max: unit.mana.max }
-            });
-          } catch (e) {
-            console.warn('[Store] Failed to update token bars:', e);
-          }
-        }
+        // ✅ ИСПРАВЛЕНО: правильный вызов
+        const updatedUnit = { ...unit, health: { ...unit.health, current: newHP } };
+        await updateTokenBars(updatedUnit, settings);
       },
       
       setMana: async (unitId, value) => {
@@ -333,18 +357,9 @@ export const useGameStore = create<GameState>()(
           )
         }));
         
-        if (settings.showTokenBars && unit.owlbearTokenId) {
-          try {
-            await tokenBarService.updateBars(unit.owlbearTokenId, {
-              hp: unit.useManaAsHp 
-                ? { current: newMana, max: unit.mana.max } 
-                : { current: unit.health.current, max: unit.health.max },
-              mana: unit.useManaAsHp ? undefined : { current: newMana, max: unit.mana.max }
-            });
-          } catch (e) {
-            console.warn('[Store] Failed to update token bars:', e);
-          }
-        }
+        // ✅ ИСПРАВЛЕНО: правильный вызов
+        const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
+        await updateTokenBars(updatedUnit, settings);
       },
       
       spendMana: async (unitId, amount) => {
@@ -355,7 +370,7 @@ export const useGameStore = create<GameState>()(
         await get().setMana(unitId, newMana);
       },
       
-      healUnit: async (unitId, amount) => {
+      heal: async (unitId, amount) => {
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
@@ -366,7 +381,7 @@ export const useGameStore = create<GameState>()(
         }
       },
       
-      damageUnit: async (unitId, amount) => {
+      takeDamage: async (unitId, amount) => {
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
@@ -378,7 +393,7 @@ export const useGameStore = create<GameState>()(
       },
       
       // ═══ РЕСУРСЫ ═══
-      updateResource: (unitId, resourceId, current) => {
+      setResource: async (unitId, resourceId, current) => {
         set(state => ({
           units: state.units.map(u => {
             if (u.id !== unitId) return u;
@@ -397,6 +412,16 @@ export const useGameStore = create<GameState>()(
         set(state => ({
           settings: { ...state.settings, ...updates }
         }));
+        
+        // Если включили/выключили бары — синхронизируем
+        if ('showTokenBars' in updates) {
+          const { units, settings } = get();
+          if (updates.showTokenBars) {
+            tokenBarService.syncAllBars(units);
+          } else {
+            tokenBarService.removeAllBars();
+          }
+        }
       },
       
       // ═══ UI ═══
@@ -421,12 +446,12 @@ export const useGameStore = create<GameState>()(
         }));
       },
       
-      addCombatLog: (unitName, action, details) => {  // ← details вместо result
+      addCombatLog: (unitName, action, details) => {
         const entry: CombatLogEntry = {
           id: generateId(),
           unitName,
           action,
-          details,  // ← details
+          details,
           timestamp: Date.now()
         };
         set(state => ({
