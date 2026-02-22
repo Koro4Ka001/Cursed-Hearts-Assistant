@@ -14,7 +14,7 @@ import { CardsTab } from './components/tabs/CardsTab';
 import { ActionsTab } from './components/tabs/ActionsTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
-import { NotificationToast, LoadingSpinner } from './components/ui';
+import { NotificationToast, LoadingSpinner, UndoButton } from './components/ui';
 import { cn } from './utils/cn';
 
 // ═══════════════════════════════════════════════════════════════
@@ -71,6 +71,8 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   const units = useGameStore(s => s.units);
   const selectedUnitId = useGameStore(s => s.selectedUnitId);
   const selectUnit = useGameStore(s => s.selectUnit);
+  const undo = useGameStore(s => s.undo);
+  const undoHistory = useGameStore(s => s.undoHistory);
   const unit = units.find(u => u.id === selectedUnitId);
 
   if (!unit) {
@@ -109,6 +111,16 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
           {units.length > 1 && <button onClick={nextUnit} className="compact-nav-btn" disabled={unitIdx === units.length - 1}>▸</button>}
         </div>
         <div className="flex gap-1 ml-2">
+          {/* Undo кнопка в компактном режиме */}
+          {undoHistory.length > 0 && (
+            <button 
+              onClick={() => undo()} 
+              className="compact-mode-btn text-gold" 
+              title={`Отменить: ${undoHistory[0]?.description}`}
+            >
+              ↩
+            </button>
+          )}
           <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
           <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
         </div>
@@ -139,6 +151,8 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
   const connections = useGameStore(s => s.connections);
   const googleDocsUrl = useGameStore(s => s.settings.googleDocsUrl);
   const combatLog = useGameStore(s => s.combatLog);
+  const undo = useGameStore(s => s.undo);
+  const undoHistory = useGameStore(s => s.undoHistory);
 
   return (
     <div className="large-frame">
@@ -150,9 +164,18 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
             <span className={cn('status-dot text-[9px]', connections.docs ? 'status-online' : 'status-dim')}>Docs {connections.docs ? '●' : (googleDocsUrl ? '○' : '—')}</span>
           </div>
         </div>
-        <div className="flex gap-1">
-          <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
-          <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
+        <div className="flex gap-2 items-center">
+          {/* Undo кнопка */}
+          <UndoButton
+            onClick={() => undo()}
+            description={undoHistory[0]?.description}
+            count={undoHistory.length}
+            disabled={undoHistory.length === 0}
+          />
+          <div className="flex gap-1">
+            <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
+            <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
+          </div>
         </div>
       </div>
       <div className="large-body">
@@ -210,6 +233,8 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
   const connections = useGameStore(s => s.connections);
   const googleDocsUrl = useGameStore(s => s.settings.googleDocsUrl);
   const activeEffect = useGameStore(s => s.activeEffect);
+  const undo = useGameStore(s => s.undo);
+  const undoHistory = useGameStore(s => s.undoHistory);
 
   const effectClass = activeEffect
     ? ({ shake: 'screen-shake', heal: 'screen-heal-glow', 'crit-gold': 'screen-flash-gold', 'crit-fail': 'screen-flash-blood' } as Record<string, string>)[activeEffect] ?? ''
@@ -236,6 +261,16 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
       <div className="gold-dust" />
       <div className="relative z-10 flex flex-col h-full">
         <div className="mode-switcher">
+          {/* Undo кнопка в medium режиме */}
+          {undoHistory.length > 0 && (
+            <button 
+              onClick={() => undo()} 
+              className="compact-mode-btn text-gold" 
+              title={`Отменить: ${undoHistory[0]?.description}`}
+            >
+              ↩ {undoHistory.length}
+            </button>
+          )}
           <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
           <button onClick={() => onChangeMode('large')} className="compact-mode-btn" title="Большой">⤢</button>
         </div>
