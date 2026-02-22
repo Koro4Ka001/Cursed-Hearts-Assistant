@@ -473,7 +473,7 @@ class DiceService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // НОВЫЙ МЕТОД: broadcastSpell (для spellExecutor)
+  // broadcastSpell (для spellExecutor)
   // ═══════════════════════════════════════════════════════════════
   
   async broadcastSpell(
@@ -497,6 +497,29 @@ class DiceService {
       total: damage,
       isCrit,
       color: isCrit ? 'gold' : 'purple',
+      timestamp: Date.now()
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // broadcastAction (для actionExecutor)
+  // ═══════════════════════════════════════════════════════════════
+  
+  async broadcastAction(
+    actionName: string,
+    unitName: string,
+    success: boolean,
+    isCrit?: boolean
+  ): Promise<void> {
+    await broadcast({
+      id: msgId(),
+      type: 'custom',
+      unitName,
+      title: actionName,
+      subtitle: isCrit ? '✨ Критический успех!' : success ? 'Успех' : 'Провал',
+      icon: success ? '⚡' : '💨',
+      isCrit,
+      color: isCrit ? 'gold' : success ? 'green' : 'white',
       timestamp: Date.now()
     });
   }
