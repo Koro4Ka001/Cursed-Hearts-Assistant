@@ -4369,3 +4369,631 @@ input[type="number"]::-webkit-outer-spin-button { opacity: 0.3; }
 .mt-fail .mt-progress {
   background: linear-gradient(90deg, var(--color-blood), var(--color-blood-bright));
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🃏 КАРТЫ РОКА — СТИЛИ
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   КОЛОДА
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-deck-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(20, 10, 30, 0.9), rgba(10, 5, 20, 0.95));
+  border: 1px solid rgba(139, 90, 200, 0.3);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.rok-deck-display::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 50%, rgba(139, 90, 200, 0.1), transparent 70%);
+  pointer-events: none;
+}
+
+.rok-deck-icon {
+  font-size: 2.5rem;
+  filter: drop-shadow(0 0 8px rgba(139, 90, 200, 0.5));
+  animation: rok-float 3s ease-in-out infinite;
+}
+
+@keyframes rok-float {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-4px) rotate(2deg); }
+}
+
+.rok-deck-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rok-deck-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  color: var(--ancient);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.rok-deck-count {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 2rem;
+  color: var(--gold);
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(201, 162, 39, 0.5);
+}
+
+.rok-deck-count.low {
+  color: #cc6600;
+  animation: rok-pulse-orange 1s ease-in-out infinite;
+}
+
+.rok-deck-count.empty {
+  color: var(--blood-bright);
+  animation: rok-pulse-red 0.8s ease-in-out infinite;
+}
+
+@keyframes rok-pulse-orange {
+  0%, 100% { text-shadow: 0 0 10px rgba(204, 102, 0, 0.5); }
+  50% { text-shadow: 0 0 20px rgba(204, 102, 0, 0.8); }
+}
+
+@keyframes rok-pulse-red {
+  0%, 100% { text-shadow: 0 0 10px rgba(139, 0, 0, 0.5); }
+  50% { text-shadow: 0 0 25px rgba(200, 0, 0, 0.9); }
+}
+
+.rok-deck-max {
+  font-size: 1rem;
+  color: var(--faded);
+}
+
+.rok-deck-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.rok-deck-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-dark), var(--gold));
+  transition: width 0.5s ease-out;
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.5);
+}
+
+.rok-deck-bar-fill.low {
+  background: linear-gradient(90deg, #994400, #cc6600);
+}
+
+.rok-deck-bar-fill.empty {
+  background: linear-gradient(90deg, #550000, #880000);
+}
+
+.rok-deck-warning {
+  text-align: center;
+  padding: 8px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: var(--blood-bright);
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  animation: rok-warning-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rok-warning-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   КНОПКИ БРОСКА
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-roll-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px !important;
+}
+
+.rok-roll-icon {
+  font-size: 1.5rem;
+}
+
+.rok-roll-text {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.rok-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  font-size: 0.6rem;
+  color: var(--dim);
+  font-family: 'EB Garamond', serif;
+}
+
+.rok-hint-icon {
+  opacity: 0.6;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   РЕЗУЛЬТАТЫ — СЕТКА
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-results-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   КАРТА — КОНТЕЙНЕР И АНИМАЦИЯ
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-card-container {
+  perspective: 1000px;
+}
+
+@keyframes rok-card-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) rotateX(-10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0);
+  }
+}
+
+.animate-card-appear {
+  animation: rok-card-appear 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   КАРТА — ОСНОВНОЙ СТИЛЬ
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-card {
+  position: relative;
+  padding: 12px;
+  background: linear-gradient(145deg, rgba(18, 18, 26, 0.95), rgba(10, 10, 15, 0.98));
+  border: 2px solid rgba(100, 80, 140, 0.4);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.rok-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(139, 90, 200, 0.1), transparent 60%);
+  pointer-events: none;
+}
+
+.rok-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(139, 90, 200, 0.5), transparent);
+}
+
+/* Варианты карт */
+.rok-card.rok-card-hit {
+  border-color: rgba(100, 200, 100, 0.4);
+}
+.rok-card.rok-card-hit::after {
+  background: linear-gradient(90deg, transparent, rgba(100, 200, 100, 0.6), transparent);
+}
+
+.rok-card.rok-card-miss {
+  border-color: rgba(100, 100, 120, 0.3);
+  opacity: 0.85;
+}
+.rok-card.rok-card-miss::after {
+  background: linear-gradient(90deg, transparent, rgba(100, 100, 120, 0.4), transparent);
+}
+
+.rok-card.rok-card-crit {
+  border-color: rgba(201, 162, 39, 0.6);
+  box-shadow: 0 0 20px rgba(201, 162, 39, 0.3), inset 0 0 30px rgba(201, 162, 39, 0.1);
+  animation: rok-crit-glow 2s ease-in-out infinite;
+}
+.rok-card.rok-card-crit::after {
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  height: 4px;
+}
+
+@keyframes rok-crit-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(201, 162, 39, 0.3), inset 0 0 30px rgba(201, 162, 39, 0.1); }
+  50% { box-shadow: 0 0 35px rgba(201, 162, 39, 0.5), inset 0 0 40px rgba(201, 162, 39, 0.15); }
+}
+
+.rok-card.rok-card-critfail {
+  border-color: rgba(139, 0, 0, 0.6);
+  box-shadow: 0 0 15px rgba(139, 0, 0, 0.4);
+  animation: rok-fail-shake 0.5s ease-in-out;
+}
+.rok-card.rok-card-critfail::after {
+  background: linear-gradient(90deg, transparent, var(--blood-bright), transparent);
+}
+
+@keyframes rok-fail-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+.rok-card.rok-card-jackpot {
+  border-color: rgba(201, 162, 39, 0.8);
+  background: linear-gradient(145deg, rgba(30, 25, 15, 0.95), rgba(15, 12, 8, 0.98));
+}
+
+.rok-card.rok-card-ricochet {
+  border-color: rgba(200, 100, 50, 0.5);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   КАРТА — ВНУТРЕННИЕ ЭЛЕМЕНТЫ
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(139, 90, 200, 0.2);
+}
+
+.rok-card-number {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1.2rem;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(201, 162, 39, 0.4);
+}
+
+.rok-card-of {
+  font-size: 0.8rem;
+  color: var(--faded);
+}
+
+.rok-card-hit-status {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rok-card-hit-status.hit { color: #66cc66; }
+.rok-card-hit-status.miss { color: var(--faded); }
+.rok-card-hit-status.crit { color: var(--gold-bright); }
+.rok-card-hit-status.critfail { color: var(--blood-bright); }
+
+.rok-card-hit-roll {
+  font-family: 'Cinzel', serif;
+  font-weight: bold;
+}
+
+.rok-card-effect {
+  margin-bottom: 10px;
+}
+
+.rok-card-effect-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rok-card-effect-icon {
+  font-size: 1.5rem;
+  filter: drop-shadow(0 0 6px rgba(139, 90, 200, 0.5));
+}
+
+.rok-card-effect-roll {
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  color: var(--ancient);
+  background: rgba(139, 90, 200, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.rok-card-effect-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+}
+
+.rok-card-effect-short {
+  font-family: 'EB Garamond', serif;
+  font-size: 0.75rem;
+  color: var(--bone);
+  font-style: italic;
+}
+
+/* Результаты бросков */
+.rok-card-results {
+  margin: 10px 0;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  border-left: 3px solid var(--gold-dark);
+}
+
+.rok-card-result-line {
+  font-family: 'EB Garamond', serif;
+  font-size: 0.8rem;
+  color: var(--bone);
+  padding: 2px 0;
+}
+
+.rok-card-rolls {
+  margin: 8px 0;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.rok-card-roll {
+  font-family: 'EB Garamond', serif;
+  font-size: 0.7rem;
+  color: var(--faded);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.rok-card-roll-label {
+  color: var(--ancient);
+}
+
+.rok-card-roll-dice {
+  color: var(--bone);
+}
+
+.rok-card-roll-total {
+  color: var(--gold);
+  font-weight: bold;
+}
+
+/* Бейджи */
+.rok-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rok-card-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rok-card-badge.badge-ricochet {
+  background: rgba(200, 100, 50, 0.3);
+  border: 1px solid rgba(200, 100, 50, 0.5);
+  color: #ff8844;
+}
+
+.rok-card-badge.badge-jackpot {
+  background: rgba(201, 162, 39, 0.3);
+  border: 1px solid rgba(201, 162, 39, 0.5);
+  color: var(--gold-bright);
+  animation: rok-jackpot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rok-jackpot-pulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(201, 162, 39, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(201, 162, 39, 0.6); }
+}
+
+.rok-card-badge.badge-check {
+  background: rgba(139, 90, 200, 0.3);
+  border: 1px solid rgba(139, 90, 200, 0.5);
+  color: #bb99ff;
+}
+
+/* Тултип */
+.rok-card-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 280px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 15, 0.98);
+  border: 1px solid var(--gold-dark);
+  border-radius: 8px;
+  font-family: 'EB Garamond', serif;
+  font-size: 0.75rem;
+  color: var(--bone);
+  line-height: 1.4;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.8);
+}
+
+.rok-card:hover .rok-card-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ИТОГИ
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-summary {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(139, 90, 200, 0.2);
+}
+
+.rok-summary-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+}
+
+.rok-summary-label {
+  color: var(--faded);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.rok-summary-value {
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.rok-summary-value.hit { color: #66cc66; }
+.rok-summary-value.miss { color: var(--faded); }
+.rok-summary-value.crit { color: var(--gold-bright); }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ТАБЛИЦА ЭФФЕКТОВ
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rok-effects-table {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.rok-effects-table::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rok-effects-table::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.rok-effects-table::-webkit-scrollbar-thumb {
+  background: var(--gold-dark);
+  border-radius: 2px;
+}
+
+.rok-effect-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(139, 90, 200, 0.1);
+}
+
+.rok-effect-row:last-child {
+  border-bottom: none;
+}
+
+.rok-effect-id {
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  color: var(--gold);
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.rok-effect-icon {
+  font-size: 1rem;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.rok-effect-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.rok-effect-title {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  color: var(--bone);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rok-effect-desc {
+  font-family: 'EB Garamond', serif;
+  font-size: 0.65rem;
+  color: var(--faded);
+  line-height: 1.3;
+}
+
+.rok-effect-tags {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rok-effect-tag {
+  font-family: 'Cinzel', serif;
+  font-size: 0.5rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.rok-effect-tag.dice {
+  background: rgba(34, 68, 170, 0.3);
+  color: var(--mana-bright);
+}
+
+.rok-effect-tag.ricochet {
+  background: rgba(200, 100, 50, 0.3);
+  color: #ff8844;
+}
+
+.rok-effect-tag.jackpot {
+  background: rgba(201, 162, 39, 0.3);
+  color: var(--gold-bright);
+}
