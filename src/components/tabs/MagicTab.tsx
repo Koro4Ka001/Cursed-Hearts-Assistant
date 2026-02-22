@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { 
   Button, Section, Select, NumberStepper, 
-  DiceResultDisplay, EmptyState, RollModifierSelector 
+  DiceResultDisplay, EmptyState 
 } from '../ui';
 import { spellExecutor } from '../../services/spellExecutor';
 import { diceService } from '../../services/diceService';
@@ -19,9 +19,8 @@ import { ELEMENT_ICONS, SPELL_TYPES } from '../../constants/elements';
 export function MagicTab() {
   const { 
     units, selectedUnitId, 
-    spendMana, setHP, setMana,
-    triggerEffect, addCombatLog, addNotification,
-    nextRollModifier, setNextRollModifier 
+    spendMana, setHP,
+    triggerEffect, addCombatLog, addNotification
   } = useGameStore();
   
   const unit = units.find(u => u.id === selectedUnitId);
@@ -33,6 +32,9 @@ export function MagicTab() {
   const [castLog, setCastLog] = useState<string[]>([]);
   const [castResults, setCastResults] = useState<DiceRollResult[]>([]);
   const [lastContext, setLastContext] = useState<CastContext | null>(null);
+  
+  // Сворачивание групп заклинаний по типу
+  const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
   
   // ─────────────────────────────────────────────────────────────────────────
   // ПРОВЕРКИ
@@ -54,7 +56,6 @@ export function MagicTab() {
   // Приводим к SpellV2 для отображения
   const getSpellV2Display = (spell: Spell | SpellV2) => {
     if (isSpellV2(spell)) return spell;
-    // Для старых заклинаний — простое отображение
     return {
       cost: spell.manaCost,
       costResource: spell.costType === 'health' ? 'health' : 'mana',
@@ -72,7 +73,6 @@ export function MagicTab() {
     if (isSpellV2(spell)) {
       return spellExecutor.calculateManaCost(spell, unit);
     }
-    // Старое заклинание
     let cost = spell.manaCost;
     for (const element of (spell.elements ?? [])) {
       const mod = unit.elementModifiers.find(m => m.element === element && m.isActive);
@@ -83,6 +83,26 @@ export function MagicTab() {
   
   const spellCost = selectedSpell ? getSpellCost(selectedSpell) : 0;
   
+  // Группировка заклинаний по типу
+  const spellsByType = spells.reduce((acc, spell) => {
+    const type = isSpellV2(spell) ? spell.spellType : spell.type;
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(spell);
+    return acc;
+  }, {} as Record<string, (Spell | SpellV2)[]>);
+  
+  const toggleType = (type: string) => {
+    setCollapsedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  };
+  
   // ─────────────────────────────────────────────────────────────────────────
   // КАСТ ЗАКЛИНАНИЯ
   // ─────────────────────────────────────────────────────────────────────────
@@ -90,7 +110,6 @@ export function MagicTab() {
   const handleCast = async () => {
     if (!selectedSpell) return;
     
-    // Проверяем ресурсы
     const costResource = isSpellV2(selectedSpell) 
       ? selectedSpell.costResource 
       : (selectedSpell.costType === 'health' ? 'health' : 'mana');
@@ -112,9 +131,6 @@ export function MagicTab() {
     setCastResults([]);
     setLastContext(null);
     
-    const modifier = nextRollModifier;
-    setNextRollModifier('normal');
-    
     try {
       // Тратим ресурс
       if (costResource === 'health') {
@@ -130,14 +146,13 @@ export function MagicTab() {
           spell: selectedSpell,
           caster: unit,
           targetCount,
-          rollModifier: modifier,
+          rollModifier: 'normal',
           onLog: (msg) => console.log('[Spell]', msg),
         });
         
         setCastLog(result.log);
         setLastContext(result.context);
         
-        // Конвертируем rolls в DiceRollResult для отображения
         const diceResults: DiceRollResult[] = result.context.rolls.map(r => ({
           formula: r.formula,
           rolls: r.rolls,
@@ -149,14 +164,12 @@ export function MagicTab() {
         }));
         setCastResults(diceResults);
         
-        // Эффекты
         if (result.context.isCritFail) {
           triggerEffect('crit-fail');
         } else if (result.context.isCrit) {
           triggerEffect('crit-gold');
         }
         
-        // Broadcast
         if (result.totalDamage > 0) {
           await diceService.broadcastSpell(
             selectedSpell.name,
@@ -176,8 +189,8 @@ export function MagicTab() {
         }
         
       } else {
-        // Старое заклинание — используем старую логику
-        await handleLegacyCast(selectedSpell, modifier);
+        // Старое заклинание
+        await handleLegacyCast(selectedSpell);
       }
       
     } catch (err) {
@@ -189,24 +202,22 @@ export function MagicTab() {
   };
   
   // Старая логика для совместимости
-  const handleLegacyCast = async (spell: Spell, modifier: 'normal' | 'advantage' | 'disadvantage') => {
+  const handleLegacyCast = async (spell: Spell) => {
     const log: string[] = [];
     log.push(`═══ ${spell.name} ═══`);
     
-    // Бонусы от элементов
     let castBonus = spell.equipmentBonus ?? 0;
     for (const element of (spell.elements ?? [])) {
       const mod = unit.elementModifiers.find(m => m.element === element && m.isActive);
       if (mod) castBonus += mod.castBonus;
     }
     
-    // Каст
     const castFormula = castBonus >= 0 ? `d20+${castBonus}` : `d20${castBonus}`;
     const castResult = await diceService.roll(
       castFormula,
       `Каст ${spell.name}`,
       unit.shortName ?? unit.name,
-      modifier
+      'normal'
     );
     
     setCastResults([castResult]);
@@ -225,7 +236,6 @@ export function MagicTab() {
       log.push(`🎯 Каст: [${castResult.rawD20}] + ${castBonus} = ${castResult.total}`);
     }
     
-    // Урон
     if (spell.damageFormula) {
       let dmgBonus = 0;
       for (const element of (spell.elements ?? [])) {
@@ -264,14 +274,6 @@ export function MagicTab() {
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       
-      {/* Модификатор броска */}
-      <Section title="Модификатор" icon="🎲">
-        <RollModifierSelector
-          value={nextRollModifier}
-          onChange={setNextRollModifier}
-        />
-      </Section>
-      
       {/* Заклинания */}
       <Section title="Заклинания" icon="✨">
         {spells.length === 0 ? (
@@ -281,28 +283,75 @@ export function MagicTab() {
           </div>
         ) : (
           <div className="space-y-3">
-            <Select
-              label="Заклинание"
-              value={selectedSpell?.id ?? ''}
-              onChange={(e) => {
-                setSelectedSpellId(e.target.value);
-                setCastLog([]);
-                setCastResults([]);
-              }}
-              options={spells.map(s => {
-                const cost = getSpellCost(s);
-                const resource = isSpellV2(s) 
-                  ? (s.costResource === 'health' ? 'HP' : 'маны')
-                  : (s.costType === 'health' ? 'HP' : 'маны');
-                return {
-                  value: s.id,
-                  label: `${s.name} (${cost} ${resource})`
-                };
-              })}
-            />
             
+            {/* Группы заклинаний по типу (сворачиваемые) */}
+            <div className="space-y-2">
+              {Object.entries(spellsByType).map(([type, typeSpells]) => {
+                const isCollapsed = collapsedTypes.has(type);
+                const typeName = SPELL_TYPES[type as keyof typeof SPELL_TYPES] ?? type;
+                
+                return (
+                  <div key={type} className="border border-edge-bone rounded overflow-hidden">
+                    <button
+                      onClick={() => toggleType(type)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 bg-obsidian hover:bg-panel transition-colors text-left"
+                    >
+                      <span className="text-xs text-faded uppercase flex-1">{typeName}</span>
+                      <span className="text-xs text-ancient">{typeSpells.length}</span>
+                      <span className={`text-faded text-xs transition-transform ${isCollapsed ? '-rotate-90' : ''}`}>
+                        ▾
+                      </span>
+                    </button>
+                    
+                    {!isCollapsed && (
+                      <div className="p-2 space-y-1 bg-panel/30">
+                        {typeSpells.map(spell => {
+                          const cost = getSpellCost(spell);
+                          const isSelected = selectedSpell?.id === spell.id;
+                          const resource = isSpellV2(spell) 
+                            ? (spell.costResource === 'health' ? 'HP' : '💠')
+                            : (spell.costType === 'health' ? 'HP' : '💠');
+                          
+                          return (
+                            <button
+                              key={spell.id}
+                              onClick={() => setSelectedSpellId(spell.id)}
+                              className={`w-full text-left px-2 py-1.5 rounded transition-all ${
+                                isSelected 
+                                  ? 'bg-gold/20 border border-gold/50' 
+                                  : 'bg-obsidian border border-transparent hover:border-edge-bone'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-bone text-sm">{spell.name}</span>
+                                <span className={`text-xs ${resource === 'HP' ? 'text-blood-bright' : 'text-mana-bright'}`}>
+                                  {cost} {resource}
+                                </span>
+                              </div>
+                              {isSpellV2(spell) && spell.elements.length > 0 && (
+                                <div className="flex gap-1 mt-1">
+                                  {spell.elements.slice(0, 3).map(el => (
+                                    <span key={el} className="text-xs opacity-60">
+                                      {ELEMENT_ICONS[el] ?? '✨'}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Детали выбранного заклинания */}
             {selectedSpell && selectedSpellDisplay && (
-              <div className="p-3 bg-obsidian rounded border border-edge-bone space-y-2">
+              <div className="p-3 bg-obsidian rounded border border-gold/30 space-y-2">
+                <div className="font-cinzel text-gold text-sm">{selectedSpell.name}</div>
+                
                 {/* Элементы */}
                 {selectedSpellDisplay.elements.length > 0 && (
                   <div className="flex flex-wrap gap-1">
@@ -365,7 +414,7 @@ export function MagicTab() {
               disabled={!selectedSpell}
               className="w-full"
             >
-              ✨ СОТВОРИТЬ {nextRollModifier !== 'normal' ? (nextRollModifier === 'advantage' ? '🎯' : '💨') : ''}
+              ✨ СОТВОРИТЬ
             </Button>
             
             {/* Лог каста */}
