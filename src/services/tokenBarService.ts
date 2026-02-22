@@ -15,8 +15,8 @@ const BAR_PREFIX = `${METADATA_KEY}/bar`;
 
 const CONFIG = {
   BAR_HEIGHT: 6,
-  BAR_GAP: 1,
-  BAR_OFFSET: -99,
+  BAR_GAP: 2,
+  BAR_OFFSET: 8,  // ✅ ИСПРАВЛЕНО: положительное = ПОД токеном
   MIN_BAR_WIDTH: 40,
   MAX_BAR_WIDTH: 120,
   BAR_WIDTH_RATIO: 0.8,
@@ -57,7 +57,7 @@ interface BarState {
   tokenY: number;
   tokenH: number;
   barW: number;
-  isDead: boolean;  // Добавляем флаг смерти
+  isDead: boolean;
 }
 
 class TokenBarService {
@@ -96,11 +96,35 @@ class TokenBarService {
   }
 
   // ==========================================================================
-  // ПРОВЕРКА СМЕРТИ (hp <= 0, включая отрицательные!)
+  // ПРОВЕРКА СМЕРТИ
   // ==========================================================================
 
   private isDead(hp: number): boolean {
     return hp <= 0;
+  }
+
+  // ==========================================================================
+  // ВЫЧИСЛЕНИЕ ПОЗИЦИИ БАРОВ
+  // ==========================================================================
+
+  private calculateBarPositions(token: Image, barW: number, showHp: boolean) {
+    const tokenH = token.image.height * token.scale.y;
+    const tokenX = token.position.x;
+    const tokenY = token.position.y;
+    
+    // Бары располагаются ПОД токеном
+    // position в OBR - это центр токена, поэтому:
+    // низ токена = tokenY + tokenH/2
+    // бар HP начинается ниже на BAR_OFFSET
+    const barX = tokenX - barW / 2;
+    const hpBarY = tokenY + tokenH / 2 + CONFIG.BAR_OFFSET;
+    const manaBarY = showHp 
+      ? hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP 
+      : hpBarY;
+    
+    console.log(`[Bars] Position calc: tokenY=${tokenY}, tokenH=${tokenH}, barY=${hpBarY}`);
+    
+    return { barX, hpBarY, manaBarY, tokenX, tokenY, tokenH };
   }
 
   // ==========================================================================
@@ -115,36 +139,39 @@ class TokenBarService {
     maxMana: number,
     useManaAsHp = false
   ): Promise<void> {
-    if (!tokenId) return;
+    if (!tokenId) {
+      console.warn("[Bars] createBars called without tokenId");
+      return;
+    }
 
     try {
       const ready = await OBR.scene.isReady();
-      if (!ready) return;
+      if (!ready) {
+        console.warn("[Bars] Scene not ready");
+        return;
+      }
 
       await this.removeBars(tokenId);
 
       const items = await OBR.scene.items.getItems([tokenId]);
-      if (!items.length || !isImage(items[0])) return;
+      if (!items.length || !isImage(items[0])) {
+        console.warn("[Bars] Token not found or not an image:", tokenId);
+        return;
+      }
 
       const token = items[0] as Image;
       const tokenW = token.image.width * token.scale.x;
-      const tokenH = token.image.height * token.scale.y;
-      const tokenX = token.position.x;
-      const tokenY = token.position.y;
-
       const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
       const showHp = !useManaAsHp;
 
-      const barX = tokenX - barW / 2;
-      const hpBarY = tokenY + tokenH / 2 + CONFIG.BAR_OFFSET;
-      const manaBarY = showHp ? hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP : hpBarY;
+      const { barX, hpBarY, manaBarY, tokenX, tokenY, tokenH } = 
+        this.calculateBarPositions(token, barW, showHp);
 
-      // Используем hp напрямую для проверки смерти!
       const dead = this.isDead(hp);
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
 
-      console.log(`[Bars] Creating: HP=${hp}/${maxHp}, dead=${dead}`);
+      console.log(`[Bars] Creating for ${tokenId}: HP=${hp}/${maxHp} (${Math.round(hpPct*100)}%), dead=${dead}, pos=(${barX}, ${hpBarY})`);
 
       const ts = Date.now();
       const ids: BarIds = {
@@ -156,7 +183,7 @@ class TokenBarService {
 
       const shapes: Shape[] = [];
 
-      // HP Background (скрыт если мёртв — будут трещины)
+      // HP Background
       if (showHp) {
         shapes.push(
           buildShape()
@@ -168,15 +195,17 @@ class TokenBarService {
             .layer("ATTACHMENT")
             .locked(true)
             .disableHit(true)
-            .visible(token.visible && !dead)  // Скрываем если мёртв!
+            .visible(token.visible && !dead)
             .fillColor(CONFIG.HP_BG)
             .strokeColor(CONFIG.HP_STROKE)
             .strokeWidth(1)
+            .zIndex(1)
             .id(ids.hpBg)
             .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
             .build()
         );
 
+        // HP Fill
         const hpW = Math.max(1, (barW - 2) * hpPct);
         shapes.push(
           buildShape()
@@ -188,9 +217,10 @@ class TokenBarService {
             .layer("ATTACHMENT")
             .locked(true)
             .disableHit(true)
-            .visible(token.visible && !dead && hpPct > 0)  // Скрываем если мёртв!
+            .visible(token.visible && !dead && hpPct > 0)
             .fillColor(this.hpColor(hpPct))
             .strokeWidth(0)
+            .zIndex(2)
             .id(ids.hpFill)
             .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
             .build()
@@ -212,11 +242,13 @@ class TokenBarService {
           .fillColor(useManaAsHp ? CONFIG.HP_BG : CONFIG.MANA_BG)
           .strokeColor(useManaAsHp ? CONFIG.HP_STROKE : CONFIG.MANA_STROKE)
           .strokeWidth(1)
+          .zIndex(1)
           .id(ids.manaBg)
           .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
           .build()
       );
 
+      // Mana Fill
       const manaW = Math.max(1, (barW - 2) * manaPct);
       shapes.push(
         buildShape()
@@ -231,6 +263,7 @@ class TokenBarService {
           .visible(token.visible && manaPct > 0)
           .fillColor(useManaAsHp ? this.hpColor(manaPct) : CONFIG.MANA_FILL)
           .strokeWidth(0)
+          .zIndex(2)
           .id(ids.manaFill)
           .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
           .build()
@@ -241,8 +274,10 @@ class TokenBarService {
       this.states.set(tokenId, { 
         tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
         tokenX, tokenY, tokenH, barW,
-        isDead: dead  // Сохраняем флаг
+        isDead: dead
       });
+
+      console.log(`[Bars] ✓ Created ${shapes.length} shapes for ${tokenId}`);
 
       // Если мёртв — создаём трещины
       if (showHp && dead) {
@@ -263,7 +298,6 @@ class TokenBarService {
     const state = this.states.get(tokenId);
     if (!ids || !state) return;
 
-    // Если трещины уже есть — не создаём повторно
     if (ids.crack1) {
       console.log("[Bars] Cracks already exist, skipping");
       return;
@@ -294,6 +328,7 @@ class TokenBarService {
           .fillColor("#2a0a0a")
           .strokeColor("#5a1818")
           .strokeWidth(1)
+          .zIndex(3)
           .id(crack1Id)
           .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
           .build()
@@ -316,6 +351,7 @@ class TokenBarService {
           .fillColor("#3a0808")
           .strokeColor("#6a2020")
           .strokeWidth(1)
+          .zIndex(3)
           .id(crack2Id)
           .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
           .build()
@@ -338,6 +374,7 @@ class TokenBarService {
           .fillColor("#1a0505")
           .strokeColor("#4a1212")
           .strokeWidth(1)
+          .zIndex(3)
           .id(crack3Id)
           .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
           .build()
@@ -359,9 +396,7 @@ class TokenBarService {
     const ids = this.bars.get(tokenId);
     if (!ids) return;
 
-    // Если трещин нет — ничего не делаем
     if (!ids.crack1) {
-      console.log("[Bars] No cracks to remove");
       return;
     }
 
@@ -373,12 +408,9 @@ class TokenBarService {
         console.log(`[Bars] ✨ Removed ${crackIds.length} cracks`);
       }
 
-      // Очищаем ID трещин
       delete ids.crack1;
       delete ids.crack2;
       delete ids.crack3;
-
-      console.log("[Bars] ✨ Death effect removed");
     } catch (e) {
       console.error("[Bars] Remove death effect error:", e);
     }
@@ -419,15 +451,16 @@ class TokenBarService {
       const wasDead = oldState?.isDead ?? false;
       const nowDead = this.isDead(hp);
 
-      console.log(`[Bars] Update: HP=${hp}, wasDead=${wasDead}, nowDead=${nowDead}`);
+      const showHp = !useManaAsHp;
+      const { barX, hpBarY, manaBarY, tokenX, tokenY, tokenH } = 
+        this.calculateBarPositions(token, barW, showHp);
+
+      console.log(`[Bars] Update ${tokenId}: HP=${hp}/${maxHp}, wasDead=${wasDead}, nowDead=${nowDead}`);
 
       // Обновляем состояние
       this.states.set(tokenId, { 
         tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
-        tokenX: token.position.x,
-        tokenY: token.position.y,
-        tokenH: token.image.height * token.scale.y,
-        barW,
+        tokenX, tokenY, tokenH, barW,
         isDead: nowDead
       });
 
@@ -435,37 +468,40 @@ class TokenBarService {
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const hpW = Math.max(1, (barW - 2) * hpPct);
       const manaW = Math.max(1, (barW - 2) * manaPct);
-      const showHp = !useManaAsHp;
 
       // Проверяем переходы жизнь<->смерть
       if (showHp) {
         if (nowDead && !wasDead) {
-          // УМЕР!
           console.log("[Bars] 💀 Character died!");
           await this.createDeathEffect(tokenId);
         } else if (!nowDead && wasDead) {
-          // ВОСКРЕС!
           console.log("[Bars] ✨ Character resurrected!");
           await this.removeDeathEffect(tokenId);
         }
       }
 
       // Обновляем визуал баров
-      await OBR.scene.items.updateItems([ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill], (upd) => {
+      const barIds = [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill].filter(Boolean);
+      
+      await OBR.scene.items.updateItems(barIds, (upd) => {
         for (const item of upd) {
           if (!isShape(item)) continue;
 
           if (item.id === ids.hpBg) {
-            // HP фон — скрываем если мёртв (показываем трещины)
+            item.position = { x: barX, y: hpBarY };
+            item.width = barW;
             item.visible = token.visible && showHp && !nowDead;
           } else if (item.id === ids.hpFill) {
+            item.position = { x: barX + 1, y: hpBarY + 1 };
             item.width = hpW;
             item.style.fillColor = this.hpColor(hpPct);
-            // HP заполнение — скрываем если мёртв или пустой
             item.visible = token.visible && showHp && !nowDead && hpPct > 0;
           } else if (item.id === ids.manaBg) {
+            item.position = { x: barX, y: manaBarY };
+            item.width = barW;
             item.visible = token.visible;
           } else if (item.id === ids.manaFill) {
+            item.position = { x: barX + 1, y: manaBarY + 1 };
             item.width = manaW;
             item.visible = token.visible && manaPct > 0;
           }
@@ -490,8 +526,13 @@ class TokenBarService {
         ids.crack1, ids.crack2, ids.crack3
       ].filter(Boolean) as string[];
       
-      await OBR.scene.items.deleteItems(allIds);
-    } catch {}
+      if (allIds.length > 0) {
+        await OBR.scene.items.deleteItems(allIds);
+        console.log(`[Bars] Removed ${allIds.length} items for ${tokenId}`);
+      }
+    } catch (e) {
+      console.error("[Bars] Remove error:", e);
+    }
     
     this.bars.delete(tokenId);
     this.states.delete(tokenId);
@@ -509,6 +550,7 @@ class TokenBarService {
   // ==========================================================================
 
   async syncAllBars(units: Unit[]): Promise<void> {
+    console.log(`[Bars] Syncing ${units.length} units`);
     const valid = new Set<string>();
 
     for (const u of units) {
@@ -531,6 +573,7 @@ class TokenBarService {
   }
 
   async forceRefresh(): Promise<void> {
+    console.log("[Bars] Force refresh");
     const s = new Map(this.states);
     await this.removeAllBars();
     for (const [id, st] of s) {
@@ -559,10 +602,7 @@ class TokenBarService {
       const manaPct = state.maxMana > 0 ? state.mana / state.maxMana : 0;
       const showHp = !state.useManaAsHp;
 
-      // ═══════════════════════════════════════════════════════════
-      // 🩸 HP АНИМАЦИИ (только если жив!)
-      // ═══════════════════════════════════════════════════════════
-      
+      // HP анимации (только если жив)
       if (showHp && !state.isDead && hpPct > 0 && hpPct < 0.5) {
         try {
           const speed = hpPct < 0.1 ? 0.8 : hpPct < 0.25 ? 0.5 : 0.3;
@@ -607,10 +647,7 @@ class TokenBarService {
         } catch {}
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // 💀 АНИМАЦИЯ ТРЕЩИН (при смерти)
-      // ═══════════════════════════════════════════════════════════
-      
+      // Анимация трещин (при смерти)
       if (showHp && state.isDead && ids.crack1) {
         try {
           const flicker = (Math.sin(this.frame * 0.3) + 1) / 2;
@@ -631,10 +668,7 @@ class TokenBarService {
         } catch {}
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // 💎 MANA АНИМАЦИИ
-      // ═══════════════════════════════════════════════════════════
-      
+      // Mana анимации
       if (manaPct > 0) {
         try {
           let color: string;
@@ -699,6 +733,7 @@ class TokenBarService {
       const ours = items.filter(i => i.id.startsWith(BAR_PREFIX));
       if (ours.length) {
         await OBR.scene.items.deleteItems(ours.map(i => i.id));
+        console.log(`[Bars] Cleanup: removed ${ours.length} orphan bars`);
       }
     } catch {}
   }
@@ -707,6 +742,7 @@ class TokenBarService {
     if (this.animInterval) clearInterval(this.animInterval);
     await this.removeAllBars();
     this.initialized = false;
+    console.log("[Bars] Destroyed");
   }
 }
 
