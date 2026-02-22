@@ -155,6 +155,81 @@ export function Input({ label, error, className, ...props }: InputProps) {
 }
 
 // ════════════════════════════════════════════════════════════
+// FORMULA INPUT — Поле ввода формулы с валидацией
+// ════════════════════════════════════════════════════════════
+
+import { validateFormula, formatFormulaRange } from '../utils/formulaValidator';
+
+interface FormulaInputProps {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  showRange?: boolean;
+  placeholder?: string;
+  className?: string;
+}
+
+export function FormulaInput({ 
+  label, 
+  value, 
+  onChange, 
+  showRange = true,
+  placeholder,
+  className
+}: FormulaInputProps) {
+  const validation = validateFormula(value || '');
+  const range = showRange && value ? formatFormulaRange(value) : '';
+  const hasValue = value && value.length > 0;
+  
+  return (
+    <div className="flex flex-col gap-1">
+      {label && (
+        <>
+          <label className="font-cinzel text-[10px] text-faded uppercase tracking-widest">
+            {label}
+          </label>
+          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-edge-bone/30 to-transparent -mt-0.5 mb-0.5" />
+        </>
+      )}
+      <div className="relative">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cn(
+            'w-full bg-obsidian border text-bone rounded px-2.5 py-1.5 pr-16',
+            'font-garamond text-sm placeholder:text-dim',
+            'focus:outline-none transition-all duration-200',
+            !hasValue || validation.isValid 
+              ? 'border-edge-bone focus:border-gold focus:shadow-[0_0_8px_rgba(212,167,38,0.15)]'
+              : 'border-blood focus:border-blood-bright',
+            className
+          )}
+        />
+        {/* Индикатор диапазона */}
+        {validation.isValid && range && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ancient pointer-events-none">
+            {range}
+          </span>
+        )}
+        {/* Индикатор ошибки */}
+        {hasValue && !validation.isValid && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-blood-bright pointer-events-none">
+            ⚠️
+          </span>
+        )}
+      </div>
+      {/* Сообщение об ошибке */}
+      {hasValue && !validation.isValid && (
+        <span className="text-[10px] text-blood-bright font-garamond">
+          {validation.error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
 // TEXTAREA
 // ════════════════════════════════════════════════════════════
 
@@ -762,59 +837,33 @@ export function ButtonGroup({ children, className }: ButtonGroupProps) {
 }
 
 // ════════════════════════════════════════════════════════════
-// ROLL MODIFIER SELECTOR — Переключатель преимущества/помехи
+// UNDO BUTTON — Кнопка отмены
 // ════════════════════════════════════════════════════════════
 
-interface RollModifierSelectorProps {
-  value: RollModifier;
-  onChange: (value: RollModifier) => void;
+interface UndoButtonProps {
+  onClick: () => void;
+  description?: string;
+  count?: number;
+  disabled?: boolean;
   className?: string;
 }
 
-export function RollModifierSelector({ value, onChange, className }: RollModifierSelectorProps) {
+export function UndoButton({ onClick, description, count = 0, disabled = false, className }: UndoButtonProps) {
   return (
-    <div className={cn('flex items-center gap-1 p-1 bg-obsidian rounded-lg border border-edge-bone', className)}>
-      <button
-        type="button"
-        onClick={() => onChange('disadvantage')}
-        className={cn(
-          'px-2 py-1.5 text-[10px] font-cinzel rounded transition-all duration-200 uppercase tracking-wider',
-          value === 'disadvantage'
-            ? 'bg-blood/30 text-blood-bright border border-blood/50 shadow-[0_0_8px_rgba(139,0,0,0.3)]'
-            : 'text-faded hover:text-blood-bright hover:bg-blood/10'
-        )}
-        title="Помеха: 2d20, берём меньший"
-      >
-        💨 Помеха
-      </button>
-      
-      <button
-        type="button"
-        onClick={() => onChange('normal')}
-        className={cn(
-          'px-2 py-1.5 text-[10px] font-cinzel rounded transition-all duration-200 uppercase tracking-wider',
-          value === 'normal'
-            ? 'bg-gold/20 text-gold border border-gold/50 shadow-[0_0_8px_rgba(212,167,38,0.2)]'
-            : 'text-faded hover:text-gold hover:bg-gold/10'
-        )}
-        title="Обычный бросок"
-      >
-        🎲 Обычный
-      </button>
-      
-      <button
-        type="button"
-        onClick={() => onChange('advantage')}
-        className={cn(
-          'px-2 py-1.5 text-[10px] font-cinzel rounded transition-all duration-200 uppercase tracking-wider',
-          value === 'advantage'
-            ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-            : 'text-faded hover:text-emerald-400 hover:bg-emerald-900/20'
-        )}
-        title="Преимущество: 2d20, берём больший"
-      >
-        🎯 Преимущ.
-      </button>
-    </div>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={description ? `Отменить: ${description}` : 'Нечего отменять'}
+      className={cn(
+        'px-2 py-1 rounded text-xs font-cinzel transition-all flex items-center gap-1',
+        !disabled
+          ? 'bg-gold/20 text-gold hover:bg-gold/30 border border-gold/50'
+          : 'bg-obsidian text-dim border border-edge-bone cursor-not-allowed opacity-50',
+        className
+      )}
+    >
+      ↩️
+      {count > 0 && <span>({count})</span>}
+    </button>
   );
 }
