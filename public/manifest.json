@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "Cursed Hearts Assistant",
-  "version": "2.2.0",
+  "version": "2.5.0",
   "action": {
     "title": "☠️ Cursed Hearts",
     "icon": "/icon.svg",
