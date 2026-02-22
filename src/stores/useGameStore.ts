@@ -13,6 +13,24 @@ function generateId(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// UNDO СИСТЕМА
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface UndoEntry {
+  id: string;
+  timestamp: number;
+  description: string;
+  type: 'hp' | 'mana' | 'resource' | 'damage' | 'heal';
+  unitId: string;
+  unitName: string;
+  resourceId?: string;
+  previousValue: number;
+  newValue: number;
+}
+
+const MAX_UNDO_HISTORY = 20;
+
+// ═══════════════════════════════════════════════════════════════════════════
 // МИГРАЦИЯ ДАННЫХ
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -95,8 +113,6 @@ function migrateUnit(unit: Unit): Unit {
     }
   }
   
-  console.log(`[MIGRATION] Created ${modifiers.length} element modifiers for "${unit.name}"`);
-  
   return {
     ...unit,
     elementModifiers: modifiers,
@@ -151,6 +167,9 @@ interface GameState {
   activeEffect: string | null;
   nextRollModifier: RollModifier;
   
+  // Undo история
+  undoHistory: UndoEntry[];
+  
   // Соединения
   connections: Connections;
   
@@ -169,6 +188,10 @@ interface GameState {
   
   // Экшены — ресурсы
   setResource: (unitId: string, resourceId: string, current: number) => Promise<void>;
+  
+  // Экшены — Undo
+  undo: () => Promise<void>;
+  clearUndoHistory: () => void;
   
   // Экшены — настройки
   updateSettings: (updates: Partial<AppSettings>) => void;
@@ -193,7 +216,6 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
   if (!settings.showTokenBars || !unit.owlbearTokenId) return;
   
   try {
-    // ✅ ИСПРАВЛЕНО: передаём отдельные параметры, не объект!
     await tokenBarService.updateBars(
       unit.owlbearTokenId,
       unit.useManaAsHp ? unit.mana.current : unit.health.current,
@@ -205,6 +227,23 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
   } catch (e) {
     console.warn('[Store] Failed to update token bars:', e);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER: Добавить undo запись
+// ═══════════════════════════════════════════════════════════════════════════
+
+function addUndoEntry(
+  state: GameState,
+  entry: Omit<UndoEntry, 'id' | 'timestamp'>
+): UndoEntry[] {
+  const newEntry: UndoEntry = {
+    ...entry,
+    id: generateId(),
+    timestamp: Date.now()
+  };
+  
+  return [newEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -274,6 +313,7 @@ export const useGameStore = create<GameState>()(
       combatLog: [],
       activeEffect: null,
       nextRollModifier: 'normal',
+      undoHistory: [],
       connections: {
         docs: false,
         owlbear: false,
@@ -298,7 +338,6 @@ export const useGameStore = create<GameState>()(
           units: state.units.map(u => u.id === id ? { ...u, ...updates } : u)
         }));
         
-        // Обновляем бары если изменились HP/Mana
         const { units, settings } = get();
         const unit = units.find(u => u.id === id);
         if (unit && (updates.health || updates.mana)) {
@@ -307,7 +346,6 @@ export const useGameStore = create<GameState>()(
       },
       
       deleteUnit: (id) => {
-        // Удаляем бары перед удалением юнита
         const unit = get().units.find(u => u.id === id);
         if (unit?.owlbearTokenId) {
           tokenBarService.removeBars(unit.owlbearTokenId);
@@ -327,17 +365,26 @@ export const useGameStore = create<GameState>()(
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
         
+        const previousValue = unit.health.current;
         const newHP = Math.max(0, Math.min(value, unit.health.max));
         
+        // Добавляем в undo историю
         set(state => ({
           units: state.units.map(u => 
             u.id === unitId 
               ? { ...u, health: { ...u.health, current: newHP } }
               : u
-          )
+          ),
+          undoHistory: addUndoEntry(state, {
+            type: 'hp',
+            description: `${unit.shortName}: HP ${previousValue} → ${newHP}`,
+            unitId,
+            unitName: unit.shortName ?? unit.name,
+            previousValue,
+            newValue: newHP
+          })
         }));
         
-        // ✅ ИСПРАВЛЕНО: правильный вызов
         const updatedUnit = { ...unit, health: { ...unit.health, current: newHP } };
         await updateTokenBars(updatedUnit, settings);
       },
@@ -347,6 +394,7 @@ export const useGameStore = create<GameState>()(
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
         
+        const previousValue = unit.mana.current;
         const newMana = Math.max(0, Math.min(value, unit.mana.max));
         
         set(state => ({
@@ -354,10 +402,17 @@ export const useGameStore = create<GameState>()(
             u.id === unitId 
               ? { ...u, mana: { ...u.mana, current: newMana } }
               : u
-          )
+          ),
+          undoHistory: addUndoEntry(state, {
+            type: 'mana',
+            description: `${unit.shortName}: Мана ${previousValue} → ${newMana}`,
+            unitId,
+            unitName: unit.shortName ?? unit.name,
+            previousValue,
+            newValue: newMana
+          })
         }));
         
-        // ✅ ИСПРАВЛЕНО: правильный вызов
         const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
         await updateTokenBars(updatedUnit, settings);
       },
@@ -374,6 +429,7 @@ export const useGameStore = create<GameState>()(
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
+        
         if (unit.useManaAsHp) {
           await get().setMana(unitId, unit.mana.current + amount);
         } else {
@@ -385,6 +441,7 @@ export const useGameStore = create<GameState>()(
         const { units } = get();
         const unit = units.find(u => u.id === unitId);
         if (!unit) return;
+        
         if (unit.useManaAsHp) {
           await get().setMana(unitId, unit.mana.current - amount);
         } else {
@@ -394,6 +451,15 @@ export const useGameStore = create<GameState>()(
       
       // ═══ РЕСУРСЫ ═══
       setResource: async (unitId, resourceId, current) => {
+        const { units } = get();
+        const unit = units.find(u => u.id === unitId);
+        if (!unit) return;
+        
+        const resource = unit.resources.find(r => r.id === resourceId);
+        if (!resource) return;
+        
+        const previousValue = resource.current;
+        
         set(state => ({
           units: state.units.map(u => {
             if (u.id !== unitId) return u;
@@ -403,8 +469,96 @@ export const useGameStore = create<GameState>()(
                 r.id === resourceId ? { ...r, current } : r
               )
             };
+          }),
+          undoHistory: addUndoEntry(state, {
+            type: 'resource',
+            description: `${unit.shortName}: ${resource.name} ${previousValue} → ${current}`,
+            unitId,
+            unitName: unit.shortName ?? unit.name,
+            resourceId,
+            previousValue,
+            newValue: current
           })
         }));
+      },
+      
+      // ═══ UNDO ═══
+      undo: async () => {
+        const { undoHistory, units, settings, addNotification } = get();
+        
+        if (undoHistory.length === 0) {
+          addNotification('Нечего отменять', 'warning');
+          return;
+        }
+        
+        const [lastEntry, ...restHistory] = undoHistory;
+        const unit = units.find(u => u.id === lastEntry.unitId);
+        
+        if (!unit) {
+          // Юнит удалён, пропускаем
+          set({ undoHistory: restHistory });
+          addNotification('Юнит не найден, пропущено', 'warning');
+          return;
+        }
+        
+        // Выполняем откат
+        switch (lastEntry.type) {
+          case 'hp':
+            set(state => ({
+              units: state.units.map(u => 
+                u.id === lastEntry.unitId 
+                  ? { ...u, health: { ...u.health, current: lastEntry.previousValue } }
+                  : u
+              ),
+              undoHistory: restHistory
+            }));
+            
+            // Обновляем бары
+            const updatedUnitHP = { ...unit, health: { ...unit.health, current: lastEntry.previousValue } };
+            await updateTokenBars(updatedUnitHP, settings);
+            break;
+            
+          case 'mana':
+            set(state => ({
+              units: state.units.map(u => 
+                u.id === lastEntry.unitId 
+                  ? { ...u, mana: { ...u.mana, current: lastEntry.previousValue } }
+                  : u
+              ),
+              undoHistory: restHistory
+            }));
+            
+            const updatedUnitMana = { ...unit, mana: { ...unit.mana, current: lastEntry.previousValue } };
+            await updateTokenBars(updatedUnitMana, settings);
+            break;
+            
+          case 'resource':
+            set(state => ({
+              units: state.units.map(u => {
+                if (u.id !== lastEntry.unitId) return u;
+                return {
+                  ...u,
+                  resources: u.resources.map(r => 
+                    r.id === lastEntry.resourceId 
+                      ? { ...r, current: lastEntry.previousValue } 
+                      : r
+                  )
+                };
+              }),
+              undoHistory: restHistory
+            }));
+            break;
+            
+          default:
+            set({ undoHistory: restHistory });
+        }
+        
+        addNotification(`↩️ Отменено: ${lastEntry.description}`, 'info');
+      },
+      
+      clearUndoHistory: () => {
+        set({ undoHistory: [] });
+        get().addNotification('История отмены очищена', 'info');
       },
       
       // ═══ НАСТРОЙКИ ═══
@@ -413,7 +567,6 @@ export const useGameStore = create<GameState>()(
           settings: { ...state.settings, ...updates }
         }));
         
-        // Если включили/выключили бары — синхронизируем
         if ('showTokenBars' in updates) {
           const { units, settings } = get();
           if (updates.showTokenBars) {
@@ -491,10 +644,10 @@ export const useGameStore = create<GameState>()(
     }),
     {
       name: 'cursed-hearts-storage',
-      version: 2,
+      version: 3,  // Увеличиваем версию для undo
       
       migrate: (persistedState: unknown, version: number) => {
-        console.log(`[STORE] Migrating from version ${version} to 2`);
+        console.log(`[STORE] Migrating from version ${version} to 3`);
         const state = persistedState as GameState;
         
         if (version < 2) {
@@ -503,6 +656,7 @@ export const useGameStore = create<GameState>()(
             ...state,
             units: migratedUnits,
             activeTab: state.activeTab ?? 'combat',
+            undoHistory: [],
             connections: {
               docs: state.connections?.docs ?? false,
               owlbear: state.connections?.owlbear ?? false,
@@ -511,12 +665,22 @@ export const useGameStore = create<GameState>()(
             }
           };
         }
+        
+        if (version < 3) {
+          return {
+            ...state,
+            undoHistory: state.undoHistory ?? []
+          };
+        }
+        
         return state;
       },
       
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.units = state.units.map(migrateUnit);
+          // Очищаем undo историю при загрузке (опционально)
+          // state.undoHistory = [];
         }
       }
     }
