@@ -1,7 +1,7 @@
 // src/components/action-editor/ActionEditorModal.tsx
 
 import { useState, useEffect } from 'react';
-import { Modal, Button, Input, Select, NumberStepper, SubTabs, Section } from '../ui';
+import { Modal, Button, Input, Select, NumberStepper, SubTabs } from '../ui';
 import { SpellChainEditor } from '../spell-editor/SpellChainEditor';
 import { cn } from '../../utils/cn';
 import type { 
@@ -16,8 +16,7 @@ import {
   isCustomActionV2, 
   createEmptyCustomActionV2,
   ACTION_CATEGORY_NAMES,
-  ACTION_CATEGORY_ICONS,
-  ROLL_MODIFIER_NAMES
+  ACTION_CATEGORY_ICONS
 } from '../../types';
 import { generateId } from '../../constants/spellActions';
 
@@ -98,7 +97,7 @@ const ACTION_TEMPLATES: {
   {
     id: 'empty',
     name: 'Пустое',
-    description: 'Чистый лист',
+    description: 'Чистый лист для создания с нуля',
     icon: '📄',
     create: () => ({
       ...createEmptyCustomActionV2(),
@@ -137,7 +136,7 @@ const ACTION_TEMPLATES: {
         {
           id: generateId(),
           type: 'message',
-          label: 'Результат',
+          label: 'Успех',
           order: 1,
           messageTemplate: '✅ Проверка пройдена!',
           messageType: 'success',
@@ -146,75 +145,9 @@ const ACTION_TEMPLATES: {
     }),
   },
   {
-    id: 'persuasion',
-    name: 'Убеждение',
-    description: 'd20 + Харизма с разными исходами',
-    icon: '🗣️',
-    create: () => {
-      const msgFailId = generateId();
-      const msgSuccessId = generateId();
-      const msgCritId = generateId();
-      
-      return {
-        id: generateId(),
-        name: 'Убеждение',
-        version: 2,
-        icon: '🗣️',
-        category: 'social',
-        description: 'Попытка убедить собеседника',
-        costs: [],
-        defaultRollModifier: 'normal',
-        actions: [
-          {
-            id: generateId(),
-            type: 'roll_check',
-            label: 'Убеждение',
-            order: 0,
-            diceFormula: 'd20',
-            bonuses: [{ type: 'stat', statKey: 'charisma', multiplier: 1 }],
-            successThreshold: 12,
-            transitions: [
-              { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
-              { id: generateId(), condition: 'crit', targetStepId: msgCritId, priority: 1 },
-              { id: generateId(), condition: 'success', targetStepId: msgSuccessId, priority: 2 },
-              { id: generateId(), condition: 'fail', targetStepId: msgFailId, priority: 3 },
-            ],
-          },
-          {
-            id: msgFailId,
-            type: 'message',
-            label: 'Провал',
-            order: 1,
-            messageTemplate: '❌ Собеседник не убеждён',
-            messageType: 'warning',
-            defaultNextStepId: 'stop',
-          },
-          {
-            id: msgSuccessId,
-            type: 'message',
-            label: 'Успех',
-            order: 2,
-            messageTemplate: '✅ Вы убедили собеседника',
-            messageType: 'success',
-            defaultNextStepId: 'stop',
-          },
-          {
-            id: msgCritId,
-            type: 'message',
-            label: 'Крит!',
-            order: 3,
-            messageTemplate: '✨ КРИТ! Собеседник полностью на вашей стороне!',
-            messageType: 'crit',
-            defaultNextStepId: 'stop',
-          },
-        ],
-      };
-    },
-  },
-  {
     id: 'use_potion',
     name: 'Зелье исцеления',
-    description: 'Потратить ресурс → исцелиться',
+    description: 'Бросок на исцеление + восстановление HP',
     icon: '🧪',
     create: () => ({
       id: generateId(),
@@ -223,7 +156,7 @@ const ACTION_TEMPLATES: {
       icon: '🧪',
       category: 'item',
       description: 'Выпить зелье и восстановить HP',
-      costs: [], // Пользователь сам добавит ресурс
+      costs: [],
       defaultRollModifier: 'normal',
       actions: [
         {
@@ -241,8 +174,7 @@ const ACTION_TEMPLATES: {
           order: 1,
           resourceType: 'health',
           resourceOperation: 'restore',
-          resourceAmount: 0, // Будет использовать контекст
-          resourceAmountFormula: '{healAmount}',
+          resourceAmount: 0,
         },
         {
           id: generateId(),
@@ -251,52 +183,6 @@ const ACTION_TEMPLATES: {
           order: 2,
           messageTemplate: '💚 Восстановлено {healAmount} HP!',
           messageType: 'success',
-        },
-      ],
-    }),
-  },
-  {
-    id: 'stealth',
-    name: 'Скрытность',
-    description: 'd20 + Ловкость с таблицей результатов',
-    icon: '🤫',
-    create: () => ({
-      id: generateId(),
-      name: 'Скрытность',
-      version: 2,
-      icon: '🤫',
-      category: 'exploration',
-      description: 'Попытка спрятаться',
-      costs: [],
-      defaultRollModifier: 'normal',
-      actions: [
-        {
-          id: generateId(),
-          type: 'roll_check',
-          label: 'Скрытность',
-          order: 0,
-          diceFormula: 'd20',
-          bonuses: [{ type: 'stat', statKey: 'dexterity', multiplier: 1 }],
-          saveResultAs: 'stealthRoll',
-          transitions: [
-            { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
-            { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
-          ],
-        },
-        {
-          id: generateId(),
-          type: 'roll_table',
-          label: 'Результат',
-          order: 1,
-          diceFormula: 'd1', // Фиктивный — используем stealthRoll
-          useThresholdFromContext: 'stealthRoll',
-          resultTable: [
-            { id: generateId(), min: 1, max: 5, resultValue: 'fail', resultLabel: 'Полный провал', resultIcon: '💀' },
-            { id: generateId(), min: 6, max: 10, resultValue: 'partial', resultLabel: 'Частично скрылся', resultIcon: '👁️' },
-            { id: generateId(), min: 11, max: 15, resultValue: 'success', resultLabel: 'Скрылся', resultIcon: '🤫' },
-            { id: generateId(), min: 16, max: 20, resultValue: 'perfect', resultLabel: 'Идеально!', resultIcon: '👻' },
-          ],
-          saveResultAs: 'stealthResult',
         },
       ],
     }),
@@ -376,7 +262,7 @@ export function ActionEditorModal({
             <p className="text-sm text-faded">Или начните с чистого листа</p>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {ACTION_TEMPLATES.map(template => (
               <button
                 key={template.id}
@@ -387,11 +273,13 @@ export function ActionEditorModal({
                   'hover:border-gold hover:bg-gold/5'
                 )}
               >
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-3">
                   <span className="text-2xl">{template.icon}</span>
-                  <span className="font-cinzel text-gold">{template.name}</span>
+                  <div>
+                    <div className="font-cinzel text-gold">{template.name}</div>
+                    <p className="text-xs text-faded">{template.description}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-faded">{template.description}</p>
               </button>
             ))}
           </div>
