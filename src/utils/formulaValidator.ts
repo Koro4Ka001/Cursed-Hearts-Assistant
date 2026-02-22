@@ -8,28 +8,18 @@
  * - 2d6+5, d20-2
  * - 2d6+3d4+5 (составные)
  * - 10 (просто число)
- * - 2d6+СИЛ (с переменными - для будущего)
  */
 
 export interface FormulaValidationResult {
   isValid: boolean;
   error?: string;
-  normalized?: string;  // Нормализованная формула
+  normalized?: string;
   breakdown?: {
     dice: Array<{ count: number; sides: number }>;
     flatBonus: number;
     variables: string[];
   };
 }
-
-// Паттерн для одного dice-терма: 2d6, d20, 3d8
-const DICE_TERM_PATTERN = /^(\d+)?d(\d+)$/i;
-
-// Паттерн для числа
-const NUMBER_PATTERN = /^[+-]?\d+$/;
-
-// Паттерн для переменной (для будущего расширения)
-const VARIABLE_PATTERN = /^[A-ZА-Яa-zа-я_][A-ZА-Яa-zа-я0-9_]*$/;
 
 /**
  * Валидирует dice-формулу
@@ -52,7 +42,6 @@ export function validateFormula(formula: string): FormulaValidationResult {
   }
   
   // Разбиваем на термы по + и -
-  // Сначала заменяем - на +- чтобы сохранить знак
   const normalized = cleaned.replace(/-/g, '+-');
   const terms = normalized.split('+').filter(t => t.length > 0);
   
@@ -81,12 +70,12 @@ export function validateFormula(formula: string): FormulaValidationResult {
     }
     
     // Это число?
-    if (NUMBER_PATTERN.test(term)) {
+    if (/^[+-]?\d+$/.test(term)) {
       flatBonus += parseInt(term, 10);
       continue;
     }
     
-    // Это переменная? (для будущего)
+    // Это переменная?
     const varMatch = term.match(/^(-)?([A-ZА-Яa-zа-я_][A-ZА-Яa-zа-я0-9_]*)$/);
     if (varMatch) {
       variables.push(varMatch[2]);
@@ -198,10 +187,9 @@ export function getFormulaRange(formula: string): { min: number; max: number } |
   
   for (const d of result.breakdown.dice) {
     if (d.count > 0) {
-      min += d.count * 1;  // минимум на кубике = 1
-      max += d.count * d.sides;  // максимум = грани
+      min += d.count * 1;
+      max += d.count * d.sides;
     } else {
-      // Отрицательные кубики (редко, но возможно)
       min += d.count * d.sides;
       max += d.count * 1;
     }
