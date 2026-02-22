@@ -1,6 +1,6 @@
 // src/components/tabs/SettingsTab.tsx
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, Input, NumberStepper, Checkbox, Modal, SubTabs } from '../ui';
@@ -26,12 +26,14 @@ import { MAGIC_ELEMENTS, SPELL_TYPES, ELEMENT_ICONS } from '../../constants/elem
 export function SettingsTab() {
   const { 
     units, selectedUnitId, addUnit, updateUnit, deleteUnit, selectUnit,
-    settings, updateSettings, addNotification, setConnection, startAutoSync
+    settings, updateSettings, addNotification, setConnection, startAutoSync,
+    combatLog
   } = useGameStore();
   
   const [subTab, setSubTab] = useState('units');
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
     const unsub = OBR.player.onChange((player) => {
@@ -64,13 +66,87 @@ export function SettingsTab() {
     }
   };
   
-  const handleDebugDice = async () => {
-    try {
-      const metadata = await OBR.player.getMetadata();
-      console.log('PLAYER METADATA:', JSON.stringify(metadata, null, 2));
-      addNotification(`Keys: ${JSON.stringify(Object.keys(metadata))}`, 'info');
-    } catch (e) {
-      addNotification(`Ошибка: ${e}`, 'error');
+  // ─────────────────────────────────────────────────────────────────────────
+  // ИМПОРТ / ЭКСПОРТ
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  const handleExportAll = () => {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      units: units
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cursed-hearts-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    addNotification(`Экспортировано ${units.length} персонажей`, 'success');
+  };
+  
+  const handleExportUnit = (unit: Unit) => {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      units: [unit]
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${unit.shortName || unit.name}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    addNotification(`Экспортирован: ${unit.name}`, 'success');
+  };
+  
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        
+        if (!data.units || !Array.isArray(data.units)) {
+          addNotification('Неверный формат файла', 'error');
+          return;
+        }
+        
+        let imported = 0;
+        for (const unitData of data.units) {
+          // Генерируем новый ID чтобы избежать конфликтов
+          const newUnit: Unit = {
+            ...unitData,
+            id: generateId(),
+            name: unitData.name + ' (импорт)'
+          };
+          
+          // Добавляем через store
+          useGameStore.setState(state => ({
+            units: [...state.units, newUnit]
+          }));
+          imported++;
+        }
+        
+        addNotification(`Импортировано ${imported} персонажей`, 'success');
+      } catch (err) {
+        console.error('Import error:', err);
+        addNotification('Ошибка при импорте файла', 'error');
+      }
+    };
+    reader.readAsText(file);
+    
+    // Сбрасываем input чтобы можно было загрузить тот же файл повторно
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
   
@@ -78,6 +154,7 @@ export function SettingsTab() {
   
   const subTabs = [
     { id: 'units', label: 'Юниты', icon: '👤' },
+    { id: 'logs', label: 'Логи', icon: '📜' },
     { id: 'docs', label: 'Google Docs', icon: '📄' },
     { id: 'debug', label: 'Debug', icon: '🔧' }
   ];
@@ -104,11 +181,19 @@ export function SettingsTab() {
                     }`}
                     onClick={() => selectUnit(u.id)}
                   >
-                    <div>
-                      <div className="text-bone font-garamond">{u.name}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-bone font-garamond truncate">{u.name}</div>
                       <div className="text-xs text-faded">{u.shortName}</div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 ml-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); handleExportUnit(u); }}
+                        title="Экспорт"
+                      >
+                        📤
+                      </Button>
                       <Button
                         variant="secondary"
                         size="sm"
@@ -129,9 +214,79 @@ export function SettingsTab() {
               </div>
             )}
             
-            <Button variant="gold" onClick={() => addUnit()} className="w-full">
-              + Добавить персонажа
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="gold" onClick={() => addUnit()} className="flex-1">
+                + Добавить
+              </Button>
+              <Button variant="secondary" onClick={handleExportAll} title="Экспорт всех">
+                📤 Все
+              </Button>
+              <Button 
+                variant="secondary" 
+                onClick={() => fileInputRef.current?.click()}
+                title="Импорт"
+              >
+                📥
+              </Button>
+            </div>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImport}
+              className="hidden"
+            />
+          </Section>
+        </div>
+      )}
+      
+      {/* === ЛОГИ === */}
+      {subTab === 'logs' && (
+        <div className="space-y-3">
+          <Section title="Боевой журнал" icon="📜">
+            {combatLog.length === 0 ? (
+              <p className="text-faded text-sm text-center py-4">
+                Журнал пуст. Действия будут записываться сюда.
+              </p>
+            ) : (
+              <div className="space-y-1 max-h-96 overflow-y-auto">
+                {combatLog.slice().reverse().map(entry => (
+                  <div 
+                    key={entry.id} 
+                    className="p-2 bg-obsidian rounded border border-edge-bone text-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-gold font-cinzel text-xs">{entry.unitName}</span>
+                      <span className="text-xs text-dim">
+                        {new Date(entry.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="text-bone font-garamond">
+                      {entry.action}: <span className="text-ancient">{entry.details}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {combatLog.length > 0 && (
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => {
+                  // Копируем лог в буфер обмена
+                  const text = combatLog
+                    .map(e => `[${new Date(e.timestamp).toLocaleTimeString()}] ${e.unitName}: ${e.action} - ${e.details}`)
+                    .join('\n');
+                  navigator.clipboard.writeText(text);
+                  addNotification('Журнал скопирован в буфер обмена', 'success');
+                }}
+                className="w-full mt-2"
+              >
+                📋 Копировать журнал
+              </Button>
+            )}
           </Section>
         </div>
       )}
@@ -202,8 +357,33 @@ export function SettingsTab() {
         <div className="space-y-3">
           <Section title="Отладка" icon="🔧">
             <div className="space-y-2">
-              <Button variant="secondary" onClick={handleDebugDice} className="w-full">
+              <Button 
+                variant="secondary" 
+                onClick={async () => {
+                  try {
+                    const metadata = await OBR.player.getMetadata();
+                    console.log('PLAYER METADATA:', JSON.stringify(metadata, null, 2));
+                    addNotification(`Keys: ${JSON.stringify(Object.keys(metadata))}`, 'info');
+                  } catch (e) {
+                    addNotification(`Ошибка: ${e}`, 'error');
+                  }
+                }} 
+                className="w-full"
+              >
                 🔍 Debug Dice Metadata
+              </Button>
+              
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  console.log('Units:', units);
+                  console.log('Settings:', settings);
+                  console.log('Combat Log:', combatLog);
+                  addNotification('Данные выведены в консоль (F12)', 'info');
+                }}
+                className="w-full"
+              >
+                🔍 Debug Store
               </Button>
               
               <div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone">
@@ -237,7 +417,7 @@ export function SettingsTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// РЕДАКТОР ЮНИТА
+// РЕДАКТОР ЮНИТА (без изменений, но оставляю для полноты)
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface UnitEditorProps {
@@ -271,17 +451,14 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
     <div className="space-y-3">
       <SubTabs tabs={editorTabs} activeTab={editorTab} onChange={setEditorTab} />
       
-      {/* ОСНОВНОЕ */}
       {editorTab === 'basic' && (
         <BasicEditor localUnit={localUnit} update={update} />
       )}
       
-      {/* СТАТЫ */}
       {editorTab === 'stats' && (
         <StatsEditor localUnit={localUnit} update={update} />
       )}
       
-      {/* ЭЛЕМЕНТЫ */}
       {editorTab === 'elements' && (
         <ElementModifiersEditor
           modifiers={localUnit.elementModifiers ?? []}
@@ -289,12 +466,10 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
         />
       )}
       
-      {/* БРОНЯ */}
       {editorTab === 'armor' && (
         <ArmorEditor localUnit={localUnit} update={update} />
       )}
       
-      {/* ОРУЖИЕ */}
       {editorTab === 'weapons' && (
         <WeaponsEditor
           weapons={localUnit.weapons ?? []}
@@ -302,7 +477,6 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
         />
       )}
       
-      {/* ЗАКЛИНАНИЯ */}
       {editorTab === 'spells' && (
         <SpellsEditorV2
           spells={localUnit.spells ?? []}
@@ -311,7 +485,6 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
         />
       )}
       
-      {/* РЕСУРСЫ */}
       {editorTab === 'resources' && (
         <ResourcesEditor
           resources={localUnit.resources ?? []}
@@ -319,7 +492,6 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
         />
       )}
       
-      {/* КНОПКИ СОХРАНЕНИЯ */}
       <div className="flex gap-2 pt-3 border-t border-edge-bone sticky bottom-0 bg-dark">
         <Button variant="secondary" onClick={onCancel} className="flex-1">
           Отмена
@@ -501,7 +673,7 @@ function StatsEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ELEMENT MODIFIERS EDITOR (НОВАЯ ГИБКАЯ СИСТЕМА)
+// ELEMENT MODIFIERS EDITOR
 // ═══════════════════════════════════════════════════════════════════════════
 
 function ElementModifiersEditor({
@@ -516,9 +688,7 @@ function ElementModifiersEditor({
   
   const addModifier = () => {
     if (!newElement) return;
-    if (modifiers.some(m => m.element === newElement)) {
-      return; // Уже есть
-    }
+    if (modifiers.some(m => m.element === newElement)) return;
     
     const newMod: ElementModifier = {
       ...createEmptyElementModifier(newElement),
@@ -549,7 +719,6 @@ function ElementModifiersEditor({
         </div>
       </div>
       
-      {/* Список модификаторов */}
       {modifiers.length === 0 ? (
         <div className="text-center text-faded text-sm py-4">
           Нет модификаторов. Добавьте ниже.
@@ -601,7 +770,6 @@ function ElementModifiersEditor({
         </div>
       )}
       
-      {/* Форма добавления */}
       {availableElements.length > 0 && (
         <div className="flex gap-2">
           <Select
@@ -622,7 +790,6 @@ function ElementModifiersEditor({
         </div>
       )}
       
-      {/* Редактирование выбранного модификатора */}
       {editingMod && (
         <div className="p-3 bg-panel rounded border border-gold/30 space-y-3">
           <div className="flex items-center gap-2">
