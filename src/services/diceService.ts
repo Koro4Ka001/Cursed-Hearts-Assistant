@@ -190,13 +190,9 @@ function msgId(): string {
 async function broadcast(msg: BroadcastMessage): Promise<void> {
   console.log('[DiceService] 📤 Broadcasting:', msg.title);
   
-  // 1. Сохраняем в очередь localStorage
   addToQueue(msg);
-  
-  // 2. Эмитим локально (main.tsx откроет popover)
   emitLocal(msg);
   
-  // 3. Отправляем другим игрокам
   try {
     await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
     console.log('[DiceService] ✅ Broadcast sent');
@@ -449,6 +445,72 @@ class DiceService {
     });
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // 🃏 КРАСИВЫЙ BROADCAST ДЛЯ КАРТ РОКА
+  // ═══════════════════════════════════════════════════════════════
+
+  async broadcastRokCard(
+    unitName: string,
+    cardIndex: number,
+    isHit: boolean,
+    isCritHit: boolean,
+    isCritMiss: boolean,
+    effectIcon: string,
+    effectName: string,
+    hitRoll: number,
+    effectRoll: number,
+    interpretedResults: string[]
+  ): Promise<void> {
+    // Формируем красивые детали
+    const details: string[] = [];
+    
+    // Строка попадания
+    if (isCritMiss) {
+      details.push(`💀 КРИТ ПРОМАХ [${hitRoll}]`);
+    } else if (isCritHit) {
+      details.push(`✨ КРИТ ПОПАДАНИЕ [${hitRoll}]`);
+    } else if (isHit) {
+      details.push(`🎯 Попадание [${hitRoll}]`);
+    } else {
+      details.push(`💨 Промах [${hitRoll}]`);
+    }
+    
+    // Строка эффекта
+    details.push(`${effectIcon} [${effectRoll}] ${effectName}`);
+    
+    // Интерпретированные результаты
+    for (const result of interpretedResults) {
+      details.push(`   └─ ${result}`);
+    }
+    
+    // Определяем цвет
+    let color: BroadcastMessage['color'] = 'purple';
+    if (isCritHit) color = 'gold';
+    else if (isCritMiss) color = 'blood';
+    else if (!isHit) color = 'white';
+    
+    // Определяем иконку
+    let icon = '🃏';
+    if (isCritHit) icon = '✨🃏';
+    else if (isCritMiss) icon = '💀🃏';
+    
+    await broadcast({
+      id: msgId(),
+      type: 'rok-card',
+      unitName,
+      title: `Карта Рока #${cardIndex}`,
+      subtitle: `${effectIcon} ${effectName}`,
+      icon,
+      total: effectRoll,
+      isCrit: isCritHit,
+      isCritFail: isCritMiss,
+      color,
+      details,
+      timestamp: Date.now()
+    });
+  }
+
+  // Старый метод для совместимости
   async announceRokCard(
     unitName: string,
     cardIdx: number,
@@ -457,19 +519,18 @@ class DiceService {
     hitRoll: number,
     effectRoll: number
   ): Promise<void> {
-    await broadcast({
-      id: msgId(),
-      type: 'rok-card',
+    await this.broadcastRokCard(
       unitName,
-      title: `Карта Рока #${cardIdx}`,
-      icon: '🃏',
-      color: isHit ? 'purple' : 'white',
-      details: [
-        `${isHit ? '🎯 Попадание' : '💨 Промах'} [${hitRoll}]`,
-        `⟐ Эффект [${effectRoll}]: ${effectName}`
-      ],
-      timestamp: Date.now()
-    });
+      cardIdx,
+      isHit,
+      hitRoll === 20,
+      hitRoll === 1,
+      '🃏',
+      effectName,
+      hitRoll,
+      effectRoll,
+      []
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════
