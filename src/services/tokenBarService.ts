@@ -16,7 +16,7 @@ const BAR_PREFIX = `${METADATA_KEY}/bar`;
 const CONFIG = {
   BAR_HEIGHT: 6,
   BAR_GAP: 2,
-  BAR_OFFSET: 8,  // ✅ ИСПРАВЛЕНО: положительное = ПОД токеном
+  BAR_OFFSET: -10,  // ✅ ИСПРАВЛЕНО: положительное = ПОД токеном
   MIN_BAR_WIDTH: 40,
   MAX_BAR_WIDTH: 120,
   BAR_WIDTH_RATIO: 0.8,
