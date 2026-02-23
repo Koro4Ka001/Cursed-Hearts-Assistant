@@ -30,11 +30,14 @@ export const SPELL_ACTION_TYPES: {
   category: 'roll' | 'effect' | 'flow' | 'utility';
 }[] = [
   // Броски
-  { value: 'roll_check', label: 'Проверка (d20)', icon: '🎯', description: 'd20 + бонусы vs порог', category: 'roll' },
+  { value: 'roll_attack', label: 'Попадание (Атака)', icon: '⚔️', description: 'Крит = x2 кубов урона', category: 'roll' },
+  { value: 'roll_cast', label: 'Каст (Магия)', icon: '✨', description: 'Крит = 1/2 маны', category: 'roll' },
+  
+  // Остальные типы
   { value: 'roll_dice', label: 'Бросок кубиков', icon: '🎲', description: 'Бросить и сохранить', category: 'roll' },
   { value: 'roll_table', label: 'Бросок по таблице', icon: '📋', description: 'Бросок → результат из таблицы', category: 'roll' },
   { value: 'roll_damage', label: 'Бросок урона', icon: '💥', description: 'Бросить кубики урона', category: 'roll' },
-  { value: 'damage_tiers', label: 'Урон по tier', icon: '⚔️', description: 'Урон зависит от броска', category: 'roll' },
+  { value: 'damage_tiers', label: 'Урон по tier', icon: '⚖️', description: 'Урон зависит от броска', category: 'roll' },
   
   // Эффекты
   { value: 'modify_resource', label: 'Изменить ресурс', icon: '💠', description: 'Потратить/восстановить', category: 'effect' },
@@ -166,7 +169,20 @@ export function createEmptyAction(type: SpellActionType, order: number): SpellAc
   };
   
   switch (type) {
-    case 'roll_check':
+    case 'roll_attack':
+    case 'roll_cast':
+      return { 
+        ...base, 
+        diceFormula: 'd20', 
+        bonuses: [], 
+        successThreshold: 10,
+        transitions: [
+          { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
+          { id: generateId(), condition: 'fail', targetStepId: 'stop', priority: 1 },
+          { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
+        ]
+      };
+    case 'roll_check': // Deprecated, но оставим для совместимости при миграции
       return { 
         ...base, 
         diceFormula: 'd20', 
@@ -190,7 +206,7 @@ export function createEmptyAction(type: SpellActionType, order: number): SpellAc
         saveResultAs: 'tableResult' 
       };
     case 'roll_damage':
-      return { ...base, damageFormula: '2d6', damageType: 'fire', critMultiplier: 2, addDamageBonus: true };
+      return { ...base, damageFormula: '2d6', damageType: 'огонь', critMultiplier: 2, addDamageBonus: true };
     case 'damage_tiers':
       return { 
         ...base, 
@@ -201,7 +217,7 @@ export function createEmptyAction(type: SpellActionType, order: number): SpellAc
           { id: generateId(), minRoll: 11, maxRoll: 15, formula: '3d10', label: 'Сильный' },
           { id: generateId(), minRoll: 16, maxRoll: 20, formula: '4d12', label: 'Мощный' },
         ],
-        damageType: 'fire'
+        damageType: 'огонь'
       };
     case 'set_value':
       return { ...base, setKey: '', setValue: '' };
@@ -258,19 +274,19 @@ export function createSimpleDamageSpell(): SpellV2 {
     costResource: 'mana',
     spellType: 'targeted',
     projectiles: '1',
-    elements: ['fire'],
+    elements: ['огонь'],
     description: 'Простое заклинание огненного урона',
     actions: [
       {
         id: generateId(),
-        type: 'roll_check',
+        type: 'roll_cast', // Используем новый тип
         label: 'Каст',
         order: 0,
         diceFormula: 'd20',
         bonuses: [{ type: 'from_elements', elementBonusType: 'cast' }],
         transitions: [
           { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
-          { id: generateId(), condition: 'crit', targetStepId: 'next', priority: 1 },
+          { id: generateId(), condition: 'fail', targetStepId: 'stop', priority: 1 },
           { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
         ],
       },
@@ -280,7 +296,7 @@ export function createSimpleDamageSpell(): SpellV2 {
         label: 'Урон',
         order: 1,
         damageFormula: '2d6',
-        damageType: 'fire',
+        damageType: 'огонь',
         critMultiplier: 2,
         addDamageBonus: true,
       },
@@ -299,18 +315,19 @@ export function createMultiStepSpell(): SpellV2 {
     costResource: 'mana',
     spellType: 'targeted',
     projectiles: '1',
-    elements: ['arcane'],
+    elements: ['астрал'],
     description: 'Каст → элемент → сила → урон',
     actions: [
       {
         id: generateId(),
-        type: 'roll_check',
+        type: 'roll_cast',
         label: 'Каст',
         order: 0,
         diceFormula: 'd20',
         bonuses: [],
         transitions: [
           { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
+          { id: generateId(), condition: 'fail', targetStepId: 'stop', priority: 1 },
           { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
         ],
       },
@@ -321,12 +338,12 @@ export function createMultiStepSpell(): SpellV2 {
         order: 1,
         diceFormula: 'd12',
         resultTable: [
-          { id: generateId(), min: 1, max: 2, resultValue: 'fire', resultLabel: 'Огонь', resultIcon: '🔥' },
-          { id: generateId(), min: 3, max: 4, resultValue: 'ice', resultLabel: 'Лёд', resultIcon: '❄️' },
-          { id: generateId(), min: 5, max: 6, resultValue: 'lightning', resultLabel: 'Молния', resultIcon: '⚡' },
-          { id: generateId(), min: 7, max: 8, resultValue: 'acid', resultLabel: 'Кислота', resultIcon: '🧪' },
-          { id: generateId(), min: 9, max: 10, resultValue: 'necrotic', resultLabel: 'Некротика', resultIcon: '💀' },
-          { id: generateId(), min: 11, max: 12, resultValue: 'void', resultLabel: 'Пустота', resultIcon: '🕳️' },
+          { id: generateId(), min: 1, max: 2, resultValue: 'огонь', resultLabel: 'Огонь', resultIcon: '🔥' },
+          { id: generateId(), min: 3, max: 4, resultValue: 'вода', resultLabel: 'Вода', resultIcon: '💧' },
+          { id: generateId(), min: 5, max: 6, resultValue: 'электричество', resultLabel: 'Молния', resultIcon: '⚡' },
+          { id: generateId(), min: 7, max: 8, resultValue: 'земля', resultLabel: 'Земля', resultIcon: '🪨' },
+          { id: generateId(), min: 9, max: 10, resultValue: 'тьма', resultLabel: 'Тьма', resultIcon: '🌑' },
+          { id: generateId(), min: 11, max: 12, resultValue: 'свет', resultLabel: 'Свет', resultIcon: '✨' },
         ],
         saveResultAs: 'element',
       },
@@ -365,18 +382,19 @@ export function createBranchingSpell(): SpellV2 {
     costResource: 'mana',
     spellType: 'targeted',
     projectiles: '1',
-    elements: ['fire', 'ice'],
-    description: 'Случайно огонь или лёд с разным уроном',
+    elements: ['огонь', 'вода'],
+    description: 'Случайно огонь или вода с разным уроном',
     actions: [
       {
         id: stepCastId,
-        type: 'roll_check',
+        type: 'roll_cast',
         label: 'Каст',
         order: 0,
         diceFormula: 'd20',
         bonuses: [],
         transitions: [
           { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
+          { id: generateId(), condition: 'fail', targetStepId: 'stop', priority: 1 },
           { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
         ],
       },
@@ -403,16 +421,16 @@ export function createBranchingSpell(): SpellV2 {
         label: 'Урон огнём',
         order: 3,
         damageFormula: '3d6',
-        damageType: 'fire',
+        damageType: 'огонь',
         critMultiplier: 2,
       },
       {
         id: stepDamageIceId,
         type: 'roll_damage',
-        label: 'Урон льдом',
+        label: 'Урон водой',
         order: 4,
         damageFormula: '2d8+4',
-        damageType: 'ice',
+        damageType: 'вода',
         critMultiplier: 2,
       },
     ],
