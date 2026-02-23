@@ -11,27 +11,26 @@ import type { Unit } from "../types";
 const METADATA_KEY = "cursed-hearts-assistant";
 const BAR_PREFIX = `${METADATA_KEY}/bar`;
 
+// Настройки
 const CONFIG = {
-  BAR_HEIGHT: 6,
-  BAR_GAP: 2,
-  BAR_OFFSET: -65,
-  MIN_BAR_WIDTH: 40,
-  MAX_BAR_WIDTH: 120,
-  BAR_WIDTH_RATIO: 0.8,
+  BAR_HEIGHT: 8,          // Чуть толще, чтобы было видно на больших зумах
+  BAR_WIDTH_RATIO: 0.8,   // Бар занимает 80% ширины токена
+  BAR_OFFSET: -65,        // 🔥 Твой запрос: смещение по Y (от центра или низа)
   
+  // Цвета
   HP_BG: "#1a0808",
-  HP_STROKE: "#4a2020",
-  HP_HIGH: "#8b0000",
-  HP_MED: "#cc4400",
-  HP_LOW: "#ff2200",
-  HP_CRIT: "#ff0000",
+  HP_STROKE: "#000000",
+  
+  HP_HIGH: "#00ff00",     // Ярко-зеленый
+  HP_MED: "#ffaa00",      // Оранжевый
+  HP_LOW: "#ff0000",      // Красный
+  HP_CRIT: "#550000",     // Темно-бордовый
   
   MANA_BG: "#080818",
-  MANA_STROKE: "#202050",
+  MANA_STROKE: "#000000",
   MANA_FILL: "#2244aa",
-  MANA_BRIGHT: "#4488ff",
   
-  ANIM_INTERVAL: 100,
+  ANIM_INTERVAL: 100,     // Частота обновления анимации (только для quality режима)
 } as const;
 
 interface BarIds {
@@ -41,7 +40,6 @@ interface BarIds {
   manaFill: string;
   crack1?: string;
   crack2?: string;
-  crack3?: string;
 }
 
 interface BarState {
@@ -53,10 +51,13 @@ interface BarState {
   useManaAsHp: boolean;
   tokenX: number;
   tokenY: number;
-  tokenH: number;
-  barW: number;
+  tokenW: number; // Реальная ширина токена (с учетом масштаба)
+  tokenH: number; // Реальная высота токена
+  barW: number;   // Ширина бара
   isDead: boolean;
 }
+
+export type BarPerformanceMode = 'quality' | 'performance';
 
 class TokenBarService {
   private bars = new Map<string, BarIds>();
@@ -64,9 +65,14 @@ class TokenBarService {
   private initialized = false;
   private animInterval: number | null = null;
   private frame = 0;
+  
+  // Режим производительности. 
+  // 'quality' = анимации, пульсации, трещины. 
+  // 'performance' = только статика (для 500+ токенов).
+  private mode: BarPerformanceMode = 'quality';
 
   // ==========================================================================
-  // INIT
+  // INIT & CONFIG
   // ==========================================================================
 
   async initialize(): Promise<void> {
@@ -87,56 +93,97 @@ class TokenBarService {
   }
 
   private async doInit(): Promise<void> {
-    await this.cleanup(); // Чистим сирот при старте
-    this.startAnim();
+    await this.cleanup(); // Чистим мусор при старте
+    this.startAnim();     // Запускаем луп (будет работать только в quality)
     this.initialized = true;
-    console.log("[Bars] ✓ Ready (Full visuals)");
+    console.log("[Bars] Ready");
+  }
+
+  /**
+   * Переключение режима производительности.
+   * Для GM-калькулятора вызывай tokenBarService.setPerformanceMode('performance')
+   */
+  public setPerformanceMode(mode: BarPerformanceMode) {
+    this.mode = mode;
+    console.log(`[Bars] Performance mode set to: ${mode}`);
+    // Если переключили на перформанс — останавливаем анимацию
+    if (mode === 'performance' && this.animInterval) {
+      clearInterval(this.animInterval);
+      this.animInterval = null;
+    } 
+    // Если включили качество — запускаем
+    else if (mode === 'quality' && !this.animInterval) {
+      this.startAnim();
+    }
   }
 
   // ==========================================================================
-  // ЛОГИКА
+  // LOGIC
   // ==========================================================================
 
   private isDead(hp: number): boolean {
     return hp <= 0;
   }
 
+  private getHpColor(current: number, max: number): string {
+    if (max === 0) return CONFIG.HP_LOW;
+    const pct = current / max;
+    if (pct <= 0) return "#333333"; // Серый для трупов
+    if (pct < 0.25) return CONFIG.HP_LOW;
+    if (pct < 0.5) return CONFIG.HP_MED;
+    return CONFIG.HP_HIGH;
+  }
+
+  /**
+   * Расчет координат.
+   * Учитывает масштаб токена, чтобы бары не улетали.
+   */
   private calculateBarPositions(token: Image, barW: number, showHp: boolean) {
-    const tokenH = token.image.height * token.scale.y;
+    // В OBR position - это центр токена.
     const tokenX = token.position.x;
     const tokenY = token.position.y;
     
+    // Реальные размеры с учетом скейла
+    const tokenScaleX = token.scale.x;
+    const tokenScaleY = token.scale.y;
+    const tokenW = token.image.width * tokenScaleX;
+    const tokenH = token.image.height * tokenScaleY;
+    
+    // Центрируем бар по X
     const barX = tokenX - barW / 2;
-    const hpBarY = tokenY + tokenH / 2 + CONFIG.BAR_OFFSET;
+    
+    // Позиция Y.
+    // tokenY (центр) + половина высоты = нижний край токена.
+    // + CONFIG.BAR_OFFSET (твои -65).
+    // Если offset -65, бар поднимется ВВЕРХ от нижнего края.
+    const hpBarY = (tokenY + tokenH / 2) + CONFIG.BAR_OFFSET;
+    
+    // Мана бар (если нужен) идет под HP баром
     const manaBarY = showHp 
       ? hpBarY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP 
       : hpBarY;
     
-    return { barX, hpBarY, manaBarY, tokenX, tokenY, tokenH };
+    return { barX, hpBarY, manaBarY, tokenX, tokenY, tokenW, tokenH };
   }
 
-  // 🛡️ ФИКС: Жесткое удаление старых баров со сцены
+  // ==========================================================================
+  // CORE OPERATIONS
+  // ==========================================================================
+
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
-      // Ищем ВСЕ элементы, которые относятся к нашей системе и привязаны к этому токену
       const toDelete = items.filter(i => 
         i.attachedTo === tokenId && 
         (i.id.startsWith(BAR_PREFIX) || i.metadata?.[METADATA_KEY])
       );
-      
       if (toDelete.length > 0) {
         await OBR.scene.items.deleteItems(toDelete.map(i => i.id));
-        console.log(`[Bars] 🧹 Cleaned ${toDelete.length} old items for ${tokenId}`);
       }
     } catch (e) {
-      console.warn("[Bars] Cleaning error", e);
+      console.warn("[Bars] Clean error", e);
     }
   }
-
-  // ==========================================================================
-  // CREATE
-  // ==========================================================================
 
   async createBars(
     tokenId: string,
@@ -152,24 +199,24 @@ class TokenBarService {
       const ready = await OBR.scene.isReady();
       if (!ready) return;
 
-      // 1. Сначала удаляем всё старое со сцены (во избежание дублей)
+      // 1. Сначала удаляем всё старое (защита от дублей)
       await this.removeExistingBarsFromScene(tokenId);
-      
-      // 2. Чистим локальный стейт
       this.bars.delete(tokenId);
       this.states.delete(tokenId);
 
       const items = await OBR.scene.items.getItems([tokenId]);
-      if (!items.length || !isImage(items[0])) {
-        return;
-      }
+      if (!items.length || !isImage(items[0])) return;
 
       const token = items[0] as Image;
-      const tokenW = token.image.width * token.scale.x;
-      const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
-      const showHp = !useManaAsHp;
+      
+      // Расчет ширины бара.
+      // Теперь он зависит от РЕАЛЬНОЙ ширины токена на карте (gridScale).
+      // Нет жесткого MAX_WIDTH, чтобы на огромных монстрах бар был соразмерным.
+      const tokenRealWidth = token.image.width * token.scale.x;
+      const barW = Math.max(CONFIG.MIN_BAR_WIDTH, tokenRealWidth * CONFIG.BAR_WIDTH_RATIO);
 
-      const { barX, hpBarY, manaBarY, tokenX, tokenY, tokenH } = 
+      const showHp = !useManaAsHp;
+      const { barX, hpBarY, manaBarY, tokenX, tokenY, tokenW, tokenH } = 
         this.calculateBarPositions(token, barW, showHp);
 
       const dead = this.isDead(hp);
@@ -186,8 +233,9 @@ class TokenBarService {
 
       const shapes: Shape[] = [];
 
-      // HP Background
+      // --- HP BAR ---
       if (showHp) {
+        // Фон
         shapes.push(
           buildShape()
             .shapeType("RECTANGLE")
@@ -202,18 +250,18 @@ class TokenBarService {
             .fillColor(CONFIG.HP_BG)
             .strokeColor(CONFIG.HP_STROKE)
             .strokeWidth(1)
-            .zIndex(1)
+            .zIndex(1) // Поверх токена? Или под? Обычно бары поверх.
             .id(ids.hpBg)
             .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
             .build()
         );
 
-        // HP Fill
-        const hpW = Math.max(1, (barW - 2) * hpPct);
+        // Заливка
+        const hpFillW = Math.max(0, (barW - 2) * hpPct);
         shapes.push(
           buildShape()
             .shapeType("RECTANGLE")
-            .width(hpW)
+            .width(hpFillW)
             .height(CONFIG.BAR_HEIGHT - 2)
             .position({ x: barX + 1, y: hpBarY + 1 })
             .attachedTo(tokenId)
@@ -221,7 +269,7 @@ class TokenBarService {
             .locked(true)
             .disableHit(true)
             .visible(token.visible && !dead && hpPct > 0)
-            .fillColor(this.hpColor(hpPct))
+            .fillColor(this.getHpColor(hp, maxHp))
             .strokeWidth(0)
             .zIndex(2)
             .id(ids.hpFill)
@@ -230,279 +278,196 @@ class TokenBarService {
         );
       }
 
-      // Mana Background
-      shapes.push(
-        buildShape()
-          .shapeType("RECTANGLE")
-          .width(barW)
-          .height(CONFIG.BAR_HEIGHT)
-          .position({ x: barX, y: manaBarY })
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(token.visible)
-          .fillColor(useManaAsHp ? CONFIG.HP_BG : CONFIG.MANA_BG)
-          .strokeColor(useManaAsHp ? CONFIG.HP_STROKE : CONFIG.MANA_STROKE)
-          .strokeWidth(1)
-          .zIndex(1)
-          .id(ids.manaBg)
-          .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
-          .build()
-      );
+      // --- MANA BAR ---
+      if (!dead) { // Ману тоже скрываем если мертв? Или оставляем? Пусть будет видна.
+        shapes.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(barW)
+            .height(CONFIG.BAR_HEIGHT)
+            .position({ x: barX, y: manaBarY })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(token.visible)
+            .fillColor(useManaAsHp ? CONFIG.HP_BG : CONFIG.MANA_BG)
+            .strokeColor(useManaAsHp ? CONFIG.HP_STROKE : CONFIG.MANA_STROKE)
+            .strokeWidth(1)
+            .zIndex(1)
+            .id(ids.manaBg)
+            .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
+            .build()
+        );
 
-      // Mana Fill
-      const manaW = Math.max(1, (barW - 2) * manaPct);
-      shapes.push(
-        buildShape()
-          .shapeType("RECTANGLE")
-          .width(manaW)
-          .height(CONFIG.BAR_HEIGHT - 2)
-          .position({ x: barX + 1, y: manaBarY + 1 })
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(token.visible && manaPct > 0)
-          .fillColor(useManaAsHp ? this.hpColor(manaPct) : CONFIG.MANA_FILL)
-          .strokeWidth(0)
-          .zIndex(2)
-          .id(ids.manaFill)
-          .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
-          .build()
-      );
+        const manaFillW = Math.max(0, (barW - 2) * manaPct);
+        shapes.push(
+          buildShape()
+            .shapeType("RECTANGLE")
+            .width(manaFillW)
+            .height(CONFIG.BAR_HEIGHT - 2)
+            .position({ x: barX + 1, y: manaBarY + 1 })
+            .attachedTo(tokenId)
+            .layer("ATTACHMENT")
+            .locked(true)
+            .disableHit(true)
+            .visible(token.visible && manaPct > 0)
+            .fillColor(useManaAsHp ? this.getHpColor(mana, maxMana) : CONFIG.MANA_FILL)
+            .strokeWidth(0)
+            .zIndex(2)
+            .id(ids.manaFill)
+            .metadata({ [METADATA_KEY]: { type: "bar", tokenId } })
+            .build()
+        );
+      }
 
       await OBR.scene.items.addItems(shapes);
       this.bars.set(tokenId, ids);
       this.states.set(tokenId, { 
         tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
-        tokenX, tokenY, tokenH, barW,
+        tokenX, tokenY, tokenW, tokenH, barW,
         isDead: dead
       });
 
-      // Если мёртв — создаём трещины (возвращаем твою логику осколков)
-      if (showHp && dead) {
+      // Эффект смерти (ТОЛЬКО В QUALITY РЕЖИМЕ)
+      if (showHp && dead && this.mode === 'quality') {
         await this.createDeathEffect(tokenId);
       }
+
     } catch (e) {
       console.error("[Bars] Create error:", e);
     }
   }
 
+  async updateBars(tokenId: string, hp: number, maxHp: number, mana: number, maxMana: number, useManaAsHp = false): Promise<void> {
+    // Если бара нет в памяти — создаем
+    const state = this.states.get(tokenId);
+    const ids = this.bars.get(tokenId);
+    if (!state || !ids) {
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+      return;
+    }
+
+    try {
+      const dead = this.isDead(hp);
+      const wasDead = state.isDead;
+      
+      // Обновляем состояние
+      state.hp = hp; state.maxHp = maxHp; state.mana = mana; state.maxMana = maxMana;
+      state.isDead = dead;
+
+      // Если режим производительности — просто обновляем и выходим, без проверок сцены
+      // Это супер-быстро для 500 токенов
+      
+      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+      const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+      const barW = state.barW; // Используем сохраненную ширину, чтобы не читать токен каждый раз
+
+      const itemsToUpdate: string[] = [];
+      if (ids.hpFill) itemsToUpdate.push(ids.hpFill);
+      if (ids.hpBg) itemsToUpdate.push(ids.hpBg);
+      if (ids.manaFill) itemsToUpdate.push(ids.manaFill);
+
+      await OBR.scene.items.updateItems(itemsToUpdate, (items) => {
+        for (const item of items) {
+          if (!isShape(item)) continue;
+
+          // HP FILL
+          if (item.id === ids.hpFill) {
+            item.width = Math.max(0, (barW - 2) * hpPct);
+            item.style.fillColor = this.getHpColor(hp, maxHp);
+            item.visible = !dead && !useManaAsHp && hpPct > 0;
+          }
+          // HP BG
+          else if (item.id === ids.hpBg) {
+            item.visible = !dead && !useManaAsHp;
+          }
+          // MANA FILL
+          else if (item.id === ids.manaFill) {
+            item.width = Math.max(0, (barW - 2) * manaPct);
+            item.visible = !dead && manaPct > 0; // Скрываем и ману если мертв?
+          }
+        }
+      });
+
+      // Эффекты смерти — только в Quality
+      if (!useManaAsHp && this.mode === 'quality') {
+        if (dead && !wasDead) await this.createDeathEffect(tokenId);
+        else if (!dead && wasDead) await this.removeDeathEffect(tokenId);
+      }
+
+    } catch (e) {
+      // Если update упал (например, токен удалили) — пробуем пересоздать (или забить)
+      console.warn("[Bars] Update fail, recreating...", e);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+    }
+  }
+
   // ==========================================================================
-  // DEATH EFFECT (Твоя сложная анимация)
+  // DEATH EFFECT (Анимация креста/осколков)
   // ==========================================================================
 
   private async createDeathEffect(tokenId: string): Promise<void> {
     const ids = this.bars.get(tokenId);
     const state = this.states.get(tokenId);
     if (!ids || !state) return;
-
     if (ids.crack1) return; // Уже есть
 
     try {
-      const barX = state.tokenX - state.barW / 2;
-      const hpBarY = state.tokenY + state.tokenH / 2 + CONFIG.BAR_OFFSET;
-      const barW = state.barW;
+      // Позиция креста — по центру бара HP
+      const centerX = state.tokenX; 
+      const centerY = (state.tokenY + state.tokenH / 2) + CONFIG.BAR_OFFSET + (CONFIG.BAR_HEIGHT / 2);
+      
+      const size = Math.min(state.barW * 0.5, 30); // Размер креста зависит от бара
 
       const ts = Date.now();
-      const crackShapes: Shape[] = [];
+      const c1Id = `${BAR_PREFIX}/c1/${tokenId}/${ts}`;
+      const c2Id = `${BAR_PREFIX}/c2/${tokenId}/${ts}`;
 
-      // Осколок 1 (левый)
-      const crack1Id = `${BAR_PREFIX}/crack1/${tokenId}/${ts}`;
-      crackShapes.push(
+      const crossParts = [
         buildShape()
           .shapeType("RECTANGLE")
-          .width(barW * 0.32)
-          .height(CONFIG.BAR_HEIGHT)
-          .position({ x: barX - 3, y: hpBarY + 2 })
-          .rotation(-18)
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .fillColor("#2a0a0a")
-          .strokeColor("#5a1818")
+          .width(size).height(4)
+          .position({ x: centerX - size/2, y: centerY - 2 })
+          .rotation(45)
+          .fillColor("#000000")
+          .strokeColor("#ff0000")
           .strokeWidth(1)
-          .zIndex(3)
-          .id(crack1Id)
-          .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
-          .build()
-      );
-
-      // Осколок 2 (центр)
-      const crack2Id = `${BAR_PREFIX}/crack2/${tokenId}/${ts}`;
-      crackShapes.push(
+          .attachedTo(tokenId).layer("ATTACHMENT").locked(true).disableHit(true)
+          .id(c1Id).metadata({ [METADATA_KEY]: { type: "crack" } }).build(),
+          
         buildShape()
           .shapeType("RECTANGLE")
-          .width(barW * 0.36)
-          .height(CONFIG.BAR_HEIGHT)
-          .position({ x: barX + barW * 0.28, y: hpBarY - 1 })
-          .rotation(6)
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .fillColor("#3a0808")
-          .strokeColor("#6a2020")
+          .width(size).height(4)
+          .position({ x: centerX - size/2, y: centerY - 2 })
+          .rotation(-45)
+          .fillColor("#000000")
+          .strokeColor("#ff0000")
           .strokeWidth(1)
-          .zIndex(3)
-          .id(crack2Id)
-          .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
-          .build()
-      );
+          .attachedTo(tokenId).layer("ATTACHMENT").locked(true).disableHit(true)
+          .id(c2Id).metadata({ [METADATA_KEY]: { type: "crack" } }).build()
+      ];
 
-      // Осколок 3 (правый)
-      const crack3Id = `${BAR_PREFIX}/crack3/${tokenId}/${ts}`;
-      crackShapes.push(
-        buildShape()
-          .shapeType("RECTANGLE")
-          .width(barW * 0.28)
-          .height(CONFIG.BAR_HEIGHT)
-          .position({ x: barX + barW * 0.68, y: hpBarY + 3 })
-          .rotation(22)
-          .attachedTo(tokenId)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
-          .visible(true)
-          .fillColor("#1a0505")
-          .strokeColor("#4a1212")
-          .strokeWidth(1)
-          .zIndex(3)
-          .id(crack3Id)
-          .metadata({ [METADATA_KEY]: { type: "crack", tokenId } })
-          .build()
-      );
+      await OBR.scene.items.addItems(crossParts);
+      ids.crack1 = c1Id;
+      ids.crack2 = c2Id;
 
-      await OBR.scene.items.addItems(crackShapes);
-      
-      ids.crack1 = crack1Id;
-      ids.crack2 = crack2Id;
-      ids.crack3 = crack3Id;
-
-    } catch (e) {
-      console.error("[Bars] Death effect error:", e);
-    }
+    } catch (e) { console.error(e); }
   }
 
   private async removeDeathEffect(tokenId: string): Promise<void> {
     const ids = this.bars.get(tokenId);
     if (!ids) return;
-
-    if (!ids.crack1) return;
-
-    try {
-      const crackIds = [ids.crack1, ids.crack2, ids.crack3].filter(Boolean) as string[];
-      if (crackIds.length > 0) {
-        await OBR.scene.items.deleteItems(crackIds);
-      }
-      delete ids.crack1;
-      delete ids.crack2;
-      delete ids.crack3;
-    } catch (e) {
-      console.error("[Bars] Remove death effect error:", e);
-    }
+    
+    const toDel = [ids.crack1, ids.crack2].filter(Boolean) as string[];
+    if (toDel.length) await OBR.scene.items.deleteItems(toDel);
+    
+    delete ids.crack1;
+    delete ids.crack2;
   }
 
   // ==========================================================================
-  // UPDATE
-  // ==========================================================================
-
-  async updateBars(
-    tokenId: string,
-    hp: number,
-    maxHp: number,
-    mana: number,
-    maxMana: number,
-    useManaAsHp = false
-  ): Promise<void> {
-    if (!tokenId) return;
-
-    const ids = this.bars.get(tokenId);
-    // Если баров нет в памяти — пробуем создать (они удалятся со сцены если есть, см createBars)
-    if (!ids) {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
-      return;
-    }
-
-    try {
-      const items = await OBR.scene.items.getItems([tokenId]);
-      if (!items.length || !isImage(items[0])) {
-        await this.removeBars(tokenId);
-        return;
-      }
-
-      const token = items[0] as Image;
-      const tokenW = token.image.width * token.scale.x;
-      const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, tokenW * CONFIG.BAR_WIDTH_RATIO));
-
-      const oldState = this.states.get(tokenId);
-      const wasDead = oldState?.isDead ?? false;
-      const nowDead = this.isDead(hp);
-
-      const showHp = !useManaAsHp;
-      const { barX, hpBarY, manaBarY } = this.calculateBarPositions(token, barW, showHp);
-
-      // Обновляем состояние
-      this.states.set(tokenId, { 
-        tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
-        tokenX: token.position.x, tokenY: token.position.y, tokenH: token.image.height * token.scale.y, barW,
-        isDead: nowDead
-      });
-
-      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
-      const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
-      const hpW = Math.max(1, (barW - 2) * hpPct);
-      const manaW = Math.max(1, (barW - 2) * manaPct);
-
-      // Проверяем переходы жизнь<->смерть
-      if (showHp) {
-        if (nowDead && !wasDead) {
-          await this.createDeathEffect(tokenId);
-        } else if (!nowDead && wasDead) {
-          await this.removeDeathEffect(tokenId);
-        }
-      }
-
-      // Обновляем визуал баров
-      const barIds = [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill].filter(Boolean);
-      
-      await OBR.scene.items.updateItems(barIds, (upd) => {
-        for (const item of upd) {
-          if (!isShape(item)) continue;
-
-          if (item.id === ids.hpBg) {
-            item.position = { x: barX, y: hpBarY };
-            item.width = barW;
-            item.visible = token.visible && showHp && !nowDead;
-          } else if (item.id === ids.hpFill) {
-            item.position = { x: barX + 1, y: hpBarY + 1 };
-            item.width = hpW;
-            item.style.fillColor = this.hpColor(hpPct);
-            item.visible = token.visible && showHp && !nowDead && hpPct > 0;
-          } else if (item.id === ids.manaBg) {
-            item.position = { x: barX, y: manaBarY };
-            item.width = barW;
-            item.visible = token.visible;
-          } else if (item.id === ids.manaFill) {
-            item.position = { x: barX + 1, y: manaBarY + 1 };
-            item.width = manaW;
-            item.visible = token.visible && manaPct > 0;
-          }
-        }
-      });
-    } catch (e) {
-      console.error("[Bars] Update error:", e);
-      // При ошибке пробуем пересоздать
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
-    }
-  }
-
-  // ==========================================================================
-  // REMOVE
+  // UTILS
   // ==========================================================================
 
   async removeBars(tokenId: string): Promise<void> {
@@ -512,190 +477,107 @@ class TokenBarService {
   }
 
   async removeAllBars(): Promise<void> {
-    for (const id of this.bars.keys()) {
-      await this.removeBars(id);
-    }
     await this.cleanup();
+    this.bars.clear();
+    this.states.clear();
   }
 
-  // ==========================================================================
-  // SYNC
-  // ==========================================================================
-
+  // Сихронизация массива юнитов (вызывать при старте или изменении настроек)
   async syncAllBars(units: Unit[]): Promise<void> {
-    const valid = new Set<string>();
-
+    const validTokens = new Set<string>();
+    
+    // Пакетное создание (по одному, но подряд)
     for (const u of units) {
       if (u.owlbearTokenId) {
-        valid.add(u.owlbearTokenId);
+        validTokens.add(u.owlbearTokenId);
         await this.createBars(
           u.owlbearTokenId,
-          u.health?.current ?? 0,
-          u.health?.max ?? 100,
-          u.mana?.current ?? 0,
-          u.mana?.max ?? 50,
-          u.useManaAsHp ?? false
+          u.useManaAsHp ? u.mana.current : u.health.current,
+          u.useManaAsHp ? u.mana.max : u.health.max,
+          u.mana.current,
+          u.mana.max,
+          u.useManaAsHp
         );
       }
     }
-
-    // Удаляем бары для юнитов, которых больше нет
-    for (const id of this.bars.keys()) {
-      if (!valid.has(id)) await this.removeBars(id);
-    }
-  }
-
-  async forceRefresh(): Promise<void> {
-    const s = new Map(this.states);
-    await this.removeAllBars();
-    for (const [id, st] of s) {
-      await this.createBars(id, st.hp, st.maxHp, st.mana, st.maxMana, st.useManaAsHp);
-    }
-  }
-
-  // ==========================================================================
-  // ANIMATION (Сохранены сложные эффекты)
-  // ==========================================================================
-
-  private startAnim(): void {
-    if (this.animInterval) return;
-    this.animInterval = window.setInterval(() => {
-      this.frame++;
-      this.animate();
-    }, CONFIG.ANIM_INTERVAL);
-  }
-
-  private async animate(): Promise<void> {
-    for (const [tokenId, state] of this.states) {
-      const ids = this.bars.get(tokenId);
-      if (!ids) continue;
-
-      const hpPct = state.maxHp > 0 ? Math.max(0, state.hp / state.maxHp) : 0;
-      const manaPct = state.maxMana > 0 ? state.mana / state.maxMana : 0;
-      const showHp = !state.useManaAsHp;
-
-      // HP анимации (пульсация, дрожание)
-      if (showHp && !state.isDead && hpPct > 0 && hpPct < 0.5) {
-        try {
-          const speed = hpPct < 0.1 ? 0.8 : hpPct < 0.25 ? 0.5 : 0.3;
-          const pulse = (Math.sin(this.frame * speed) + 1) / 2;
-          
-          let colorA: string, colorB: string;
-          if (hpPct < 0.1) { colorA = "#ff0000"; colorB = "#660000"; }
-          else if (hpPct < 0.25) { colorA = "#ff2200"; colorB = "#881100"; }
-          else { colorA = "#cc4400"; colorB = "#882200"; }
-          
-          const color = this.lerpColor(colorB, colorA, pulse);
-          
-          await OBR.scene.items.updateItems([ids.hpFill], (items) => {
-            for (const i of items) { if (isShape(i)) i.style.fillColor = color; }
-          });
-
-          // Дрожание при критическом HP
-          if (hpPct < 0.25 && ids.hpBg) {
-            const shakeX = (Math.random() - 0.5) * (hpPct < 0.1 ? 2 : 1);
-            const baseX = state.tokenX - state.barW / 2;
-            const baseY = state.tokenY + state.tokenH / 2 + CONFIG.BAR_OFFSET;
-            
-            await OBR.scene.items.updateItems([ids.hpBg], (items) => {
-              for (const i of items) {
-                if (isShape(i)) {
-                  i.position = { x: baseX + shakeX, y: baseY };
-                  i.style.strokeColor = pulse > 0.5 ? "#6a2020" : "#4a1515";
-                }
-              }
-            });
-          }
-        } catch {}
-      }
-
-      // Анимация трещин (при смерти) - мерцание
-      if (showHp && state.isDead && ids.crack1) {
-        try {
-          const flicker = (Math.sin(this.frame * 0.3) + 1) / 2;
-          const crackColor1 = this.lerpColor("#1a0505", "#2a0a0a", flicker);
-          const crackColor2 = this.lerpColor("#2a0808", "#3a1010", flicker);
-          
-          const crackIds = [ids.crack1, ids.crack2, ids.crack3].filter(Boolean) as string[];
-          
-          await OBR.scene.items.updateItems(crackIds, (items) => {
-            for (const i of items) {
-              if (isShape(i)) {
-                if (i.id === ids.crack1) i.style.fillColor = crackColor1;
-                if (i.id === ids.crack2) i.style.fillColor = crackColor2;
-                if (i.id === ids.crack3) i.style.fillColor = crackColor1;
-              }
-            }
-          });
-        } catch {}
-      }
-
-      // Mana анимации (шиммер)
-      if (manaPct > 0) {
-        try {
-          let color: string;
-          if (manaPct > 0.75) {
-            const shimmer = (Math.sin(this.frame * 0.25) + 1) / 2;
-            color = this.lerpColor("#2255cc", "#55aaff", shimmer);
-          } else if (manaPct > 0.5) {
-            const shimmer = (Math.sin(this.frame * 0.15) + 1) / 2;
-            color = this.lerpColor("#2244aa", "#3366cc", shimmer);
-          } else if (manaPct > 0.25) {
-            color = "#2244aa";
-          } else {
-            const dim = (Math.sin(this.frame * 0.4) + 1) / 2;
-            color = this.lerpColor("#1a2255", "#223377", dim);
-          }
-          
-          await OBR.scene.items.updateItems([ids.manaFill], (items) => {
-            for (const i of items) { if (isShape(i)) i.style.fillColor = color; }
-          });
-        } catch {}
+    
+    // Очистка тех, кого больше нет в списке
+    for (const [tokenId] of this.bars) {
+      if (!validTokens.has(tokenId)) {
+        await this.removeBars(tokenId);
       }
     }
-  }
-
-  // ==========================================================================
-  // HELPERS
-  // ==========================================================================
-
-  private hpColor(pct: number): string {
-    if (pct < 0.1) return CONFIG.HP_CRIT;
-    if (pct < 0.25) return CONFIG.HP_LOW;
-    if (pct < 0.5) return CONFIG.HP_MED;
-    return CONFIG.HP_HIGH;
-  }
-
-  private lerpColor(color1: string, color2: string, t: number): string {
-    const c1 = this.hexToRgb(color1);
-    const c2 = this.hexToRgb(color2);
-    const r = Math.round(c1.r + (c2.r - c1.r) * t);
-    const g = Math.round(c1.g + (c2.g - c1.g) * t);
-    const b = Math.round(c1.b + (c2.b - c1.b) * t);
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-  }
-
-  private hexToRgb(hex: string): { r: number; g: number; b: number } {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16),
-    } : { r: 0, g: 0, b: 0 };
   }
 
   private async cleanup(): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
-      // Удаляем "сирот" — бары, которые есть на сцене, но не привязаны ни к кому
-      const ours = items.filter(i => 
+      // Удаляем "сирот" — наши бары, которые не привязаны ни к чему
+      const orphans = items.filter(i => 
         (i.id.startsWith(BAR_PREFIX) || i.metadata?.[METADATA_KEY]?.type === "crack") && 
-        (!i.attachedTo || i.attachedTo === "")
+        (!i.attachedTo)
       );
-      if (ours.length) {
-        await OBR.scene.items.deleteItems(ours.map(i => i.id));
+      if (orphans.length) {
+        await OBR.scene.items.deleteItems(orphans.map(i => i.id));
       }
     } catch {}
+  }
+
+  // ==========================================================================
+  // ANIMATION LOOP (Только для Quality Mode)
+  // ==========================================================================
+
+  private startAnim(): void {
+    if (this.animInterval) return;
+    this.animInterval = window.setInterval(() => {
+      if (this.mode === 'quality') {
+        this.frame++;
+        this.animateQuality();
+      }
+    }, CONFIG.ANIM_INTERVAL);
+  }
+
+  private async animateQuality(): Promise<void> {
+    // Здесь только визуальные украшательства: пульсация цвета при низком HP
+    // Не меняем позицию или размер, только цвет
+    
+    for (const [tokenId, state] of this.states) {
+      const ids = this.bars.get(tokenId);
+      if (!ids || state.isDead) continue;
+
+      const hpPct = state.maxHp > 0 ? state.hp / state.maxHp : 0;
+      
+      // Пульсация при низком HP (< 25%)
+      if (hpPct > 0 && hpPct < 0.25) {
+        try {
+          const speed = hpPct < 0.1 ? 0.8 : 0.4;
+          const pulse = (Math.sin(this.frame * speed) + 1) / 2;
+          
+          // Интерполяция цвета от Красного к Темно-бордовому
+          const color = this.lerpColor(CONFIG.HP_LOW, "#550000", pulse);
+          
+          await OBR.scene.items.updateItems([ids.hpFill], (items) => {
+            for (const i of items) { 
+              if (isShape(i)) i.style.fillColor = color; 
+            }
+          });
+        } catch {}
+      }
+    }
+  }
+
+  private lerpColor(color1: string, color2: string, t: number): string {
+    const c1 = parseInt(color1.slice(1), 16);
+    const c2 = parseInt(color2.slice(1), 16);
+    
+    const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
+    const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
+    
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   }
 }
 
