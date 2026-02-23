@@ -86,7 +86,6 @@ function rollDice(formula: string): { formula: string; rolls: number[]; bonus: n
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Удваивает количество кубов в формуле (например, 2d6 -> 4d6) */
 function doubleDiceInFormula(formula: string): string {
   return formula.replace(/(\d*)d(\d+)/gi, (_, count, sides) => {
     const c = parseInt(count || '1', 10);
@@ -232,17 +231,17 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.isCrit = isCrit;
     context.isCritFail = isCritFail;
     
-    // 🔥 ЛОГИКА: Если Крит — включаем удвоение кубов
     if (isCrit) {
       context.doubleDamageDice = true;
     }
 
+    const rollsStr = `[${result.rolls.join(', ')}]`;
     const modText = allD20Rolls && allD20Rolls.length > 1 ? ` (${rollModifier === 'advantage' ? '🎯' : '💨'}[${allD20Rolls.join(',')}])` : '';
     
-    if (isCritFail) context.log.push(`💀 Попадание: [${rawD20}]${modText} = КРИТ ПРОВАЛ!`);
-    else if (!isSuccess) context.log.push(`💨 Попадание: [${rawD20}] + ${bonus} = ${result.total}${modText} (мимо, AC ${threshold})`);
-    else if (isCrit) context.log.push(`✨ Попадание: [${rawD20}] + ${bonus} = ${result.total}${modText} — КРИТ! (Кубы урона ×2)`);
-    else context.log.push(`🎯 Попадание: [${rawD20}] + ${bonus} = ${result.total}${modText}`);
+    if (isCritFail) context.log.push(`💀 Попадание: ${rollsStr}${modText} = КРИТ ПРОВАЛ!`);
+    else if (!isSuccess) context.log.push(`💨 Попадание: ${rollsStr} + ${bonus} = ${result.total}${modText} (мимо, AC ${threshold})`);
+    else if (isCrit) context.log.push(`✨ Попадание: ${rollsStr} + ${bonus} = ${result.total}${modText} — КРИТ! (Кубы ×2)`);
+    else context.log.push(`🎯 Попадание: ${rollsStr} + ${bonus} = ${result.total}${modText}`);
     
     return evaluateTransitions(action, context);
   },
@@ -264,21 +263,22 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.isCrit = isCrit;
     context.isCritFail = isCritFail;
     
-    // 🔥 ЛОГИКА: Если Крит — скидка на ману 50%
     if (isCrit) {
       context.manaDiscount = 0.5;
     }
 
+    const rollsStr = `[${result.rolls.join(', ')}]`;
     const modText = allD20Rolls && allD20Rolls.length > 1 ? ` (${rollModifier === 'advantage' ? '🎯' : '💨'}[${allD20Rolls.join(',')}])` : '';
-    if (isCritFail) context.log.push(`💀 Каст: [${rawD20}]${modText} = ПРОВАЛ!`);
-    else if (!isSuccess) context.log.push(`💨 Каст: [${rawD20}] + ${bonus} = ${result.total}${modText} (сложность ${threshold})`);
-    else if (isCrit) context.log.push(`✨ Каст: [${rawD20}] + ${bonus} = ${result.total}${modText} — ИДЕАЛЬНО! (Мана ×0.5)`);
-    else context.log.push(`✨ Каст: [${rawD20}] + ${bonus} = ${result.total}${modText}`);
+    
+    if (isCritFail) context.log.push(`💀 Каст: ${rollsStr}${modText} = ПРОВАЛ!`);
+    else if (!isSuccess) context.log.push(`💨 Каст: ${rollsStr} + ${bonus} = ${result.total}${modText} (сложность ${threshold})`);
+    else if (isCrit) context.log.push(`✨ Каст: ${rollsStr} + ${bonus} = ${result.total}${modText} — ИДЕАЛЬНО! (Мана ×0.5)`);
+    else context.log.push(`✨ Каст: ${rollsStr} + ${bonus} = ${result.total}${modText}`);
     
     return evaluateTransitions(action, context);
   },
 
-  // 🎯 roll_check (Старая Проверка - для совместимости)
+  // 🎯 roll_check (Старая)
   roll_check: (action, context, spell, caster, rollModifier) => {
     const bonus = calculateBonus(caster, action.bonuses, spell.elements);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
@@ -294,12 +294,13 @@ const stepExecutors: Record<string, StepExecutor> = {
     const isSuccess = !isCritFail && (isCrit || result.total >= threshold);
     context.success = isSuccess;
 
+    const rollsStr = `[${result.rolls.join(', ')}]`;
     const modText = allD20Rolls && allD20Rolls.length > 1 ? ` (${rollModifier === 'advantage' ? '🎯' : '💨'}[${allD20Rolls.join(',')}])` : '';
     
-    if (isCritFail) context.log.push(`💀 Проверка: [${rawD20}]${modText} = КРИТ ПРОВАЛ!`);
-    else if (!isSuccess) context.log.push(`💨 Проверка: [${rawD20}] + ${bonus} = ${result.total}${modText} (нужно ${threshold})`);
-    else if (isCrit) context.log.push(`✨ Проверка: [${rawD20}] + ${bonus} = ${result.total}${modText} — КРИТ!`);
-    else context.log.push(`🎯 Проверка: [${rawD20}] + ${bonus} = ${result.total}${modText}`);
+    if (isCritFail) context.log.push(`💀 Проверка: ${rollsStr}${modText} = КРИТ ПРОВАЛ!`);
+    else if (!isSuccess) context.log.push(`💨 Проверка: ${rollsStr} + ${bonus} = ${result.total}${modText} (нужно ${threshold})`);
+    else if (isCrit) context.log.push(`✨ Проверка: ${rollsStr} + ${bonus} = ${result.total}${modText} — КРИТ!`);
+    else context.log.push(`🎯 Проверка: ${rollsStr} + ${bonus} = ${result.total}${modText}`);
     
     return evaluateTransitions(action, context);
   },
@@ -308,16 +309,13 @@ const stepExecutors: Record<string, StepExecutor> = {
   roll_dice: (action, context) => {
     const formula = action.diceFormula ?? 'd6';
     const result = rollDice(formula);
-    
     context.rolls.push({ stepId: action.id, formula, rolls: result.rolls, total: result.total });
     context.lastRoll = result.total;
     context.values['lastRoll'] = result.total;
+    if (action.saveResultAs) context.values[action.saveResultAs] = result.total;
     
-    if (action.saveResultAs) {
-      context.values[action.saveResultAs] = result.total;
-    }
-    
-    context.log.push(`🎲 ${action.label}: ${formula} = [${result.rolls.join(', ')}] = ${result.total}`);
+    const rollsStr = `[${result.rolls.join(', ')}]`;
+    context.log.push(`🎲 ${action.label}: ${formula} = ${rollsStr} = ${result.total}`);
     
     return evaluateTransitions(action, context);
   },
@@ -326,38 +324,34 @@ const stepExecutors: Record<string, StepExecutor> = {
   roll_table: (action, context) => {
     const formula = action.diceFormula ?? 'd12';
     const result = rollDice(formula);
-    
     context.rolls.push({ stepId: action.id, formula, rolls: result.rolls, total: result.total });
     context.lastRoll = result.total;
-    
     const table = action.resultTable ?? [];
     const entry = table.find(e => result.total >= e.min && result.total <= e.max);
     
+    const rollsStr = `[${result.rolls.join(', ')}]`;
+    
     if (entry) {
-      if (action.saveResultAs) {
-        context.values[action.saveResultAs] = entry.resultValue;
-      }
+      if (action.saveResultAs) context.values[action.saveResultAs] = entry.resultValue;
       const icon = entry.resultIcon ?? ELEMENT_ICONS[entry.resultValue] ?? '✨';
       const label = entry.resultLabel ?? ELEMENT_NAMES[entry.resultValue] ?? entry.resultValue;
-      context.log.push(`📋 ${action.label}: [${result.total}] → ${icon} ${label}`);
+      context.log.push(`📋 ${action.label}: ${rollsStr} = ${result.total} → ${icon} ${label}`);
     } else {
-      context.log.push(`📋 ${action.label}: [${result.total}] → (не найдено в таблице)`);
+      context.log.push(`📋 ${action.label}: ${rollsStr} = ${result.total} → (не найдено)`);
     }
-    
     return evaluateTransitions(action, context);
   },
   
-  // 💥 roll_damage: Бросок урона (с учетом удвоения кубов)
+  // 💥 roll_damage
   roll_damage: (action, context, spell, caster) => {
     let formula = action.damageFormula ?? 'd6';
     
-    // Бонус от элементов
     if (action.addDamageBonus) {
       const dmgBonus = getElementBonus(caster, spell.elements, 'damage');
       if (dmgBonus > 0) formula = `${formula}+${dmgBonus}`;
     }
     
-    // 🔥 ПРИМЕНЕНИЕ УДВОЕНИЯ КУБОВ (от roll_attack)
+    // 🔥 УДВОЕНИЕ КУБОВ
     if (context.doubleDamageDice) {
       formula = doubleDiceInFormula(formula);
     }
@@ -365,7 +359,6 @@ const stepExecutors: Record<string, StepExecutor> = {
     const result = rollDice(formula);
     let total = result.total;
     
-    // Определение типа урона
     let damageType: string | undefined;
     if (context.isCrit && action.forcePureOnCrit) {
       damageType = 'pure';
@@ -379,27 +372,19 @@ const stepExecutors: Record<string, StepExecutor> = {
     
     context.totalDamage += total;
     context.damageType = damageType;
-    context.damageBreakdown.push({
-      formula,
-      result: total,
-      type: damageType,
-      isCrit: context.isCrit
-    });
-    
-    if (action.saveDamageAs) {
-      context.values[action.saveDamageAs] = total;
-    }
+    context.damageBreakdown.push({ formula, result: total, type: damageType, isCrit: context.isCrit });
     
     const typeLabel = damageType ? (DAMAGE_TYPE_NAMES[damageType as DamageType] ?? ELEMENT_NAMES[damageType] ?? damageType) : '';
     const pureLabel = damageType === 'pure' ? ' (ЧИСТЫЙ)' : '';
     const critLabel = context.doubleDamageDice ? ' (КРИТ! Кубы ×2)' : '';
+    const rollsStr = `[${result.rolls.join(', ')}]`;
     
-    context.log.push(`💥 Урон: ${formula} = ${total}${typeLabel}${pureLabel}${critLabel}`);
+    context.log.push(`💥 Урон: ${formula} = ${rollsStr} = ${total} ${typeLabel}${pureLabel}${critLabel}`);
     
     return evaluateTransitions(action, context);
   },
   
-  // ⚖️ damage_tiers: Урон по тирам (с учетом удвоения кубов)
+  // ⚖️ damage_tiers
   damage_tiers: (action, context, spell, caster) => {
     const formula = action.diceFormula ?? 'd20';
     const result = rollDice(formula);
@@ -410,12 +395,14 @@ const stepExecutors: Record<string, StepExecutor> = {
     const tiers = action.damageTiers ?? [];
     const tier = tiers.find(t => result.total >= t.minRoll && result.total <= t.maxRoll);
     
+    const tierRollsStr = `[${result.rolls.join(', ')}]`;
+    
     if (!tier) {
-      context.log.push(`⚔️ ${action.label}: [${result.total}] — нет подходящего tier!`);
+      context.log.push(`⚖️ ${action.label}: ${formula} = ${tierRollsStr} = ${result.total} — нет tier!`);
       return evaluateTransitions(action, context);
     }
     
-    context.log.push(`⚔️ ${action.label}: [${result.total}] → ${tier.label ?? tier.formula}`);
+    context.log.push(`⚖️ ${action.label}: ${formula} = ${tierRollsStr} = ${result.total} → ${tier.label ?? tier.formula}`);
     
     let dmgFormula = tier.formula;
     if (action.addDamageBonus) {
@@ -431,7 +418,6 @@ const stepExecutors: Record<string, StepExecutor> = {
     const dmgResult = rollDice(dmgFormula);
     let dmgTotal = dmgResult.total;
     
-    // Крит на самом кубике тира тоже считается
     const isTierCrit = result.total === 20; 
     if (isTierCrit || context.isCrit) {
       context.isCrit = true;
@@ -450,120 +436,70 @@ const stepExecutors: Record<string, StepExecutor> = {
     
     context.totalDamage += dmgTotal;
     context.damageType = damageType;
-    context.damageBreakdown.push({
-      formula: dmgFormula,
-      result: dmgTotal,
-      type: damageType,
-      isCrit: context.isCrit
-    });
+    context.damageBreakdown.push({ formula: dmgFormula, result: dmgTotal, type: damageType, isCrit: context.isCrit });
     
     const typeLabel = damageType ? (DAMAGE_TYPE_NAMES[damageType as DamageType] ?? ELEMENT_NAMES[damageType] ?? damageType) : '';
     const pureLabel = damageType === 'pure' ? ' (ЧИСТЫЙ)' : '';
     const critLabel = context.doubleDamageDice ? ' (КРИТ! Кубы ×2)' : (isTierCrit ? ' (КРИТ ТИРА!)' : '');
+    const dmgRollsStr = `[${dmgResult.rolls.join(', ')}]`;
     
-    context.log.push(`💥 Урон: ${dmgFormula} = ${dmgTotal}${typeLabel}${pureLabel}${critLabel}`);
+    context.log.push(`💥 Урон: ${dmgFormula} = ${dmgRollsStr} = ${dmgTotal} ${typeLabel}${pureLabel}${critLabel}`);
     
     return evaluateTransitions(action, context);
   },
   
-  // 📝 set_value
   set_value: (action, context) => {
     if (action.setKey) {
-      if (action.setValueFromContext) {
-        context.values[action.setKey] = context.values[action.setValueFromContext];
-      } else if (action.setValueFormula) {
-        const result = rollDice(action.setValueFormula);
-        context.values[action.setKey] = result.total;
-      } else {
-        context.values[action.setKey] = action.setValue;
-      }
-      
+      if (action.setValueFromContext) context.values[action.setKey] = context.values[action.setValueFromContext];
+      else if (action.setValueFormula) context.values[action.setKey] = rollDice(action.setValueFormula).total;
+      else context.values[action.setKey] = action.setValue;
       context.log.push(`📝 ${action.setKey} = ${context.values[action.setKey]}`);
     }
-    
     return evaluateTransitions(action, context);
   },
-  
-  // 💬 message
+
   message: (action, context) => {
-    if (action.messageTemplate) {
-      const message = interpolateMessage(action.messageTemplate, context);
-      context.log.push(`💬 ${message}`);
-    }
-    
+    if (action.messageTemplate) context.log.push(`💬 ${interpolateMessage(action.messageTemplate, context)}`);
     return evaluateTransitions(action, context);
   },
-  
-  // 🔀 branch
+
   branch: (action, context) => {
-    if (!action.branchCondition) {
-      return action.branchFalseStepId ?? 'next';
-    }
-    
+    if (!action.branchCondition) return action.branchFalseStepId ?? 'next';
     const { type, key, value, valueMax } = action.branchCondition;
     const actualValue = context.values[key];
-    
     let conditionMet = false;
-    
     switch (type) {
-      case 'value_exists':
-        conditionMet = actualValue !== undefined;
-        break;
-      case 'value_equals':
-        conditionMet = actualValue == value;
-        break;
-      case 'value_gte':
-        conditionMet = typeof actualValue === 'number' && actualValue >= (value as number);
-        break;
-      case 'value_lte':
-        conditionMet = typeof actualValue === 'number' && actualValue <= (value as number);
-        break;
-      case 'value_in_range':
-        conditionMet = typeof actualValue === 'number' 
-          && actualValue >= (value as number) 
-          && actualValue <= (valueMax ?? value as number);
-        break;
+      case 'value_exists': conditionMet = actualValue !== undefined; break;
+      case 'value_equals': conditionMet = actualValue == value; break;
+      case 'value_gte': conditionMet = typeof actualValue === 'number' && actualValue >= (value as number); break;
+      case 'value_lte': conditionMet = typeof actualValue === 'number' && actualValue <= (value as number); break;
+      case 'value_in_range': conditionMet = typeof actualValue === 'number' && actualValue >= (value as number) && actualValue <= (valueMax ?? value as number); break;
     }
-    
     context.log.push(`🔀 ${action.label}: ${key}=${actualValue} ${type} ${value} → ${conditionMet ? 'ДА' : 'НЕТ'}`);
-    
     return conditionMet ? (action.branchTrueStepId ?? 'next') : (action.branchFalseStepId ?? 'stop');
   },
-  
-  // ➡️ goto
+
   goto: (action, context) => {
     context.log.push(`➡️ Переход к: ${action.gotoStepId}`);
     return action.gotoStepId ?? 'next';
   },
-  
-  // 🛑 stop
+
   stop: (action, context) => {
     context.log.push(`🛑 ${action.label ?? 'Стоп'}`);
     context.stopped = true;
     return 'stop';
   },
-  
-  // 💠 modify_resource
+
   modify_resource: (action, context) => {
     const amount = action.resourceAmount ?? 0;
     const op = action.resourceOperation === 'restore' ? '+' : '-';
     const type = action.resourceType ?? 'mana';
-    
     context.log.push(`💠 ${op}${amount} ${type}`);
-    
-    if (!context.values._resourceChanges) {
-      context.values._resourceChanges = [];
-    }
-    (context.values._resourceChanges as any[]).push({
-      type,
-      amount: action.resourceOperation === 'restore' ? amount : -amount,
-      resourceId: action.resourceId
-    });
-    
+    if (!context.values._resourceChanges) context.values._resourceChanges = [];
+    (context.values._resourceChanges as any[]).push({ type, amount: action.resourceOperation === 'restore' ? amount : -amount, resourceId: action.resourceId });
     return evaluateTransitions(action, context);
   },
-  
-  // 🩸 apply_damage
+
   apply_damage: (action, context) => {
     context.log.push(`🩸 Итоговый урон: ${context.totalDamage}`);
     return evaluateTransitions(action, context);
@@ -615,36 +551,23 @@ function checkTransitionCondition(transition: { condition: string; conditionKey?
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function executeSpell(options: ExecuteSpellOptions): Promise<ExecuteSpellResult> {
-  const { 
-    spell, 
-    caster, 
-    targetCount = 1, 
-    rollModifier = 'normal',
-    onStepComplete,
-    onLog
-  } = options;
-  
+  const { spell, caster, targetCount = 1, rollModifier = 'normal', onStepComplete, onLog } = options;
   const context = createInitialContext(spell, caster, targetCount);
   const sortedActions = [...spell.actions].sort((a, b) => a.order - b.order);
   const actionMap = new Map<string, number>();
-  sortedActions.forEach((action, index) => {
-    actionMap.set(action.id, index);
-  });
+  sortedActions.forEach((action, index) => actionMap.set(action.id, index));
   
   let manaCost = spell.cost;
   const manaReduction = getElementBonus(caster, spell.elements, 'mana');
   manaCost = Math.max(0, manaCost - manaReduction);
   
   context.log.push(`═══ ${spell.name} ═══`);
-  if (manaReduction > 0) {
-    context.log.push(`💠 Мана: ${spell.cost} - ${manaReduction} (предрасп.) = ${manaCost}`);
-  }
+  if (manaReduction > 0) context.log.push(`💠 Мана: ${spell.cost} - ${manaReduction} (предрасп.) = ${manaCost}`);
   
   let projectileCount = 1;
   if (spell.projectiles && spell.projectiles !== '1') {
-    if (/^\d+$/.test(spell.projectiles)) {
-      projectileCount = parseInt(spell.projectiles, 10);
-    } else {
+    if (/^\d+$/.test(spell.projectiles)) projectileCount = parseInt(spell.projectiles, 10);
+    else {
       const projResult = rollDice(spell.projectiles);
       projectileCount = projResult.total;
       context.log.push(`🎲 Снарядов: ${spell.projectiles} = ${projectileCount}`);
@@ -657,24 +580,18 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
   
   while (currentIndex < sortedActions.length && !context.stopped && iterations < MAX_ITERATIONS) {
     iterations++;
-    
     const action = sortedActions[currentIndex];
     if (!action) break;
-    
     context.currentStepIndex = currentIndex;
     context.currentStepId = action.id;
     
     if (action.condition && action.condition.type !== 'always') {
       const condMet = checkStepCondition(action.condition, context);
-      if (!condMet) {
-        currentIndex++;
-        continue;
-      }
+      if (!condMet) { currentIndex++; continue; }
     }
     
     const executor = stepExecutors[action.type];
     let nextStepId: string | null = null;
-    
     if (executor) {
       const useModifier = iterations === 1 ? rollModifier : 'normal';
       nextStepId = executor(action, context, spell, caster, useModifier);
@@ -682,22 +599,14 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
       context.log.push(`⚠️ Неизвестный тип шага: ${action.type}`);
     }
     
-    if (onStepComplete) {
-      onStepComplete(action.id, context);
-    }
+    if (onStepComplete) onStepComplete(action.id, context);
     
-    if (nextStepId === 'stop' || context.stopped) {
-      break;
-    } else if (nextStepId === 'next' || nextStepId === null) {
-      currentIndex++;
-    } else {
+    if (nextStepId === 'stop' || context.stopped) break;
+    else if (nextStepId === 'next' || nextStepId === null) currentIndex++;
+    else {
       const targetIndex = actionMap.get(nextStepId);
-      if (targetIndex !== undefined) {
-        currentIndex = targetIndex;
-      } else {
-        context.log.push(`⚠️ Шаг не найден: ${nextStepId}`);
-        currentIndex++;
-      }
+      if (targetIndex !== undefined) currentIndex = targetIndex;
+      else { context.log.push(`⚠️ Шаг не найден: ${nextStepId}`); currentIndex++; }
     }
   }
   
@@ -706,16 +615,13 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
     context.error = 'Max iterations exceeded';
   }
   
-  // 🔥 Применяем скидку на ману от крит каста
   if (context.manaDiscount) {
     const oldCost = manaCost;
     manaCost = Math.floor(manaCost * (1 - context.manaDiscount));
     context.log.push(`✨ КРИТ КАСТ! Мана снижена: ${oldCost} → ${manaCost}`);
   }
   
-  if (onLog) {
-    context.log.forEach(line => onLog(line));
-  }
+  if (onLog) context.log.forEach(line => onLog(line));
   
   return {
     success: context.success && !context.isCritFail,
@@ -725,21 +631,6 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
     manaCost,
     log: context.log
   };
-}
-
-function checkStepCondition(
-  condition: NonNullable<SpellAction['condition']>, 
-  context: CastContext
-): boolean {
-  const { type, key, value } = condition;
-  switch (type) {
-    case 'always': return true;
-    case 'value_exists': return key ? context.values[key] !== undefined : false;
-    case 'value_equals': return key ? context.values[key] == value : false;
-    case 'value_gte': return key && typeof context.values[key] === 'number' ? context.values[key] >= (value as number) : false;
-    case 'value_lte': return key && typeof context.values[key] === 'number' ? context.values[key] <= (value as number) : false;
-    default: return true;
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
