@@ -183,7 +183,7 @@ export interface SpellAction {
   critMultiplier?: number;
   addDamageBonus?: boolean;
   saveDamageAs?: string;
-  forcePureOnCrit?: boolean; // 🔥 ГАЛОЧКА
+  forcePureOnCrit?: boolean; // ГАЛОЧКА
   
   setKey?: string;
   setValue?: string | number | boolean;
@@ -260,7 +260,7 @@ export interface CastContext {
   success: boolean;
   error?: string;
   
-  // 🔥 Новые флаги для логики
+  // Флаги для логики
   doubleDamageDice?: boolean;
   manaDiscount?: number;
 }
@@ -285,39 +285,9 @@ export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// МЕТАДАННЫЕ ТИПОВ
+// КАСТОМНЫЕ ДЕЙСТВИЯ V2
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const SPELL_ACTION_TYPE_META: Record<SpellActionType, {
-  name: string;
-  icon: string;
-  description: string;
-  color: string;
-}> = {
-  roll_attack: { name: 'Попадание', icon: '⚔️', description: 'Крит = x2 кубов урона', color: 'text-blood-bright' },
-  roll_cast: { name: 'Каст', icon: '✨', description: 'Крит = 1/2 маны', color: 'text-mana-bright' },
-  roll_check: { name: 'Проверка', icon: '🎯', description: 'd20 + бонусы', color: 'text-gold' },
-  roll_dice: { name: 'Бросок', icon: '🎲', description: 'Бросить кубики', color: 'text-ancient' },
-  roll_table: { name: 'Таблица', icon: '📋', description: 'Бросок → таблица', color: 'text-mana-bright' },
-  roll_damage: { name: 'Урон', icon: '💥', description: 'Кубики урона', color: 'text-blood-bright' },
-  damage_tiers: { name: 'Tier-урон', icon: '⚖️', description: 'Урон по броску', color: 'text-blood-bright' },
-  set_value: { name: 'Установить', icon: '📝', description: 'Сохранить значение', color: 'text-faded' },
-  modify_resource: { name: 'Ресурс', icon: '💠', description: 'Изменить ресурс', color: 'text-mana-bright' },
-  apply_damage: { name: 'Применить', icon: '🩸', description: 'Применить урон', color: 'text-blood' },
-  message: { name: 'Сообщение', icon: '💬', description: 'В лог', color: 'text-bone' },
-  branch: { name: 'Ветвление', icon: '🔀', description: 'Условие', color: 'text-purple-400' },
-  goto: { name: 'Переход', icon: '➡️', description: 'Go to', color: 'text-purple-400' },
-  stop: { name: 'Стоп', icon: '🛑', description: 'Стоп', color: 'text-blood' }
-};
-
-// ... (остальные маппинги и интерфейсы)
-// ОРУЖИЕ, КАСТОМНЫЕ ДЕЙСТВИЯ, РЕСУРСЫ и т.д. остаются как были
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🎬 КАСТОМНЫЕ ДЕЙСТВИЯ V2
-// ═══════════════════════════════════════════════════════════════════════════
-
-/** Категория действия */
 export type ActionCategory = 
   | 'check'       // Проверки характеристик
   | 'social'      // Социальные взаимодействия
@@ -347,7 +317,6 @@ export const ACTION_CATEGORY_ICONS: Record<ActionCategory, string> = {
   other: '✨'
 };
 
-/** Стоимость действия */
 export interface ActionCost {
   id: string;
   type: 'mana' | 'health' | 'resource';
@@ -355,33 +324,22 @@ export interface ActionCost {
   amount: number;
 }
 
-/** Кастомное действие V2 */
 export interface CustomActionV2 {
   id: string;
   name: string;
   version: 2;
-  
-  // Визуальное
   icon: string;
   category: ActionCategory;
   description?: string;
-  
-  // Стоимость (может быть несколько или пусто)
   costs: ActionCost[];
-  
-  // Модификатор броска по умолчанию
   defaultRollModifier: RollModifier;
-  
-  // ⛓️ Цепочка действий (переиспользуем SpellAction!)
   actions: SpellAction[];
 }
 
-/** Проверка версии действия */
 export function isCustomActionV2(action: CustomAction | CustomActionV2): action is CustomActionV2 {
   return 'version' in action && action.version === 2;
 }
 
-/** Создать пустое действие V2 */
 export function createEmptyCustomActionV2(): CustomActionV2 {
   return {
     id: '',
@@ -397,10 +355,10 @@ export function createEmptyCustomActionV2(): CustomActionV2 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// КАСТОМНЫЕ ДЕЙСТВИЯ (СТАРАЯ ВЕРСИЯ — для миграции)
+// КАСТОМНЫЕ ДЕЙСТВИЯ (СТАРАЯ ВЕРСИЯ)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** @deprecated Используй CustomActionV2 */
+/** @deprecated */
 export interface ActionBonus {
   type: 'stat' | 'proficiency' | 'flat';
   stat?: StatKey;
@@ -409,7 +367,7 @@ export interface ActionBonus {
   label?: string;
 }
 
-/** @deprecated Используй CustomActionV2 */
+/** @deprecated */
 export interface ActionOutcome {
   type: 'message' | 'next_step' | 'damage' | 'heal' | 'mana_cost' | 'health_cost';
   message?: string;
@@ -419,7 +377,7 @@ export interface ActionOutcome {
   amount?: number;
 }
 
-/** @deprecated Используй CustomActionV2 */
+/** @deprecated */
 export interface ActionStep {
   id: string;
   label: string;
@@ -433,7 +391,7 @@ export interface ActionStep {
   onFailure?: ActionOutcome;
 }
 
-/** @deprecated Используй CustomActionV2 */
+/** @deprecated */
 export interface CustomAction {
   id: string;
   name: string;
@@ -460,7 +418,7 @@ export interface Resource {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ЮНИТ (ПЕРСОНАЖ)
+// ЮНИТ
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface Unit {
@@ -500,7 +458,6 @@ export interface Unit {
   spells: (Spell | SpellV2)[];
   resources: Resource[];
   
-  // Действия — поддержка обеих версий
   customActions?: (CustomAction | CustomActionV2)[];
   
   useManaAsHp: boolean;
@@ -518,7 +475,7 @@ export interface Unit {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// РЕЗУЛЬТАТЫ БРОСКОВ
+// ОСТАЛЬНОЕ
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface DiceRollResult {
@@ -533,10 +490,6 @@ export interface DiceRollResult {
   allD20Rolls?: number[];
   label?: string;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BROADCAST СООБЩЕНИЯ
-// ═══════════════════════════════════════════════════════════════════════════
 
 export interface BroadcastMessage {
   id: string;
@@ -554,10 +507,6 @@ export interface BroadcastMessage {
   details?: string[];
   timestamp: number;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// НАСТРОЙКИ
-// ═══════════════════════════════════════════════════════════════════════════
 
 export interface AppSettings {
   googleDocsUrl?: string;
@@ -639,86 +588,24 @@ export const MULTIPLIER_OPTIONS = [
   { value: 3, label: '×3 (Крит. уязв.)' }
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ТИПЫ ШАГОВ — МЕТАДАННЫЕ
-// ═══════════════════════════════════════════════════════════════════════════
-
 export const SPELL_ACTION_TYPE_META: Record<SpellActionType, {
   name: string;
   icon: string;
   description: string;
   color: string;
 }> = {
-  roll_check: {
-    name: 'Проверка',
-    icon: '🎯',
-    description: 'd20 + бонусы против порога',
-    color: 'text-gold'
-  },
-  roll_dice: {
-    name: 'Бросок',
-    icon: '🎲',
-    description: 'Бросить кубики и сохранить результат',
-    color: 'text-ancient'
-  },
-  roll_table: {
-    name: 'Таблица',
-    icon: '📋',
-    description: 'Бросок → результат из таблицы',
-    color: 'text-mana-bright'
-  },
-  roll_damage: {
-    name: 'Урон',
-    icon: '💥',
-    description: 'Бросок кубиков урона',
-    color: 'text-blood-bright'
-  },
-  damage_tiers: {
-    name: 'Tier-урон',
-    icon: '⚔️',
-    description: 'Урон зависит от броска',
-    color: 'text-blood-bright'
-  },
-  set_value: {
-    name: 'Установить',
-    icon: '📝',
-    description: 'Сохранить значение в контекст',
-    color: 'text-faded'
-  },
-  modify_resource: {
-    name: 'Ресурс',
-    icon: '💠',
-    description: 'Изменить ресурс (мана/HP)',
-    color: 'text-mana-bright'
-  },
-  apply_damage: {
-    name: 'Применить',
-    icon: '🩸',
-    description: 'Применить накопленный урон',
-    color: 'text-blood'
-  },
-  message: {
-    name: 'Сообщение',
-    icon: '💬',
-    description: 'Показать сообщение в логе',
-    color: 'text-bone'
-  },
-  branch: {
-    name: 'Ветвление',
-    icon: '🔀',
-    description: 'Условный переход',
-    color: 'text-purple-400'
-  },
-  goto: {
-    name: 'Переход',
-    icon: '➡️',
-    description: 'Перейти к шагу',
-    color: 'text-purple-400'
-  },
-  stop: {
-    name: 'Стоп',
-    icon: '🛑',
-    description: 'Остановить выполнение',
-    color: 'text-blood'
-  }
+  roll_attack: { name: 'Попадание', icon: '⚔️', description: 'Крит = x2 кубов урона', color: 'text-blood-bright' },
+  roll_cast: { name: 'Каст', icon: '✨', description: 'Крит = 1/2 маны', color: 'text-mana-bright' },
+  roll_check: { name: 'Проверка', icon: '🎯', description: 'd20 + бонусы', color: 'text-gold' },
+  roll_dice: { name: 'Бросок', icon: '🎲', description: 'Бросить кубики', color: 'text-ancient' },
+  roll_table: { name: 'Таблица', icon: '📋', description: 'Бросок → таблица', color: 'text-mana-bright' },
+  roll_damage: { name: 'Урон', icon: '💥', description: 'Кубики урона', color: 'text-blood-bright' },
+  damage_tiers: { name: 'Tier-урон', icon: '⚖️', description: 'Урон по броску', color: 'text-blood-bright' },
+  set_value: { name: 'Установить', icon: '📝', description: 'Сохранить значение', color: 'text-faded' },
+  modify_resource: { name: 'Ресурс', icon: '💠', description: 'Изменить ресурс', color: 'text-mana-bright' },
+  apply_damage: { name: 'Применить', icon: '🩸', description: 'Применить урон', color: 'text-blood' },
+  message: { name: 'Сообщение', icon: '💬', description: 'В лог', color: 'text-bone' },
+  branch: { name: 'Ветвление', icon: '🔀', description: 'Условие', color: 'text-purple-400' },
+  goto: { name: 'Переход', icon: '➡️', description: 'Go to', color: 'text-purple-400' },
+  stop: { name: 'Стоп', icon: '🛑', description: 'Стоп', color: 'text-blood' }
 };
