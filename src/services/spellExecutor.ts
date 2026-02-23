@@ -444,7 +444,6 @@ const stepExecutors: Record<string, StepExecutor> = {
     
     context.lastRoll = result.total;
     
-    // Ищем tier
     const tiers = action.damageTiers ?? [];
     const tier = tiers.find(t => result.total >= t.minRoll && result.total <= t.maxRoll);
     
@@ -455,31 +454,38 @@ const stepExecutors: Record<string, StepExecutor> = {
     
     context.log.push(`⚔️ ${action.label}: [${result.total}] → ${tier.label ?? tier.formula}`);
     
-    // Бросаем урон по tier'у
     let dmgFormula = tier.formula;
     if (action.addDamageBonus) {
       const dmgBonus = getElementBonus(caster, spell.elements, 'damage');
-      if (dmgBonus > 0) {
-        dmgFormula = `${dmgFormula}+${dmgBonus}`;
-      }
+      if (dmgBonus > 0) dmgFormula = `${dmgFormula}+${dmgBonus}`;
     }
     
     const dmgResult = rollDice(dmgFormula);
     let dmgTotal = dmgResult.total;
     
-    // Крит на 20 в этом броске?
-    const isTierCrit = result.total === 20;
-    if (isTierCrit) {
+    // Проверка крита на кубике тира (d20)
+    // Если выпало 20 на проверке тира — считаем это критом для логики (флагов), 
+    // НО НЕ УМНОЖАЕМ УРОН АВТОМАТИЧЕСКИ.
+    const isTierCrit = result.total === 20; 
+    
+    if (isTierCrit || context.isCrit) {
       context.isCrit = true;
-      dmgTotal *= (action.critMultiplier ?? 2);
+      // ❌ УБРАНО: dmgTotal *= (action.critMultiplier ?? 2);
+      // Крит влияет только на статус и флаги (например, чистый урон)
     }
     
     // Определяем тип урона
     let damageType: string | undefined;
-    if (action.damageType === 'from_context' && action.damageTypeContextKey) {
-      damageType = context.values[action.damageTypeContextKey] as string;
-    } else if (action.damageType && action.damageType !== 'from_context') {
-      damageType = action.damageType;
+
+    // 🔥 ЛОГИКА ЧИСТОГО УРОНА ПРИ КРИТЕ
+    if (context.isCrit && action.forcePureOnCrit) {
+      damageType = 'pure';
+    } else {
+      if (action.damageType === 'from_context' && action.damageTypeContextKey) {
+        damageType = context.values[action.damageTypeContextKey] as string;
+      } else if (action.damageType && action.damageType !== 'from_context') {
+        damageType = action.damageType;
+      }
     }
     
     context.totalDamage += dmgTotal;
@@ -488,19 +494,21 @@ const stepExecutors: Record<string, StepExecutor> = {
       formula: dmgFormula,
       result: dmgTotal,
       type: damageType,
-      isCrit: isTierCrit
+      isCrit: context.isCrit
     });
     
     const typeLabel = damageType 
       ? (DAMAGE_TYPE_NAMES[damageType as DamageType] ?? ELEMENT_NAMES[damageType] ?? damageType)
       : '';
-    const critText = isTierCrit ? ' ×2 КРИТ!' : '';
     
-    context.log.push(`💥 Урон: ${dmgFormula} = ${dmgTotal}${critText} ${typeLabel}`);
+    // Добавляем пометку "КРИТ", но без "x2", если урон не умножался
+    const critText = context.isCrit ? ' (КРИТ!)' : '';
+    const pureLabel = damageType === 'pure' ? ' (ЧИСТЫЙ)' : '';
+    
+    context.log.push(`💥 Урон: ${dmgFormula} = ${dmgTotal}${critText} ${typeLabel}${pureLabel}`);
     
     return evaluateTransitions(action, context);
   },
-  
   // ─────────────────────────────────────────────────────────────────────────
   // set_value: Установить значение
   // ─────────────────────────────────────────────────────────────────────────
