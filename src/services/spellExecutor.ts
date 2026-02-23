@@ -263,45 +263,54 @@ const stepExecutors: Record<string, StepExecutor> = {
   // roll_check: d20 + бонусы (vs порог)
   // ─────────────────────────────────────────────────────────────────────────
   roll_check: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
-    const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
-    
-    const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
-    
-    context.rolls.push({
-      stepId: action.id,
-      formula,
-      rolls: result.rolls,
-      total: result.total,
-      rawD20,
-      isCrit,
-      isCritFail
-    });
-    
-    context.lastRoll = result.total;
-    context.lastD20 = rawD20;
-    context.isCrit = isCrit;
-    context.isCritFail = isCritFail;
-    context.values['lastRoll'] = result.total;
-    context.values['lastD20'] = rawD20;
-    
-    // Формируем лог
-    const modText = allD20Rolls && allD20Rolls.length > 1
-      ? ` (${rollModifier === 'advantage' ? '🎯' : '💨'}[${allD20Rolls.join(',')}])`
-      : '';
-    
-    if (isCritFail) {
-      context.log.push(`💀 ${action.label}: [${rawD20}]${modText} = КРИТ ПРОВАЛ!`);
-      context.success = false;
-    } else if (isCrit) {
-      context.log.push(`✨ ${action.label}: [${rawD20}] + ${bonus} = ${result.total}${modText} — КРИТ!`);
-    } else {
-      context.log.push(`🎯 ${action.label}: [${rawD20}] + ${bonus} = ${result.total}${modText}`);
-    }
-    
-    // Проверяем переходы
-    return evaluateTransitions(action, context);
-  },
+  const bonus = calculateBonus(caster, action.bonuses, spell.elements);
+  const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
+  
+  const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
+  
+  context.rolls.push({
+    stepId: action.id,
+    formula,
+    rolls: result.rolls,
+    total: result.total,
+    rawD20,
+    isCrit,
+    isCritFail
+  });
+  
+  context.lastRoll = result.total;
+  context.lastD20 = rawD20;
+  context.isCrit = isCrit;
+  context.isCritFail = isCritFail;
+  context.values['lastRoll'] = result.total;
+  context.values['lastD20'] = rawD20;
+  
+  // 🔥 ФИКС: Проверка порога
+  const threshold = action.successThreshold ?? 10;
+  const isSuccess = !isCritFail && (isCrit || result.total >= threshold);
+  
+  context.success = isSuccess; // <--- Явно обновляем статус успеха в контексте
+
+  // Формируем лог
+  const modText = allD20Rolls && allD20Rolls.length > 1
+    ? ` (${rollModifier === 'advantage' ? '🎯' : '💨'}[${allD20Rolls.join(',')}])`
+    : '';
+  
+  if (isCritFail) {
+    context.log.push(`💀 ${action.label}: [${rawD20}]${modText} = КРИТ ПРОВАЛ!`);
+  } else if (!isSuccess) {
+    // Добавим лог для обычного промаха
+    context.log.push(`💨 ${action.label}: [${rawD20}] + ${bonus} = ${result.total}${modText} (нужно ${threshold})`);
+  } else if (isCrit) {
+    context.log.push(`✨ ${action.label}: [${rawD20}] + ${bonus} = ${result.total}${modText} — КРИТ!`);
+  } else {
+    context.log.push(`🎯 ${action.label}: [${rawD20}] + ${bonus} = ${result.total}${modText}`);
+  }
+  
+  // Проверяем переходы
+  return evaluateTransitions(action, context);
+},
+
   
   // ─────────────────────────────────────────────────────────────────────────
   // roll_dice: Просто бросить кубики
