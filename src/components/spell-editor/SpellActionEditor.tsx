@@ -30,7 +30,7 @@ import {
   createEmptyDamageTier,
   createEmptyTransition
 } from '../../constants/spellActions';
-import { MAGIC_ELEMENTS, ELEMENT_ICONS } from '../../constants/elements';
+import { GAME_ELEMENTS } from '../../constants/elements';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
@@ -38,7 +38,7 @@ import { MAGIC_ELEMENTS, ELEMENT_ICONS } from '../../constants/elements';
 
 interface SpellActionEditorProps {
   action: SpellAction;
-  allActions: SpellAction[];  // Для выбора целей переходов
+  allActions: SpellAction[];
   onChange: (action: SpellAction) => void;
   onDelete: () => void;
   onMoveUp?: () => void;
@@ -69,7 +69,6 @@ export function SpellActionEditor({
     onChange({ ...action, ...updates });
   };
   
-  // Опции для выбора целей переходов
   const targetOptions = [
     { value: 'next', label: '→ Следующий шаг' },
     { value: 'stop', label: '🛑 Остановить' },
@@ -122,7 +121,6 @@ export function SpellActionEditor({
               value={action.type}
               onChange={(e) => {
                 const newType = e.target.value as SpellActionType;
-                // При смене типа сбрасываем специфичные поля
                 const newAction: SpellAction = {
                   id: action.id,
                   type: newType,
@@ -355,13 +353,8 @@ function RollTableFields({ action, update }: { action: SpellAction; update: (u: 
               className="w-10 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs text-center"
             />
             <span className="text-faded">→</span>
-            <input
-              type="text"
-              value={entry.resultIcon ?? ''}
-              onChange={(e) => updateEntry(idx, { resultIcon: e.target.value })}
-              className="w-8 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs text-center"
-              placeholder="🔥"
-            />
+            
+            {/* Value - короткий ID */}
             <input
               type="text"
               value={entry.resultValue}
@@ -369,6 +362,8 @@ function RollTableFields({ action, update }: { action: SpellAction; update: (u: 
               className="w-20 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs"
               placeholder="fire"
             />
+            
+            {/* Label - название */}
             <input
               type="text"
               value={entry.resultLabel ?? ''}
@@ -426,7 +421,8 @@ function RollDamageFields({ action, update }: { action: SpellAction; update: (u:
           })}
           options={[
             { value: 'from_context', label: '📋 Из контекста' },
-            ...ALL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] }))
+            // 🔥 ЕДИНЫЙ СПИСОК ЭЛЕМЕНТОВ
+            ...GAME_ELEMENTS.map(e => ({ value: e.id, label: `${e.icon} ${e.name}` }))
           ]}
         />
       </div>
@@ -448,11 +444,17 @@ function RollDamageFields({ action, update }: { action: SpellAction; update: (u:
           min={1}
           max={5}
         />
-        <div className="flex items-end pb-1">
+        <div className="flex flex-col gap-1 pb-1">
           <Checkbox
             checked={action.addDamageBonus ?? false}
             onChange={(v) => update({ addDamageBonus: v })}
             label="+ бонус от элементов"
+          />
+          {/* 🔥 ГАЛОЧКА ЧИСТОГО УРОНА */}
+          <Checkbox
+            checked={action.forcePureOnCrit ?? false}
+            onChange={(v) => update({ forcePureOnCrit: v })}
+            label="✨ Чистый при Крите"
           />
         </div>
       </div>
@@ -505,7 +507,8 @@ function DamageTiersFields({ action, update }: { action: SpellAction; update: (u
           })}
           options={[
             { value: 'from_context', label: '📋 Из контекста' },
-            ...ALL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] }))
+            // 🔥 ЕДИНЫЙ СПИСОК ЭЛЕМЕНТОВ
+            ...GAME_ELEMENTS.map(e => ({ value: e.id, label: `${e.icon} ${e.name}` }))
           ]}
         />
       </div>
@@ -518,6 +521,15 @@ function DamageTiersFields({ action, update }: { action: SpellAction; update: (u
           placeholder="element"
         />
       )}
+      
+      {/* 🔥 ГАЛОЧКА ЧИСТОГО УРОНА */}
+      <div className="flex justify-end">
+         <Checkbox
+            checked={action.forcePureOnCrit ?? false}
+            onChange={(v) => update({ forcePureOnCrit: v })}
+            label="✨ Чистый урон при Крите (игнор брони)"
+          />
+      </div>
       
       <div className="space-y-1">
         <div className="text-xs text-faded uppercase">Tier'ы урона:</div>
@@ -841,7 +853,7 @@ function BonusesEditor({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// РЕДАКТОР ПЕРЕХОДОВ
+// РЕДАКТОР ПЕРЕХОДОВ (ИСПРАВЛЕННЫЙ UI)
 // ═══════════════════════════════════════════════════════════════════════════
 
 function TransitionsEditor({
@@ -869,8 +881,7 @@ function TransitionsEditor({
   
   const condMeta = TRANSITION_CONDITIONS;
   
-  // Сортируем локально для отображения, но индексы используем от исходного массива
-  // Лучше просто мапить как есть, пользователь сам настроит приоритет
+  // Сортируем локально для отображения
   const sortedTransitions = transitions.map((t, i) => ({ t, i })).sort((a, b) => a.t.priority - b.t.priority);
   
   return (
@@ -894,7 +905,7 @@ function TransitionsEditor({
                   type="number"
                   value={trans.priority}
                   onChange={(e) => updateTransition(originalIndex, { priority: parseInt(e.target.value) || 0 })}
-                  className="bg-obsidian border border-edge-bone text-bone rounded px-2 py-1 text-xs text-center focus:border-gold outline-none"
+                  className="bg-obsidian border border-edge-bone text-bone rounded px-2 py-1 text-xs text-center focus:border-gold outline-none w-full"
                 />
               </div>
               
