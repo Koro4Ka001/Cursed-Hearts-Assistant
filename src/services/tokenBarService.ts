@@ -8,15 +8,15 @@ import OBR, {
 import type { Unit } from "../types";
 
 const METADATA_KEY = "cursed-hearts-assistant";
-// Упрощаем префикс до предела, чтобы не было конфликтов с regex или парсерами OBR
-const BAR_PREFIX = "cha_bar";
+// Упрощаем префикс до минимума
+const BAR_PREFIX = "ch_bar"; 
 
 // Настройки
 const CONFIG = {
   BAR_HEIGHT: 8,          
   BAR_WIDTH_RATIO: 0.9,   
   MIN_BAR_WIDTH: 40,
-  MAX_BAR_WIDTH: 150,     
+  MAX_BAR_WIDTH: 300, // Увеличил для больших токенов
   BAR_GAP: 2,             
   BAR_OFFSET_Y: -65,      
   
@@ -26,10 +26,10 @@ const CONFIG = {
   HP_COLOR_HIGH: "#cc2222", 
   HP_COLOR_MED:  "#aa4400", 
   HP_COLOR_LOW:  "#ff0000", 
-  HP_COLOR_CRIT: "#550000", // Поправил имя
+  HP_COLOR_CRIT: "#550000", 
   
   MANA_COLOR: "#2244aa",    
-  MANA_FILL: "#2244aa",     // Добавил для совместимости
+  MANA_FILL: "#2244aa",     
   
   ANIM_INTERVAL: 100,
 } as const;
@@ -90,7 +90,7 @@ class TokenBarService {
     await this.cleanup(); 
     this.startAnim();     
     this.initialized = true;
-    console.log("[Bars] Ready (Stable)");
+    console.log("[Bars] Ready (v3.0 - Safe Mode)");
   }
 
   public setPerformanceMode(mode: BarPerformanceMode) {
@@ -121,11 +121,11 @@ class TokenBarService {
   }
 
   private calculateLayout(token: Image) {
-    const scaleX = token.scale.x;
-    const scaleY = token.scale.y;
+    const scaleX = token.scale.x || 1;
+    const scaleY = token.scale.y || 1;
     
-    const worldWidth = token.image.width * scaleX;
-    const worldHeight = token.image.height * scaleY;
+    const worldWidth = (token.image.width || 100) * scaleX;
+    const worldHeight = (token.image.height || 100) * scaleY;
 
     const barW = Math.min(CONFIG.MAX_BAR_WIDTH, Math.max(CONFIG.MIN_BAR_WIDTH, worldWidth * CONFIG.BAR_WIDTH_RATIO));
     
@@ -145,7 +145,6 @@ class TokenBarService {
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
-      // Ищем по префиксу ID, чтобы случайно не удалить чужое
       const toDelete = items.filter(i => 
         i.attachedTo === tokenId && 
         (i.id.startsWith(BAR_PREFIX) || (i.metadata && i.metadata[METADATA_KEY]))
@@ -183,7 +182,6 @@ class TokenBarService {
       }
       
       const token = items[0];
-      // Проверка на image, т.к. только к ним можно удобно привязаться по размеру
       if (!isImage(token)) {
         console.warn(`[Bars] Token ${tokenId} is not an Image`);
         return;
@@ -192,18 +190,25 @@ class TokenBarService {
       // 2. Calc
       const { barW, barX, hpY, manaY } = this.calculateLayout(token as Image);
       
+      // 🔥 ВАЖНАЯ ПРОВЕРКА: Координаты должны быть числами
+      if (!Number.isFinite(barX) || !Number.isFinite(hpY) || !Number.isFinite(barW)) {
+        console.error("[Bars] Invalid coordinates calculated:", { barX, hpY, barW });
+        return;
+      }
+
       const dead = this.isDead(hp);
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const showHp = !useManaAsHp;
 
-      const ts = Date.now();
-      // Уникальные ID для каждого элемента
+      // Генерируем короткий суффикс
+      const suffix = Math.random().toString(36).slice(2, 7);
+      
       const ids: BarIds = {
-        hpBg: `${BAR_PREFIX}_hpbg_${tokenId}_${ts}`,
-        hpFill: `${BAR_PREFIX}_hpfill_${tokenId}_${ts}`,
-        manaBg: `${BAR_PREFIX}_manabg_${tokenId}_${ts}`,
-        manaFill: `${BAR_PREFIX}_manafill_${tokenId}_${ts}`,
+        hpBg: `${BAR_PREFIX}_bg_${suffix}`,
+        hpFill: `${BAR_PREFIX}_fill_${suffix}`,
+        manaBg: `${BAR_PREFIX}_mbg_${suffix}`,
+        manaFill: `${BAR_PREFIX}_mfill_${suffix}`,
       };
 
       const shapes: Shape[] = [];
@@ -215,7 +220,7 @@ class TokenBarService {
           .width(w).height(h)
           .position({ x, y })
           .attachedTo(tokenId)
-          // .layer("DRAWING") <--- УБРАЛ ЯВНЫЙ СЛОЙ, пусть OBR сам решит
+          // ⚠️ Убрал layer("ATTACHMENT"), чтобы избежать конфликтов прав доступа
           .locked(true)
           .disableHit(true)
           .fillColor(color)
@@ -265,8 +270,10 @@ class TokenBarService {
       }
 
     } catch (e: any) {
-      // 🔥 Вот теперь мы увидим настоящую ошибку!
-      console.error("[Bars] Create FAIL:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
+      // 🔥 ЛОВИМ ВСЁ И ВЫВОДИМ В КОНСОЛЬ
+      console.error("[Bars] Create FAIL. Message:", e?.message);
+      console.error("[Bars] Stack:", e?.stack);
+      console.error("[Bars] Full Error:", e);
     }
   }
 
@@ -290,7 +297,6 @@ class TokenBarService {
       state.hp = hp; state.maxHp = maxHp; state.mana = mana; state.maxMana = maxMana;
       state.isDead = dead;
 
-      // Проверяем, живы ли бары
       const items = await OBR.scene.items.getItems([ids.hpFill, ids.manaFill, ids.hpBg, ids.manaBg]);
       if (items.length === 0) {
         await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
@@ -368,7 +374,6 @@ class TokenBarService {
           .fillColor("#000000")
           .strokeColor("#ff0000").strokeWidth(2)
           .attachedTo(tokenId)
-          // .layer("DRAWING") <--- Тоже убрал
           .locked(true).disableHit(true)
           .id(id).metadata({ [METADATA_KEY]: { type: "crack" } }).build();
 
@@ -411,6 +416,7 @@ class TokenBarService {
 
   async syncAllBars(units: Unit[]): Promise<void> {
     const validTokens = new Set<string>();
+    
     for (const u of units) {
       if (u.owlbearTokenId) {
         validTokens.add(u.owlbearTokenId);
@@ -424,6 +430,7 @@ class TokenBarService {
         );
       }
     }
+    
     for (const [tokenId] of this.bars) {
       if (!validTokens.has(tokenId)) {
         await this.removeBars(tokenId);
@@ -434,11 +441,14 @@ class TokenBarService {
   private async cleanup(): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
+      // Чистим все бары по префиксу
       const orphans = items.filter(i => 
         (i.id.startsWith(BAR_PREFIX) || i.metadata?.[METADATA_KEY]?.type === "crack") && 
         (!i.attachedTo)
       );
-      if (orphans.length) await OBR.scene.items.deleteItems(orphans.map(i => i.id));
+      if (orphans.length) {
+        await OBR.scene.items.deleteItems(orphans.map(i => i.id));
+      }
     } catch {}
   }
 
