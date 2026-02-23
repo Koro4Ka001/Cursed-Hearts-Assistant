@@ -1,14 +1,18 @@
 // src/types/index.ts
 
+import { ELEMENT_NAMES_MAP } from '../constants/elements';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // БАЗОВЫЕ ТИПЫ
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type DamageType = 
+  | 'fire' | 'water' | 'earth' | 'air' 
+  | 'light' | 'space' | 'astral' | 'corruption'
+  | 'electricity' | 'darkness' | 'void' | 'life'
+  | 'death' | 'horror' | 'transcendence'
   | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'
-  | 'fire' | 'ice' | 'lightning' | 'acid'
-  | 'poison' | 'necrotic' | 'radiant' | 'psychic'
-  | 'force' | 'thunder' | 'void' | 'pure';
+  | 'pure';
 
 export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
 export type WeaponType = 'melee' | 'ranged';
@@ -177,6 +181,7 @@ export interface SpellAction {
   critMultiplier?: number;
   addDamageBonus?: boolean;
   saveDamageAs?: string;
+  forcePureOnCrit?: boolean; // 🔥 НОВАЯ ГАЛОЧКА
   
   setKey?: string;
   setValue?: string | number | boolean;
@@ -562,67 +567,9 @@ export interface AppSettings {
 // КОНСТАНТЫ И МАППИНГИ
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const DAMAGE_TYPE_NAMES: Record<DamageType, string> = {
-  slashing: 'Режущий',
-  piercing: 'Колющий',
-  bludgeoning: 'Дробящий',
-  chopping: 'Рубящий',
-  fire: 'Огонь',
-  ice: 'Лёд',
-  lightning: 'Молния',
-  acid: 'Кислота',
-  poison: 'Яд',
-  necrotic: 'Некротика',
-  radiant: 'Свет',
-  psychic: 'Психика',
-  force: 'Сила',
-  thunder: 'Гром',
-  void: 'Пустота',
-  pure: 'Чистый'
-};
-
-export const ELEMENT_NAMES: Record<string, string> = {
-  fire: 'Огонь',
-  ice: 'Лёд',
-  lightning: 'Молния',
-  acid: 'Кислота',
-  poison: 'Яд',
-  necrotic: 'Некротика',
-  radiant: 'Свет',
-  psychic: 'Психика',
-  force: 'Сила',
-  thunder: 'Гром',
-  void: 'Пустота',
-  water: 'Вода',
-  earth: 'Земля',
-  wind: 'Ветер',
-  nature: 'Природа',
-  shadow: 'Тень',
-  holy: 'Святость',
-  arcane: 'Аркана',
-  blood: 'Кровь',
-  time: 'Время',
-  space: 'Пространство',
-  chaos: 'Хаос',
-  order: 'Порядок',
-  'огонь': 'Огонь',
-  'вода': 'Вода',
-  'земля': 'Земля',
-  'воздух': 'Воздух',
-  'свет': 'Свет',
-  'тьма': 'Тьма',
-  'электричество': 'Электричество',
-  'мороз': 'Мороз',
-  'природа': 'Природа',
-  'пустота': 'Пустота',
-  'скверна': 'Скверна',
-  'смерть': 'Смерть',
-  'жизнь': 'Жизнь',
-  'кровь': 'Кровь',
-  'астрал': 'Астрал',
-  'пространство': 'Пространство',
-  'трансцендентность': 'Трансцендентность'
-};
+// Теперь берем названия из единого источника
+export const DAMAGE_TYPE_NAMES = ELEMENT_NAMES_MAP;
+export const ELEMENT_NAMES = ELEMENT_NAMES_MAP;
 
 export const PROFICIENCY_NAMES: Record<ProficiencyType, string> = {
   swords: 'Мечи',
@@ -656,10 +603,12 @@ export const AFFINITY_BONUS_NAMES: Record<AffinityBonusType, string> = {
 };
 
 export const ALL_DAMAGE_TYPES: DamageType[] = [
+  'fire', 'water', 'earth', 'air', 
+  'light', 'space', 'astral', 'corruption',
+  'electricity', 'darkness', 'void', 'life',
+  'death', 'horror', 'transcendence',
   'slashing', 'piercing', 'bludgeoning', 'chopping',
-  'fire', 'ice', 'lightning', 'acid',
-  'poison', 'necrotic', 'radiant', 'psychic',
-  'force', 'thunder', 'void', 'pure'
+  'pure'
 ];
 
 export const PHYSICAL_DAMAGE_TYPES: DamageType[] = [
