@@ -7,10 +7,10 @@ import { ELEMENT_NAMES_MAP } from '../constants/elements';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type DamageType = 
-  | 'fire' | 'water' | 'earth' | 'air' 
-  | 'light' | 'space' | 'astral' | 'corruption'
-  | 'electricity' | 'darkness' | 'void' | 'life'
-  | 'death' | 'horror' | 'transcendence'
+  | 'огонь' | 'вода' | 'земля' | 'воздух'
+  | 'свет' | 'пространство' | 'астрал' | 'скверна'
+  | 'электричество' | 'тьма' | 'пустота' | 'жизнь'
+  | 'смерть' | 'ужас' | 'запредельность'
   | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'
   | 'pure';
 
@@ -181,7 +181,7 @@ export interface SpellAction {
   critMultiplier?: number;
   addDamageBonus?: boolean;
   saveDamageAs?: string;
-  forcePureOnCrit?: boolean; // 🔥 НОВАЯ ГАЛОЧКА
+  forcePureOnCrit?: boolean; // 🔥 ГАЛОЧКА
   
   setKey?: string;
   setValue?: string | number | boolean;
@@ -567,7 +567,6 @@ export interface AppSettings {
 // КОНСТАНТЫ И МАППИНГИ
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Теперь берем названия из единого источника
 export const DAMAGE_TYPE_NAMES = ELEMENT_NAMES_MAP;
 export const ELEMENT_NAMES = ELEMENT_NAMES_MAP;
 
@@ -603,10 +602,10 @@ export const AFFINITY_BONUS_NAMES: Record<AffinityBonusType, string> = {
 };
 
 export const ALL_DAMAGE_TYPES: DamageType[] = [
-  'fire', 'water', 'earth', 'air', 
-  'light', 'space', 'astral', 'corruption',
-  'electricity', 'darkness', 'void', 'life',
-  'death', 'horror', 'transcendence',
+  'огонь', 'вода', 'земля', 'воздух', 
+  'свет', 'пространство', 'астрал', 'скверна',
+  'электричество', 'тьма', 'пустота', 'жизнь',
+  'смерть', 'ужас', 'запредельность',
   'slashing', 'piercing', 'bludgeoning', 'chopping',
   'pure'
 ];
@@ -616,9 +615,10 @@ export const PHYSICAL_DAMAGE_TYPES: DamageType[] = [
 ];
 
 export const MAGICAL_DAMAGE_TYPES: DamageType[] = [
-  'fire', 'ice', 'lightning', 'acid',
-  'poison', 'necrotic', 'radiant', 'psychic',
-  'force', 'thunder', 'void'
+  'огонь', 'вода', 'земля', 'воздух', 
+  'свет', 'пространство', 'астрал', 'скверна',
+  'электричество', 'тьма', 'пустота', 'жизнь',
+  'смерть', 'ужас', 'запредельность'
 ];
 
 export const MULTIPLIER_OPTIONS = [
