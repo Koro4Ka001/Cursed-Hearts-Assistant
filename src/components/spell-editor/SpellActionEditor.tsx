@@ -140,7 +140,7 @@ export function SpellActionEditor({
           {renderTypeSpecificFields(action, update, allActions)}
           
           {/* Переходы (для типов с бросками) */}
-          {['roll_check', 'roll_dice', 'roll_table', 'roll_damage', 'damage_tiers'].includes(action.type) && (
+          {['roll_check', 'roll_attack', 'roll_cast', 'roll_dice', 'roll_table', 'roll_damage', 'damage_tiers'].includes(action.type) && (
             <TransitionsEditor
               transitions={action.transitions ?? []}
               onChange={(transitions) => update({ transitions })}
@@ -193,6 +193,8 @@ function renderTypeSpecificFields(
   allActions: SpellAction[]
 ) {
   switch (action.type) {
+    case 'roll_attack': // Новое
+    case 'roll_cast':   // Новое
     case 'roll_check':
       return <RollCheckFields action={action} update={update} />;
     case 'roll_dice':
@@ -353,8 +355,6 @@ function RollTableFields({ action, update }: { action: SpellAction; update: (u: 
               className="w-10 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs text-center"
             />
             <span className="text-faded">→</span>
-            
-            {/* Value - короткий ID */}
             <input
               type="text"
               value={entry.resultValue}
@@ -362,8 +362,6 @@ function RollTableFields({ action, update }: { action: SpellAction; update: (u: 
               className="w-20 bg-dark border border-edge-bone text-bone rounded px-1 py-0.5 text-xs"
               placeholder="fire"
             />
-            
-            {/* Label - название */}
             <input
               type="text"
               value={entry.resultLabel ?? ''}
