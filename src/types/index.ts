@@ -7,7 +7,7 @@ import { ELEMENT_NAMES_MAP } from '../constants/elements';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type DamageType = 
-  | 'огонь' | 'вода' | 'земля' | 'воздух'
+  | 'огонь' | 'вода' | 'земля' | 'воздух' 
   | 'свет' | 'пространство' | 'астрал' | 'скверна'
   | 'электричество' | 'тьма' | 'пустота' | 'жизнь'
   | 'смерть' | 'ужас' | 'запредельность'
@@ -91,7 +91,9 @@ export interface Weapon {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type SpellActionType = 
-  | 'roll_check'
+  | 'roll_attack' // НОВОЕ
+  | 'roll_cast'   // НОВОЕ
+  | 'roll_check'  // Deprecated
   | 'roll_dice'
   | 'roll_table'
   | 'roll_damage'
@@ -257,6 +259,10 @@ export interface CastContext {
   stopped: boolean;
   success: boolean;
   error?: string;
+  
+  // 🔥 Новые флаги для логики
+  doubleDamageDice?: boolean;
+  manaDiscount?: number;
 }
 
 export interface SpellV2 {
@@ -279,33 +285,33 @@ export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ЗАКЛИНАНИЯ (СТАРАЯ ВЕРСИЯ)
+// МЕТАДАННЫЕ ТИПОВ
 // ═══════════════════════════════════════════════════════════════════════════
 
-export interface DamageTier {
-  minRoll: number;
-  maxRoll: number;
-  formula: string;
-  label?: string;
-}
-
-/** @deprecated Используй SpellV2 */
-export interface Spell {
-  id: string;
+export const SPELL_ACTION_TYPE_META: Record<SpellActionType, {
   name: string;
-  manaCost: number;
-  costType: 'mana' | 'health';
-  elements: string[];
-  type: 'targeted' | 'aoe' | 'self' | 'utility' | 'summon';
-  projectiles?: string;
-  damageFormula?: string;
-  damageType?: DamageType;
-  description?: string;
-  equipmentBonus?: number;
-  isMultiStep?: boolean;
-  elementTable?: Record<number, DamageType>;
-  damageTiers?: DamageTier[];
-}
+  icon: string;
+  description: string;
+  color: string;
+}> = {
+  roll_attack: { name: 'Попадание', icon: '⚔️', description: 'Крит = x2 кубов урона', color: 'text-blood-bright' },
+  roll_cast: { name: 'Каст', icon: '✨', description: 'Крит = 1/2 маны', color: 'text-mana-bright' },
+  roll_check: { name: 'Проверка', icon: '🎯', description: 'd20 + бонусы', color: 'text-gold' },
+  roll_dice: { name: 'Бросок', icon: '🎲', description: 'Бросить кубики', color: 'text-ancient' },
+  roll_table: { name: 'Таблица', icon: '📋', description: 'Бросок → таблица', color: 'text-mana-bright' },
+  roll_damage: { name: 'Урон', icon: '💥', description: 'Кубики урона', color: 'text-blood-bright' },
+  damage_tiers: { name: 'Tier-урон', icon: '⚖️', description: 'Урон по броску', color: 'text-blood-bright' },
+  set_value: { name: 'Установить', icon: '📝', description: 'Сохранить значение', color: 'text-faded' },
+  modify_resource: { name: 'Ресурс', icon: '💠', description: 'Изменить ресурс', color: 'text-mana-bright' },
+  apply_damage: { name: 'Применить', icon: '🩸', description: 'Применить урон', color: 'text-blood' },
+  message: { name: 'Сообщение', icon: '💬', description: 'В лог', color: 'text-bone' },
+  branch: { name: 'Ветвление', icon: '🔀', description: 'Условие', color: 'text-purple-400' },
+  goto: { name: 'Переход', icon: '➡️', description: 'Go to', color: 'text-purple-400' },
+  stop: { name: 'Стоп', icon: '🛑', description: 'Стоп', color: 'text-blood' }
+};
+
+// ... (остальные маппинги и интерфейсы)
+// ОРУЖИЕ, КАСТОМНЫЕ ДЕЙСТВИЯ, РЕСУРСЫ и т.д. остаются как были
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🎬 КАСТОМНЫЕ ДЕЙСТВИЯ V2
