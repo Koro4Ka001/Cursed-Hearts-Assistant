@@ -29,7 +29,7 @@ export const SPELL_ACTION_TYPES: {
   description: string;
   category: 'roll' | 'effect' | 'flow' | 'utility';
 }[] = [
-  // Броски
+  // Броски (новые типы)
   { value: 'roll_attack', label: 'Попадание (Атака)', icon: '⚔️', description: 'Крит = x2 кубов урона', category: 'roll' },
   { value: 'roll_cast', label: 'Каст (Магия)', icon: '✨', description: 'Крит = 1/2 маны', category: 'roll' },
   
@@ -124,7 +124,6 @@ export const COMMON_DICE_FORMULAS: string[] = [
 // СОЗДАНИЕ ПУСТЫХ ОБЪЕКТОВ
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Создать пустой элемент таблицы */
 export function createEmptyTableEntry(min: number = 1, max: number = 1): TableResultEntry {
   return {
     id: generateId(),
@@ -136,7 +135,6 @@ export function createEmptyTableEntry(min: number = 1, max: number = 1): TableRe
   };
 }
 
-/** Создать пустой tier урона */
 export function createEmptyDamageTier(minRoll: number = 1, maxRoll: number = 5): DamageTierEntry {
   return {
     id: generateId(),
@@ -147,7 +145,6 @@ export function createEmptyDamageTier(minRoll: number = 1, maxRoll: number = 5):
   };
 }
 
-/** Создать пустой переход */
 export function createEmptyTransition(condition: TransitionCondition = 'always'): StepTransition {
   return {
     id: generateId(),
@@ -157,7 +154,6 @@ export function createEmptyTransition(condition: TransitionCondition = 'always')
   };
 }
 
-/** Создать пустой шаг */
 export function createEmptyAction(type: SpellActionType, order: number): SpellAction {
   const meta = SPELL_ACTION_TYPES.find(t => t.value === type);
   
@@ -182,7 +178,7 @@ export function createEmptyAction(type: SpellActionType, order: number): SpellAc
           { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
         ]
       };
-    case 'roll_check': // Deprecated, но оставим для совместимости при миграции
+    case 'roll_check': // Оставлено для совместимости
       return { 
         ...base, 
         diceFormula: 'd20', 
@@ -243,7 +239,6 @@ export function createEmptyAction(type: SpellActionType, order: number): SpellAc
   }
 }
 
-/** Создать пустое заклинание V2 */
 export function createEmptySpellV2(): SpellV2 {
   return {
     id: generateId(),
@@ -264,7 +259,6 @@ export function createEmptySpellV2(): SpellV2 {
 // ШАБЛОНЫ ЗАКЛИНАНИЙ
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Шаблон: Простое заклинание урона */
 export function createSimpleDamageSpell(): SpellV2 {
   return {
     id: generateId(),
@@ -279,7 +273,7 @@ export function createSimpleDamageSpell(): SpellV2 {
     actions: [
       {
         id: generateId(),
-        type: 'roll_cast', // Используем новый тип
+        type: 'roll_cast', // Новое
         label: 'Каст',
         order: 0,
         diceFormula: 'd20',
@@ -305,7 +299,6 @@ export function createSimpleDamageSpell(): SpellV2 {
   };
 }
 
-/** Шаблон: Многошаговое заклинание с элементом */
 export function createMultiStepSpell(): SpellV2 {
   return {
     id: generateId(),
@@ -367,7 +360,6 @@ export function createMultiStepSpell(): SpellV2 {
   };
 }
 
-/** Шаблон: Заклинание с ветвлением */
 export function createBranchingSpell(): SpellV2 {
   const stepCastId = generateId();
   const stepBranchId = generateId();
@@ -437,10 +429,6 @@ export function createBranchingSpell(): SpellV2 {
     modifiers: [],
   };
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// СПИСОК ШАБЛОНОВ
-// ═══════════════════════════════════════════════════════════════════════════
 
 export const SPELL_TEMPLATES: {
   id: string;
