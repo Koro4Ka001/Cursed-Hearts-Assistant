@@ -869,66 +869,88 @@ function TransitionsEditor({
   
   const condMeta = TRANSITION_CONDITIONS;
   
+  // Сортируем локально для отображения, но индексы используем от исходного массива
+  // Лучше просто мапить как есть, пользователь сам настроит приоритет
+  const sortedTransitions = transitions.map((t, i) => ({ t, i })).sort((a, b) => a.t.priority - b.t.priority);
+  
   return (
-    <div className="space-y-2 border-t border-edge-bone pt-3">
-      <div className="text-xs text-faded uppercase">Переходы (проверяются по приоритету):</div>
+    <div className="space-y-3 border-t border-edge-bone pt-3 mt-2">
+      <div className="flex justify-between items-center">
+        <div className="text-xs text-faded uppercase font-bold tracking-wider">Логика переходов:</div>
+        <div className="text-[10px] text-dim italic">0 = высший приоритет</div>
+      </div>
       
-      {transitions
-        .sort((a, b) => a.priority - b.priority)
-        .map((trans, idx) => {
-          const condInfo = condMeta.find(c => c.value === trans.condition);
-          
-          return (
-            <div key={trans.id} className="flex items-center gap-1 flex-wrap p-2 bg-dark/30 rounded">
-              <NumberStepper
-                value={trans.priority}
-                onChange={(v) => updateTransition(idx, { priority: v })}
-                min={0}
-                max={99}
-                className="w-20"
-              />
-              
-              <Select
-                value={trans.condition}
-                onChange={(e) => updateTransition(idx, { condition: e.target.value as any })}
-                options={condMeta.map(c => ({ value: c.value, label: `${c.icon} ${c.label}` }))}
-                className="w-36"
-              />
-              
-              {condInfo?.needsKey && (
-                <Input
-                  value={trans.conditionKey ?? ''}
-                  onChange={(e) => updateTransition(idx, { conditionKey: e.target.value })}
-                  placeholder="ключ"
-                  className="w-20"
+      {sortedTransitions.map(({ t: trans, i: originalIndex }) => {
+        const condInfo = condMeta.find(c => c.value === trans.condition);
+        
+        return (
+          <div key={trans.id} className="p-2 bg-black/20 rounded border border-edge-bone/50 space-y-2">
+            
+            {/* Первая строка: Приоритет + Условие */}
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col w-16 shrink-0">
+                <span className="text-[9px] text-faded uppercase">Приор.</span>
+                <input
+                  type="number"
+                  value={trans.priority}
+                  onChange={(e) => updateTransition(originalIndex, { priority: parseInt(e.target.value) || 0 })}
+                  className="bg-obsidian border border-edge-bone text-bone rounded px-2 py-1 text-xs text-center focus:border-gold outline-none"
                 />
-              )}
+              </div>
               
-              {condInfo?.needsValue && (
-                <Input
-                  value={String(trans.conditionValue ?? '')}
-                  onChange={(e) => updateTransition(idx, { conditionValue: e.target.value })}
-                  placeholder="значение"
-                  className="w-20"
+              <div className="flex-1">
+                <span className="text-[9px] text-faded uppercase block mb-0.5">Если...</span>
+                <Select
+                  value={trans.condition}
+                  onChange={(e) => updateTransition(originalIndex, { condition: e.target.value as any })}
+                  options={condMeta.map(c => ({ value: c.value, label: `${c.icon} ${c.label}` }))}
+                  className="w-full"
                 />
-              )}
-              
-              <span className="text-faded">→</span>
-              
+              </div>
+            </div>
+
+            {/* Вторая строка: Параметры условия (если нужны) */}
+            {(condInfo?.needsKey || condInfo?.needsValue) && (
+              <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded">
+                {condInfo?.needsKey && (
+                  <Input
+                    value={trans.conditionKey ?? ''}
+                    onChange={(e) => updateTransition(originalIndex, { conditionKey: e.target.value })}
+                    placeholder="ключ"
+                    className="flex-1"
+                  />
+                )}
+                {condInfo?.needsKey && condInfo?.needsValue && <span className="text-faded">=</span>}
+                {condInfo?.needsValue && (
+                  <Input
+                    value={String(trans.conditionValue ?? '')}
+                    onChange={(e) => updateTransition(originalIndex, { conditionValue: e.target.value })}
+                    placeholder="значение"
+                    className="flex-1"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Третья строка: Цель перехода */}
+            <div className="flex items-center gap-2 pt-1 border-t border-edge-bone/30">
+              <span className="text-xs text-gold font-bold">→</span>
               <Select
                 value={trans.targetStepId}
-                onChange={(e) => updateTransition(idx, { targetStepId: e.target.value })}
+                onChange={(e) => updateTransition(originalIndex, { targetStepId: e.target.value })}
                 options={targetOptions}
-                className="flex-1 min-w-[100px]"
+                className="flex-1"
               />
-              
-              <Button variant="danger" size="sm" onClick={() => deleteTransition(idx)}>×</Button>
+              <Button variant="danger" size="sm" onClick={() => deleteTransition(originalIndex)} className="h-8 w-8 p-0 flex items-center justify-center">
+                ×
+              </Button>
             </div>
-          );
-        })}
+          </div>
+        );
+      })}
       
-      <Button variant="secondary" size="sm" onClick={addTransition} className="w-full">
-        + Добавить переход
+      <Button variant="secondary" size="sm" onClick={addTransition} className="w-full border-dashed border-edge-bone text-faded hover:text-gold hover:border-gold">
+        + Добавить условие
       </Button>
     </div>
   );
