@@ -1,4 +1,6 @@
-import type { Unit, DamageType, DamageCategory } from '../types';
+import type { Unit, DamageType } from '../types';
+
+export type DamageCategory = 'physical' | 'magical' | 'pure';
 
 export interface DamageResult {
   finalDamage: number;
@@ -22,6 +24,7 @@ export function getDamageCategory(damageType: DamageType): DamageCategory {
     return 'physical';
   }
   
+  // Всё остальное (огонь, вода, тьма...) — магия
   return 'magical';
 }
 
@@ -35,26 +38,23 @@ function getArmorValue(unit: Unit, category: DamageCategory, damageType: DamageT
   
   if (category === 'physical') {
     switch (damageType) {
-      case 'slashing':
-        return unit.armor.slashing;
-      case 'piercing':
-        return unit.armor.piercing;
-      case 'bludgeoning':
-        return unit.armor.bludgeoning;
-      case 'chopping':
-        return unit.armor.chopping;
-      default:
-        return 0;
+      case 'slashing': return unit.armor.slashing;
+      case 'piercing': return unit.armor.piercing;
+      case 'bludgeoning': return unit.armor.bludgeoning;
+      case 'chopping': return unit.armor.chopping;
+      default: return 0;
     }
   }
   
-  // Магический урон
-  // Сначала проверяем override для конкретного типа
+  // Магический урон (русские ключи)
+  // Сначала проверяем override для конкретного типа (например, резист к 'огонь')
   const damageTypeLower = damageType.toLowerCase();
-  const override = unit.armor.magicOverrides[damageTypeLower];
   
-  if (override !== undefined) {
-    return override;
+  // Ищем модификатор с резистом к этому элементу
+  const modifier = unit.elementModifiers.find(m => m.element === damageTypeLower && m.isActive);
+  
+  if (modifier && modifier.resistance > 0) {
+    return modifier.resistance;
   }
   
   // Иначе используем базовую магическую защиту
@@ -63,12 +63,6 @@ function getArmorValue(unit: Unit, category: DamageCategory, damageType: DamageT
 
 /**
  * Рассчитывает итоговый урон с учётом брони и множителей
- * 
- * Формула:
- * 1. multiplier = damageMultipliers[subtype] ?? 1.0
- * 2. armor = соответствующая броня
- * 3. undeadBonus = если атакующий нежить → armor.undead, иначе 0
- * 4. finalDamage = max(0, round(rawDamage × multiplier - armor - undeadBonus))
  */
 export function calculateDamage(
   rawDamage: number,
@@ -91,7 +85,20 @@ export function calculateDamage(
   
   // Множитель урона (уязвимости/сопротивления)
   const damageTypeLower = damageType.toLowerCase();
-  const multiplier = unit.damageMultipliers[damageTypeLower] ?? 1.0;
+  
+  // Ищем множитель в модификаторах элементов
+  let multiplier = 1.0;
+  
+  // Проверяем физические множители (legacy или если добавлены)
+  if (unit.physicalMultipliers && unit.physicalMultipliers[damageTypeLower]) {
+    multiplier = unit.physicalMultipliers[damageTypeLower];
+  } else {
+    // Проверяем магические модификаторы
+    const modifier = unit.elementModifiers.find(m => m.element === damageTypeLower && m.isActive);
+    if (modifier) {
+      multiplier = modifier.damageMultiplier;
+    }
+  }
   
   // Броня
   const armorApplied = getArmorValue(unit, category, damageType);
@@ -150,15 +157,7 @@ export function getStatDamageBonus(
 }
 
 /**
- * Рассчитывает бонус к магическому урону от интеллекта
- */
-export function getIntelligenceBonus(unit: Unit): number {
-  return unit.stats.intelligence * 3;
-}
-
-/**
  * Применяет урон к юниту (уменьшает HP)
- * Возвращает новое значение HP (может быть отрицательным)
  */
 export function applyDamage(currentHP: number, damage: number): number {
   return currentHP - damage;
@@ -166,7 +165,6 @@ export function applyDamage(currentHP: number, damage: number): number {
 
 /**
  * Применяет исцеление к юниту
- * HP не может превышать maxHP
  */
 export function applyHealing(currentHP: number, maxHP: number, healing: number): number {
   return Math.min(maxHP, currentHP + healing);
