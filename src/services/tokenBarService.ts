@@ -1,6 +1,5 @@
 import OBR, { 
   buildShape, 
-  Item, 
   isImage, 
   isShape,
   Shape,
@@ -9,28 +8,29 @@ import OBR, {
 import type { Unit } from "../types";
 
 const METADATA_KEY = "cursed-hearts-assistant";
-const BAR_PREFIX = `${METADATA_KEY}/bar`;
+// Упростил префикс, убрал слэш на всякий случай
+const BAR_PREFIX = "cha_bar"; 
 
 // Настройки
 const CONFIG = {
-  BAR_HEIGHT: 8,          // Чуть толще, чтобы было видно на больших зумах
-  BAR_WIDTH_RATIO: 0.8,   // Бар занимает 80% ширины токена
-  BAR_OFFSET: -65,        // Смещение вверх от центра (подгони под свои токены)
+  BAR_HEIGHT: 8,          
+  BAR_WIDTH_RATIO: 0.8,   
+  BAR_OFFSET: -65,        
+  MIN_BAR_WIDTH: 40,
+  MAX_BAR_WIDTH: 300,     // Увеличил лимит для больших токенов
   
-  // Цвета
   HP_BG: "#1a0808",
   HP_STROKE: "#000000",
-  
-  HP_HIGH: "#00ff00",     // Ярко-зеленый
-  HP_MED: "#ffaa00",      // Оранжевый
-  HP_LOW: "#ff0000",      // Красный
-  HP_CRIT: "#550000",     // Темно-бордовый
+  HP_HIGH: "#00ff00",     
+  HP_MED: "#ffaa00",      
+  HP_LOW: "#ff0000",      
+  HP_CRIT: "#550000",     
   
   MANA_BG: "#080818",
   MANA_STROKE: "#000000",
   MANA_FILL: "#2244aa",
   
-  ANIM_INTERVAL: 100,     // Частота обновления анимации (только для quality режима)
+  ANIM_INTERVAL: 100,     
 } as const;
 
 interface BarIds {
@@ -130,11 +130,11 @@ class TokenBarService {
     const tokenX = token.position.x;
     const tokenY = token.position.y;
     
-    // Защита от undefined
-    const scaleX = token.scale?.x ?? 1;
-    const scaleY = token.scale?.y ?? 1;
-    const width = token.image?.width ?? 100;
-    const height = token.image?.height ?? 100;
+    // Защита от undefined и 0
+    const scaleX = token.scale?.x || 1;
+    const scaleY = token.scale?.y || 1;
+    const width = token.image?.width || 100;
+    const height = token.image?.height || 100;
 
     const tokenW = width * scaleX;
     const tokenH = height * scaleY;
@@ -142,11 +142,6 @@ class TokenBarService {
     const barX = tokenX - barW / 2;
     
     // Позиционирование:
-    // OBR origin = center (обычно).
-    // Y центра = tokenY.
-    // Низ токена = tokenY + tokenH/2.
-    // Смещение BAR_OFFSET от низа (или центра, зависит от оффсета).
-    // При offset -65 бар поднимется вверх.
     const hpBarY = (tokenY + tokenH / 2) + CONFIG.BAR_OFFSET;
     
     const manaBarY = showHp 
@@ -163,6 +158,7 @@ class TokenBarService {
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
+      // Ищем по ID, который начинается с префикса И привязан к токену
       const toDelete = items.filter(i => 
         i.attachedTo === tokenId && 
         (i.id.startsWith(BAR_PREFIX) || i.metadata?.[METADATA_KEY])
@@ -195,7 +191,6 @@ class TokenBarService {
         return;
       }
 
-      // 1. Очистка старого
       await this.removeExistingBarsFromScene(tokenId);
       this.bars.delete(tokenId);
       this.states.delete(tokenId);
@@ -212,12 +207,12 @@ class TokenBarService {
         return;
       }
 
-      // Расчет
       const imgToken = token as Image;
-      const scaleX = imgToken.scale?.x ?? 1;
-      const width = imgToken.image?.width ?? 100;
-      const tokenRealWidth = width * scaleX;
       
+      // Расчет ширины
+      const scaleX = imgToken.scale?.x || 1;
+      const width = imgToken.image?.width || 100;
+      const tokenRealWidth = width * scaleX;
       const barW = Math.max(CONFIG.MIN_BAR_WIDTH, tokenRealWidth * CONFIG.BAR_WIDTH_RATIO);
 
       const showHp = !useManaAsHp;
@@ -230,23 +225,25 @@ class TokenBarService {
 
       const ts = Date.now();
       const ids: BarIds = {
-        hpBg: `${BAR_PREFIX}/hpbg/${tokenId}/${ts}`,
-        hpFill: `${BAR_PREFIX}/hpfill/${tokenId}/${ts}`,
-        manaBg: `${BAR_PREFIX}/manabg/${tokenId}/${ts}`,
-        manaFill: `${BAR_PREFIX}/manafill/${tokenId}/${ts}`,
+        hpBg: `${BAR_PREFIX}_hpbg_${tokenId}_${ts}`,
+        hpFill: `${BAR_PREFIX}_hpfill_${tokenId}_${ts}`,
+        manaBg: `${BAR_PREFIX}_manabg_${tokenId}_${ts}`,
+        manaFill: `${BAR_PREFIX}_manafill_${tokenId}_${ts}`,
       };
 
       const shapes: Shape[] = [];
 
-      // Helper для создания шейпа
+      // Функция-хелпер
       const makeBar = (id: string, w: number, h: number, x: number, y: number, color: string, z: number, visible: boolean, stroke?: string) => {
+        // !!! ВАЖНО: Используем DRAWING для теста, чтобы исключить проблемы с ATTACHMENT
+        // Если заработает - вернем ATTACHMENT
         const builder = buildShape()
           .shapeType("RECTANGLE")
           .width(w)
           .height(h)
           .position({ x, y })
           .attachedTo(tokenId)
-          .layer("ATTACHMENT") // Если здесь падает, попробуй DRAWING
+          .layer("ATTACHMENT") 
           .locked(true)
           .disableHit(true)
           .visible(visible)
@@ -302,7 +299,8 @@ class TokenBarService {
       }
 
     } catch (e: any) {
-      console.error("[Bars] Create failed with details:", JSON.stringify(e, Object.getOwnPropertyNames(e)));
+      console.error("[Bars] Create failed. Raw error:", e);
+      if (e.message) console.error("Message:", e.message);
     }
   }
 
@@ -327,7 +325,6 @@ class TokenBarService {
       state.isDead = dead;
 
       const items = await OBR.scene.items.getItems([state.ids?.hpFill ?? '', state.ids?.manaFill ?? '', state.ids?.hpBg ?? '']);
-      // Если баров на сцене нет — создаем заново
       if (items.length === 0) {
         await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
         return;
@@ -386,8 +383,8 @@ class TokenBarService {
       
       const size = Math.min(state.barW * 0.5, 30);
       const ts = Date.now();
-      const c1Id = `${BAR_PREFIX}/c1/${tokenId}/${ts}`;
-      const c2Id = `${BAR_PREFIX}/c2/${tokenId}/${ts}`;
+      const c1Id = `${BAR_PREFIX}_c1_${tokenId}_${ts}`;
+      const c2Id = `${BAR_PREFIX}_c2_${tokenId}_${ts}`;
 
       const crossParts = [
         buildShape().shapeType("RECTANGLE").width(size).height(4)
