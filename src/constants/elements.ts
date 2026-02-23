@@ -44,9 +44,10 @@ export const GAME_ELEMENTS: MagicElementInfo[] = [
 ];
 
 // Хелперы для быстрого доступа
+// MAGIC_ELEMENTS теперь возвращает массив ID всех магических элементов (без физики и чистого)
 export const MAGIC_ELEMENTS = GAME_ELEMENTS
   .filter(e => !['slashing', 'piercing', 'bludgeoning', 'chopping', 'pure'].includes(e.id))
-  .map(e => e.id); // Возвращает массив ID ['fire', 'water'...]
+  .map(e => e.id); 
 
 export const ELEMENT_ICONS: Record<string, string> = 
   Object.fromEntries(GAME_ELEMENTS.map(e => [e.id, e.icon]));
@@ -57,7 +58,7 @@ export const ELEMENT_COLORS: Record<string, string> =
 export const ELEMENT_NAMES_MAP: Record<string, string> = 
   Object.fromEntries(GAME_ELEMENTS.map(e => [e.id, e.name]));
 
-// Типы заклинаний (оставляем как было)
+// Типы заклинаний
 export const SPELL_TYPES = {
   targeted: 'Направленное',
   aoe: 'По площади',
@@ -67,3 +68,37 @@ export const SPELL_TYPES = {
 } as const;
 
 export type SpellType = keyof typeof SPELL_TYPES;
+
+// === МНОГОШАГОВЫЕ ЗАКЛИНАНИЯ ===
+
+import type { DamageType } from '../types';
+
+// Дефолтная таблица d12 → элемент (для создания новых заклинаний)
+export const DEFAULT_ELEMENT_TABLE: Record<number, DamageType> = {
+  1: 'fire',
+  2: 'water',
+  3: 'earth',
+  4: 'air',
+  5: 'electricity',
+  6: 'light', // Было frost, теперь light (Свет)
+  7: 'light',
+  8: 'darkness',
+  9: 'life', // Было nature, теперь life
+  10: 'corruption',
+  11: 'void',
+  12: 'astral'
+};
+
+// Дефолтные tier'ы урона
+export const DEFAULT_DAMAGE_TIERS: Array<{
+  minRoll: number;
+  maxRoll: number;
+  formula: string;
+  label?: string;
+}> = [
+  { minRoll: 1, maxRoll: 3, formula: 'd6', label: 'Слабый' },
+  { minRoll: 4, maxRoll: 7, formula: '2d12', label: 'Средний' },
+  { minRoll: 8, maxRoll: 12, formula: '4d12+2d10', label: 'Сильный' },
+  { minRoll: 13, maxRoll: 16, formula: '4d20+2d12', label: 'Мощный' },
+  { minRoll: 17, maxRoll: 20, formula: '8d20', label: 'Разрушительный' }
+];
