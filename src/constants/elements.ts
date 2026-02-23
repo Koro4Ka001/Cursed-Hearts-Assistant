@@ -5,35 +5,34 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface MagicElementInfo {
-  id: string;        // Английский ID (для кода)
-  name: string;      // Русское название (для UI)
+  id: string;        // ID (русский для магии, англ для физики)
+  name: string;      // Отображаемое название
   icon: string;      // Иконка
   color: string;     // Цвет (для эффектов)
   isSecret?: boolean;// Тайная магия?
 }
 
-// 12 Базовых + Тайные + Физика
 export const GAME_ELEMENTS: MagicElementInfo[] = [
   // --- БАЗОВЫЕ (12) ---
-  { id: 'fire', name: 'Огонь', icon: '🔥', color: '#ff4500' },
-  { id: 'water', name: 'Вода', icon: '💧', color: '#1e90ff' },
-  { id: 'earth', name: 'Земля', icon: '🪨', color: '#8b4513' },
-  { id: 'air', name: 'Воздух', icon: '💨', color: '#87ceeb' },
-  { id: 'light', name: 'Свет', icon: '✨', color: '#ffd700' },
-  { id: 'space', name: 'Пространство', icon: '🌀', color: '#9370db' },
-  { id: 'astral', name: 'Астрал', icon: '🌟', color: '#daa520' },
-  { id: 'corruption', name: 'Скверна', icon: '☠️', color: '#9932cc' },
-  { id: 'electricity', name: 'Электричество', icon: '⚡', color: '#00ffff' },
-  { id: 'darkness', name: 'Тьма', icon: '🌑', color: '#4b0082' },
-  { id: 'void', name: 'Пустота', icon: '🕳️', color: '#2f2f2f' },
-  { id: 'life', name: 'Жизнь', icon: '💚', color: '#32cd32' },
+  { id: 'огонь', name: 'Огонь', icon: '🔥', color: '#ff4500' },
+  { id: 'вода', name: 'Вода', icon: '💧', color: '#1e90ff' },
+  { id: 'земля', name: 'Земля', icon: '🪨', color: '#8b4513' },
+  { id: 'воздух', name: 'Воздух', icon: '💨', color: '#87ceeb' },
+  { id: 'свет', name: 'Свет', icon: '✨', color: '#ffd700' },
+  { id: 'пространство', name: 'Пространство', icon: '🌀', color: '#9370db' },
+  { id: 'астрал', name: 'Астрал', icon: '🌟', color: '#daa520' },
+  { id: 'скверна', name: 'Скверна', icon: '☠️', color: '#9932cc' },
+  { id: 'электричество', name: 'Электричество', icon: '⚡', color: '#00ffff' },
+  { id: 'тьма', name: 'Тьма', icon: '🌑', color: '#4b0082' },
+  { id: 'пустота', name: 'Пустота', icon: '🕳️', color: '#2f2f2f' },
+  { id: 'жизнь', name: 'Жизнь', icon: '💚', color: '#32cd32' },
 
   // --- ТАЙНЫЕ ---
-  { id: 'death', name: 'Смерть', icon: '💀', color: '#2f4f4f', isSecret: true },
-  { id: 'horror', name: 'Ужас', icon: '😱', color: '#4a0a0a', isSecret: true },
-  { id: 'transcendence', name: 'Запредельность', icon: '🔮', color: '#ff69b4', isSecret: true },
+  { id: 'смерть', name: 'Смерть', icon: '💀', color: '#2f4f4f', isSecret: true },
+  { id: 'ужас', name: 'Ужас', icon: '😱', color: '#4a0a0a', isSecret: true },
+  { id: 'запредельность', name: 'Запредельность', icon: '🔮', color: '#ff69b4', isSecret: true },
 
-  // --- ФИЗИЧЕСКИЕ (для оружия) ---
+  // --- ФИЗИЧЕСКИЕ (оставляем англ ID для совместимости с броней) ---
   { id: 'slashing', name: 'Режущий', icon: '🔪', color: '#aaaaaa' },
   { id: 'piercing', name: 'Колющий', icon: '🗡️', color: '#aaaaaa' },
   { id: 'bludgeoning', name: 'Дробящий', icon: '🔨', color: '#aaaaaa' },
@@ -43,8 +42,7 @@ export const GAME_ELEMENTS: MagicElementInfo[] = [
   { id: 'pure', name: 'Чистый', icon: '⚔️', color: '#ffffff' },
 ];
 
-// Хелперы для быстрого доступа
-// MAGIC_ELEMENTS теперь возвращает массив ID всех магических элементов (без физики и чистого)
+// Хелперы
 export const MAGIC_ELEMENTS = GAME_ELEMENTS
   .filter(e => !['slashing', 'piercing', 'bludgeoning', 'chopping', 'pure'].includes(e.id))
   .map(e => e.id); 
@@ -73,23 +71,22 @@ export type SpellType = keyof typeof SPELL_TYPES;
 
 import type { DamageType } from '../types';
 
-// Дефолтная таблица d12 → элемент (для создания новых заклинаний)
+// Дефолтная таблица (на русском!)
 export const DEFAULT_ELEMENT_TABLE: Record<number, DamageType> = {
-  1: 'fire',
-  2: 'water',
-  3: 'earth',
-  4: 'air',
-  5: 'electricity',
-  6: 'light', // Было frost, теперь light (Свет)
-  7: 'light',
-  8: 'darkness',
-  9: 'life', // Было nature, теперь life
-  10: 'corruption',
-  11: 'void',
-  12: 'astral'
+  1: 'огонь',
+  2: 'вода',
+  3: 'земля',
+  4: 'воздух',
+  5: 'электричество',
+  6: 'свет',
+  7: 'тьма',
+  8: 'жизнь',
+  9: 'скверна',
+  10: 'пустота',
+  11: 'пространство',
+  12: 'астрал'
 };
 
-// Дефолтные tier'ы урона
 export const DEFAULT_DAMAGE_TIERS: Array<{
   minRoll: number;
   maxRoll: number;
