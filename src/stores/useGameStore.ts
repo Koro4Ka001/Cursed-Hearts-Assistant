@@ -212,6 +212,20 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🔥 FIX: Гарантирует что docsService.url всегда актуален
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ensureDocsUrl(settings: AppSettings): boolean {
+  if (!settings.googleDocsUrl) return false;
+  
+  if (docsService.getUrl() !== settings.googleDocsUrl) {
+    docsService.setUrl(settings.googleDocsUrl);
+    console.log('[Store] 📄 docsService URL synced from settings');
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // DEFAULT UNIT
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -254,6 +268,12 @@ function createDefaultUnit(): Unit {
     useManaAsHp: false
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔥 FIX: Авто-синхронизация
+// ═══════════════════════════════════════════════════════════════════════════
+
+let autoSyncIntervalId: ReturnType<typeof setInterval> | null = null;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STORE
@@ -357,13 +377,27 @@ export const useGameStore = create<GameState>()(
         const updatedUnit = { ...unit, health: { ...unit.health, current: newHP } };
         await updateTokenBars(updatedUnit, settings);
         
-        // Google Docs sync
+        // 🔥 FIX: Google Docs sync с проверкой URL и результата
         if (connections.docs && settings.syncHP && unit.googleDocsHeader) {
+          if (!ensureDocsUrl(settings)) {
+            console.warn('[Store] 📄 HP sync skipped: no Docs URL configured');
+            return;
+          }
+          
           try {
-            await docsService.setHealth(unit.googleDocsHeader, newHP, unit.health.max);
-            console.log(`[Store] 📄 Synced HP to Docs: ${unit.shortName} = ${newHP}`);
+            const result = await docsService.setHealth(unit.googleDocsHeader, newHP, unit.health.max);
+            if (result.success) {
+              console.log(`[Store] 📄 Synced HP to Docs: ${unit.shortName} = ${newHP}`);
+            } else {
+              console.warn(`[Store] 📄 HP sync failed: ${result.error}`);
+              // Помечаем что соединение потеряно если ошибка сетевая
+              if (result.error && !result.error.includes('не найден')) {
+                set(state => ({ connections: { ...state.connections, docs: false } }));
+              }
+            }
           } catch (e) {
-            console.warn('[Store] Docs sync HP failed:', e);
+            console.warn('[Store] Docs sync HP exception:', e);
+            set(state => ({ connections: { ...state.connections, docs: false } }));
           }
         }
       },
@@ -401,13 +435,26 @@ export const useGameStore = create<GameState>()(
         const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
         await updateTokenBars(updatedUnit, settings);
         
-        // Google Docs sync
+        // 🔥 FIX: Google Docs sync с проверкой URL и результата
         if (connections.docs && settings.syncMana && unit.googleDocsHeader) {
+          if (!ensureDocsUrl(settings)) {
+            console.warn('[Store] 📄 Mana sync skipped: no Docs URL configured');
+            return;
+          }
+          
           try {
-            await docsService.setMana(unit.googleDocsHeader, newMana, unit.mana.max);
-            console.log(`[Store] 📄 Synced Mana to Docs: ${unit.shortName} = ${newMana}`);
+            const result = await docsService.setMana(unit.googleDocsHeader, newMana, unit.mana.max);
+            if (result.success) {
+              console.log(`[Store] 📄 Synced Mana to Docs: ${unit.shortName} = ${newMana}`);
+            } else {
+              console.warn(`[Store] 📄 Mana sync failed: ${result.error}`);
+              if (result.error && !result.error.includes('не найден')) {
+                set(state => ({ connections: { ...state.connections, docs: false } }));
+              }
+            }
           } catch (e) {
-            console.warn('[Store] Docs sync Mana failed:', e);
+            console.warn('[Store] Docs sync Mana exception:', e);
+            set(state => ({ connections: { ...state.connections, docs: false } }));
           }
         }
       },
@@ -482,11 +529,20 @@ export const useGameStore = create<GameState>()(
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
-        // Google Docs sync
+        // 🔥 FIX: Google Docs sync с проверкой
         if (connections.docs && settings.syncResources && unit.googleDocsHeader && resource.syncWithDocs) {
+          if (!ensureDocsUrl(settings)) {
+            console.warn('[Store] 📄 Resource sync skipped: no Docs URL');
+            return;
+          }
+          
           try {
-            await docsService.setResource(unit.googleDocsHeader, resource.name, newValue, resource.max);
-            console.log(`[Store] 📄 Synced Resource to Docs: ${resource.name} = ${newValue}`);
+            const result = await docsService.setResource(unit.googleDocsHeader, resource.name, newValue, resource.max);
+            if (result.success) {
+              console.log(`[Store] 📄 Synced Resource to Docs: ${resource.name} = ${newValue}`);
+            } else {
+              console.warn(`[Store] 📄 Resource sync failed: ${result.error}`);
+            }
           } catch (e) {
             console.warn('[Store] Docs sync Resource failed:', e);
           }
@@ -523,7 +579,9 @@ export const useGameStore = create<GameState>()(
           return;
         }
         
-        // Откатываем БЕЗ добавления в undo историю
+        // 🔥 FIX: Убеждаемся что URL есть перед undo-синхронизацией
+        ensureDocsUrl(settings);
+        
         switch (lastEntry.type) {
           case 'hp':
             set(state => ({
@@ -538,7 +596,6 @@ export const useGameStore = create<GameState>()(
             const updatedUnitHP = { ...unit, health: { ...unit.health, current: lastEntry.previousValue } };
             await updateTokenBars(updatedUnitHP, settings);
             
-            // Синхронизируем откат в Docs
             if (get().connections.docs && settings.syncHP && unit.googleDocsHeader) {
               try {
                 await docsService.setHealth(unit.googleDocsHeader, lastEntry.previousValue, unit.health.max);
@@ -609,17 +666,23 @@ export const useGameStore = create<GameState>()(
         
         if (!connections.docs || !unit.googleDocsHeader) return;
         
+        // 🔥 FIX: Убеждаемся что URL есть
+        if (!ensureDocsUrl(settings)) return;
+        
         try {
           if (settings.syncHP) {
-            await docsService.setHealth(unit.googleDocsHeader, unit.health.current, unit.health.max);
+            const r = await docsService.setHealth(unit.googleDocsHeader, unit.health.current, unit.health.max);
+            if (!r.success) console.warn(`[Store] HP sync failed for ${unit.shortName}: ${r.error}`);
           }
           if (settings.syncMana) {
-            await docsService.setMana(unit.googleDocsHeader, unit.mana.current, unit.mana.max);
+            const r = await docsService.setMana(unit.googleDocsHeader, unit.mana.current, unit.mana.max);
+            if (!r.success) console.warn(`[Store] Mana sync failed for ${unit.shortName}: ${r.error}`);
           }
           if (settings.syncResources) {
             for (const resource of unit.resources) {
               if (resource.syncWithDocs) {
-                await docsService.setResource(unit.googleDocsHeader, resource.name, resource.current, resource.max);
+                const r = await docsService.setResource(unit.googleDocsHeader, resource.name, resource.current, resource.max);
+                if (!r.success) console.warn(`[Store] Resource sync failed for ${resource.name}: ${r.error}`);
               }
             }
           }
@@ -635,8 +698,19 @@ export const useGameStore = create<GameState>()(
           settings: { ...state.settings, ...updates }
         }));
         
+        // 🔥 FIX: Синхронизируем URL docsService при изменении настроек
+        if (updates.googleDocsUrl !== undefined) {
+          if (updates.googleDocsUrl) {
+            docsService.setUrl(updates.googleDocsUrl);
+            console.log('[Store] 📄 docsService URL updated from settings');
+          } else {
+            docsService.setUrl('');
+            set(state => ({ connections: { ...state.connections, docs: false } }));
+          }
+        }
+        
         if ('showTokenBars' in updates) {
-          const { units, settings } = get();
+          const { units } = get();
           if (updates.showTokenBars) {
             tokenBarService.syncAllBars(units);
           } else {
@@ -688,6 +762,9 @@ export const useGameStore = create<GameState>()(
         
         // Логируем в Google Docs
         if (connections.docs && settings.writeLogs) {
+          // 🔥 FIX: Убеждаемся что URL есть
+          ensureDocsUrl(settings);
+          
           const units = get().units;
           const unit = units.find(u => u.shortName === unitName || u.name === unitName);
           if (unit?.googleDocsHeader) {
@@ -716,21 +793,39 @@ export const useGameStore = create<GameState>()(
         }));
       },
       
+      // 🔥 FIX: Реальный авто-синк с интервалом
       startAutoSync: () => {
         const { settings } = get();
         if (!settings.googleDocsUrl) return;
         
-        console.log('[Store] Starting auto-sync with interval:', settings.autoSyncInterval, 'min');
+        // Устанавливаем URL в docsService
+        ensureDocsUrl(settings);
+        
+        const intervalMinutes = settings.autoSyncInterval ?? 5;
+        console.log('[Store] 📄 Starting auto-sync with interval:', intervalMinutes, 'min');
+        
+        // Очищаем предыдущий интервал
+        if (autoSyncIntervalId !== null) {
+          clearInterval(autoSyncIntervalId);
+          autoSyncIntervalId = null;
+        }
         
         // Синхронизируем сразу
-        const { units, connections } = get();
-        if (connections.docs) {
+        const doSync = () => {
+          const { units, connections } = get();
+          if (!connections.docs) return;
+          
           for (const unit of units) {
             if (unit.googleDocsHeader) {
               get().syncUnitToDocs(unit);
             }
           }
-        }
+        };
+        
+        doSync();
+        
+        // Ставим интервал
+        autoSyncIntervalId = setInterval(doSync, intervalMinutes * 60 * 1000);
       }
     }),
     {
@@ -758,10 +853,38 @@ export const useGameStore = create<GameState>()(
         return state;
       },
       
+      // 🔥 FIX: Инициализация docsService при загрузке приложения
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.units = state.units.map(migrateUnit);
           state.undoHistory = state.undoHistory ?? [];
+          
+          // ═══════════════════════════════════════════════════════════════
+          // 🔥 ГЛАВНЫЙ FIX: Восстанавливаем URL docsService из настроек
+          // ═══════════════════════════════════════════════════════════════
+          if (state.settings?.googleDocsUrl) {
+            docsService.setUrl(state.settings.googleDocsUrl);
+            console.log('[Store] 📄 Restored Docs URL from persisted settings:', 
+              state.settings.googleDocsUrl.substring(0, 40) + '...');
+            
+            // Если соединение было активно — проверяем его
+            if (state.connections?.docs) {
+              console.log('[Store] 📄 Previous docs connection was active, verifying...');
+              docsService.testConnection().then(result => {
+                if (result.success) {
+                  console.log('[Store] 📄 Docs connection verified ✅');
+                  // Запускаем авто-синк
+                  state.startAutoSync();
+                } else {
+                  console.warn('[Store] 📄 Docs connection lost:', result.error);
+                  state.setConnection('docs', false);
+                }
+              }).catch(() => {
+                console.warn('[Store] 📄 Docs connection check failed');
+                state.setConnection('docs', false);
+              });
+            }
+          }
         }
       }
     }
