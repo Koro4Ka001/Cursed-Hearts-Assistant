@@ -15,7 +15,7 @@ const CONFIG = {
   BAR_HEIGHT_BASE: 8,          
   BAR_WIDTH_RATIO: 0.77,
   BAR_GAP_BASE: 2,             
-  BAR_OFFSET_Y_BASE: 5,
+  BAR_OFFSET_Y_BASE: 3,
   
   // 🔥 Лимиты масштабирования
   MIN_BAR_WIDTH: 30,
