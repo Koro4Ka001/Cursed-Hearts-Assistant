@@ -1,6 +1,7 @@
-import type { Unit, DamageType } from '../types';
+// src/utils/damage.ts
+import type { Unit, DamageType, DamageCategory } from '../types';
 
-export type DamageCategory = 'physical' | 'magical' | 'pure';
+export type { DamageCategory };
 
 export interface DamageResult {
   finalDamage: number;
@@ -46,19 +47,45 @@ function getArmorValue(unit: Unit, category: DamageCategory, damageType: DamageT
     }
   }
   
-  // Магический урон (русские ключи)
-  // Сначала проверяем override для конкретного типа (например, резист к 'огонь')
-  const damageTypeLower = damageType.toLowerCase();
+  // Магический урон (русские ключи: 'огонь', 'вода', 'тьма'...)
+  const elementKey = damageType.toLowerCase();
   
   // Ищем модификатор с резистом к этому элементу
-  const modifier = unit.elementModifiers.find(m => m.element === damageTypeLower && m.isActive);
+  const modifier = unit.elementModifiers?.find(m => m.element === elementKey && m.isActive);
   
   if (modifier && modifier.resistance > 0) {
-    return modifier.resistance;
+    // 🔥 FIX: Суммируем базовую магическую защиту + специфический резист
+    return (unit.armor.magicBase ?? 0) + modifier.resistance;
   }
   
-  // Иначе используем базовую магическую защиту
-  return unit.armor.magicBase;
+  // Иначе используем только базовую магическую защиту
+  return unit.armor.magicBase ?? 0;
+}
+
+/**
+ * Находит множитель урона для данного типа
+ */
+function getDamageMultiplier(unit: Unit, category: DamageCategory, damageType: DamageType): number {
+  const elementKey = damageType.toLowerCase();
+  
+  if (category === 'physical') {
+    // 🔥 FIX: Используем `in` вместо truthy-check (чтобы ×0 иммунитет работал!)
+    if (unit.physicalMultipliers && elementKey in unit.physicalMultipliers) {
+      return unit.physicalMultipliers[elementKey]!;
+    }
+    return 1;
+  }
+  
+  if (category === 'magical') {
+    const modifier = unit.elementModifiers?.find(m => m.element === elementKey && m.isActive);
+    if (modifier) {
+      return modifier.damageMultiplier;
+    }
+    return 1;
+  }
+  
+  // pure — всегда ×1
+  return 1;
 }
 
 /**
@@ -84,57 +111,54 @@ export function calculateDamage(
   const category = getDamageCategory(damageType);
   
   // Множитель урона (уязвимости/сопротивления)
-  const damageTypeLower = damageType.toLowerCase();
+  const multiplier = getDamageMultiplier(unit, category, damageType);
   
-  // Ищем множитель в модификаторах элементов
-  let multiplier = 1.0;
-  
-  // Проверяем физические множители (legacy или если добавлены)
-  if (unit.physicalMultipliers && unit.physicalMultipliers[damageTypeLower]) {
-    multiplier = unit.physicalMultipliers[damageTypeLower];
-  } else {
-    // Проверяем магические модификаторы
-    const modifier = unit.elementModifiers.find(m => m.element === damageTypeLower && m.isActive);
-    if (modifier) {
-      multiplier = modifier.damageMultiplier;
-    }
+  // Иммунитет (×0) — сразу выходим
+  if (multiplier === 0) {
+    return {
+      finalDamage: 0,
+      armorApplied: 0,
+      multiplier: 0,
+      undeadBonus: 0,
+      breakdown: `${rawDamage} × 0 = 0 (ИММУНИТЕТ)`
+    };
   }
   
   // Броня
   const armorApplied = getArmorValue(unit, category, damageType);
   
   // Бонус от нежити
-  const undeadBonus = isUndeadAttacker ? unit.armor.undead : 0;
+  const undeadBonus = isUndeadAttacker ? (unit.armor.undead ?? 0) : 0;
   
   // Итоговый урон
   const damageAfterMultiplier = rawDamage * multiplier;
   const finalDamage = Math.max(0, Math.round(damageAfterMultiplier - armorApplied - undeadBonus));
   
   // Формируем строку разбивки
-  let breakdown = '';
+  const parts: string[] = [];
   
   if (multiplier !== 1) {
-    breakdown += `(${rawDamage} × ${multiplier})`;
+    parts.push(`${rawDamage} × ${multiplier}`);
   } else {
-    breakdown += `${rawDamage}`;
+    parts.push(`${rawDamage}`);
   }
   
   if (armorApplied > 0) {
-    breakdown += ` − ${armorApplied} броня`;
+    parts.push(`− ${armorApplied} броня`);
   }
   
   if (undeadBonus > 0) {
-    breakdown += ` − ${undeadBonus} (нежить)`;
+    parts.push(`− ${undeadBonus} (нежить)`);
   }
   
-  breakdown += ` = ${finalDamage}`;
+  parts.push(`= ${finalDamage}`);
   
   return {
     finalDamage,
     armorApplied,
     multiplier,
     undeadBonus,
-    breakdown
+    breakdown: parts.join(' ')
   };
 }
 
@@ -147,9 +171,9 @@ export function getStatDamageBonus(
 ): number {
   switch (statBonus) {
     case 'physicalPower':
-      return unit.stats.physicalPower * 5;
+      return (unit.stats.physicalPower ?? 0) * 5;
     case 'dexterity':
-      return unit.stats.dexterity * 3;
+      return (unit.stats.dexterity ?? 0) * 3;
     case 'none':
     default:
       return 0;
