@@ -3,27 +3,25 @@ import type { SpellAction } from '../types';
 
 /**
  * Контекст для выполнения оружейных эффектов.
- * Все поля доступны через {ключ} в message templates и branch conditions.
+ * Все поля доступны через ключ (без скобок) в branch conditions,
+ * и через {ключ} в message templates.
  */
 export interface WeaponEffectContext {
-  hitRoll: number;       // Сырой d20
-  hitTotal: number;      // Итого (d20 + бонусы)
-  isCrit: boolean;       // Крит
-  isCritFail: boolean;   // Крит промах
-  damage: number;        // Нанесённый урон
-  weaponName: string;    // Название оружия/боеприпаса
-  unitName: string;      // Имя юнита
-  targetIndex: number;   // Номер цели (0-based)
-  shotIndex: number;     // Номер выстрела (0-based)
-  values: Record<string, unknown>;   // Пользовательские переменные
-  log: string[];         // Лог сообщений
+  hitRoll: number;
+  hitTotal: number;
+  isCrit: boolean;
+  isCritFail: boolean;
+  damage: number;
+  weaponName: string;
+  unitName: string;
+  targetIndex: number;
+  shotIndex: number;
+  values: Record<string, unknown>;
+  log: string[];
 }
 
 /**
  * Выполняет цепочку SpellAction[] как оружейные эффекты.
- * Поддерживает: branch, message, set_value, goto, stop
- * 
- * Переиспользует ту же систему что заклинания — максимальная гибкость.
  */
 export function executeWeaponEffects(
   actions: SpellAction[],
@@ -55,6 +53,7 @@ export function executeWeaponEffects(
         if (!cond) { currentIndex++; break; }
         
         const condMet = evaluateBranchCondition(cond, ctx);
+        console.log('[WeaponFX] Branch:', cond.key, cond.type, cond.value, '→', condMet);
         const targetId = condMet ? action.branchTrueStepId : action.branchFalseStepId;
         currentIndex = resolveTarget(targetId, sorted, currentIndex);
         break;
@@ -91,7 +90,6 @@ export function executeWeaponEffects(
         return;
       
       default:
-        // Для неподдерживаемых типов — пропускаем (roll_damage и т.п. не имеют смысла здесь)
         currentIndex++;
     }
   }
@@ -105,12 +103,22 @@ export function executeWeaponEffects(
 // ВНУТРЕННИЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * 🔥 Очищает ключ от фигурных скобок.
+ * Пользователь может ввести "{hitTotal}" вместо "hitTotal" — защищаемся.
+ */
+function cleanKey(key: string): string {
+  return key.replace(/^\{|\}$/g, '').trim();
+}
+
 function resolveValue(key: string, ctx: WeaponEffectContext): unknown {
+  const cleaned = cleanKey(key);
+  
   // Сначала пользовательские значения
-  if (key in ctx.values) return ctx.values[key];
+  if (cleaned in ctx.values) return ctx.values[cleaned];
   
   // Потом встроенные поля контекста
-  switch (key) {
+  switch (cleaned) {
     case 'hitRoll': return ctx.hitRoll;
     case 'hitTotal': return ctx.hitTotal;
     case 'isCrit': return ctx.isCrit;
@@ -146,6 +154,8 @@ function evaluateBranchCondition(
   ctx: WeaponEffectContext
 ): boolean {
   const val = resolveValue(cond.key, ctx);
+  
+  console.log('[WeaponFX] Branch eval:', `key="${cond.key}" → cleaned="${cleanKey(cond.key)}" → val=${val}, compare ${cond.type} ${cond.value}`);
   
   switch (cond.type) {
     case 'value_gte': return Number(val) >= Number(cond.value);
