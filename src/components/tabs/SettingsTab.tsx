@@ -578,37 +578,47 @@ function SpellsEditorV2({ spells, resources, onChange }: { spells: (Spell | Spel
 
 function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (weapons: Weapon[]) => void; }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [effectsId, setEffectsId] = useState<string | null>(null);
   
   const addWeapon = () => {
     const newWeapon: Weapon = {
-      id: generateId(),
-      name: 'Новое оружие',
-      type: 'melee',
-      damageFormula: 'd6',
-      damageType: 'slashing',
-      proficiencyType: 'swords',
-      statBonus: 'physicalPower',
-      hitBonus: 0,
-      multishot: 1
+      id: generateId(), name: 'Новое оружие', type: 'melee',
+      damageFormula: 'd6', damageType: 'slashing', proficiencyType: 'swords',
+      statBonus: 'physicalPower', hitBonus: 0, multishot: 1
     };
     onChange([...weapons, newWeapon]);
     setEditingId(newWeapon.id);
   };
   
   const updateWeapon = (id: string, updates: Partial<Weapon>) => { onChange(weapons.map(w => w.id === id ? { ...w, ...updates } : w)); };
-  const deleteWeapon = (id: string) => { onChange(weapons.filter(w => w.id !== id)); if (editingId === id) setEditingId(null); };
+  const deleteWeapon = (id: string) => { onChange(weapons.filter(w => w.id !== id)); if (editingId === id) setEditingId(null); if (effectsId === id) setEffectsId(null); };
   
   const editingWeapon = weapons.find(w => w.id === editingId);
+  const effectsWeapon = weapons.find(w => w.id === effectsId);
   
   return (
     <div className="space-y-2">
       {weapons.map(w => (
         <div key={w.id} className="flex items-center justify-between p-2 bg-obsidian rounded border border-edge-bone">
-          <div><span className="text-bone">{w.name}</span><span className="text-xs text-faded ml-2">{w.type === 'melee' ? '⚔️' : '🏹'}</span></div>
-          <div className="flex gap-1"><Button variant="secondary" size="sm" onClick={() => setEditingId(w.id)}>✏️</Button><Button variant="danger" size="sm" onClick={() => deleteWeapon(w.id)}>🗑️</Button></div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-bone">{w.name}</span>
+              <span className="text-xs text-faded">{w.type === 'melee' ? '⚔️' : '🏹'}</span>
+              {(w.onHitActions?.length ?? 0) > 0 && (
+                <span className="text-xs text-purple-400" title={`${w.onHitActions!.length} эффектов при попадании`}>⚡{w.onHitActions!.length}</span>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <Button variant="secondary" size="sm" onClick={() => setEffectsId(w.id)} title="Эффекты при попадании">⚡</Button>
+            <Button variant="secondary" size="sm" onClick={() => setEditingId(w.id)}>✏️</Button>
+            <Button variant="danger" size="sm" onClick={() => deleteWeapon(w.id)}>🗑️</Button>
+          </div>
         </div>
       ))}
       <Button variant="gold" size="sm" onClick={addWeapon} className="w-full">+ Добавить оружие</Button>
+      
+      {/* Модалка: редактирование оружия */}
       <Modal isOpen={!!editingWeapon} onClose={() => setEditingId(null)} title="Редактировать оружие">
         {editingWeapon && (
           <div className="space-y-3">
@@ -631,6 +641,30 @@ function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (we
           </div>
         )}
       </Modal>
+      
+      {/* 🔥 Модалка: эффекты при попадании */}
+      <Modal isOpen={!!effectsWeapon} onClose={() => setEffectsId(null)} title={`⚡ Эффекты: ${effectsWeapon?.name ?? ''}`} className="max-w-lg max-h-[85vh]">
+        {effectsWeapon && (
+          <div className="space-y-3">
+            <div className="p-2 bg-obsidian rounded border border-edge-bone">
+              <div className="text-xs text-faded">
+                ⚡ <strong>Эффекты при попадании</strong> — выполняются после каждого успешного удара.
+              </div>
+              <div className="text-xs text-ancient mt-1 font-mono">
+                {'{hitRoll}'} = d20 • {'{hitTotal}'} = итого • {'{isCrit}'} = крит • {'{damage}'} = урон
+              </div>
+              <div className="text-xs text-faded mt-1">
+                💡 <strong>Ветвление</strong> + ключ <code className="bg-dark px-1 rounded">hitRoll</code> + условие ≥ = проверка порога
+              </div>
+            </div>
+            <SpellChainEditor
+              actions={effectsWeapon.onHitActions ?? []}
+              onChange={(actions) => updateWeapon(effectsWeapon.id, { onHitActions: actions })}
+            />
+            <Button variant="gold" onClick={() => setEffectsId(null)} className="w-full">Готово</Button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -641,35 +675,43 @@ function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (we
 
 function ResourcesEditor({ resources, onChange }: { resources: Resource[]; onChange: (resources: Resource[]) => void; }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [effectsId, setEffectsId] = useState<string | null>(null);
   
   const addResource = () => {
     const newResource: Resource = {
-      id: generateId(),
-      name: 'Новый ресурс',
-      icon: '📦',
-      current: 10,
-      max: 10,
-      resourceType: 'generic',
-      syncWithDocs: false
+      id: generateId(), name: 'Новый ресурс', icon: '📦',
+      current: 10, max: 10, resourceType: 'generic', syncWithDocs: false
     };
     onChange([...resources, newResource]);
     setEditingId(newResource.id);
   };
   
   const updateResource = (id: string, updates: Partial<Resource>) => { onChange(resources.map(r => r.id === id ? { ...r, ...updates } : r)); };
-  const deleteResource = (id: string) => { onChange(resources.filter(r => r.id !== id)); if (editingId === id) setEditingId(null); };
+  const deleteResource = (id: string) => { onChange(resources.filter(r => r.id !== id)); if (editingId === id) setEditingId(null); if (effectsId === id) setEffectsId(null); };
   
   const editingResource = resources.find(r => r.id === editingId);
+  const effectsResource = resources.find(r => r.id === effectsId);
   
   return (
     <div className="space-y-2">
       {resources.map(r => (
         <div key={r.id} className="flex items-center justify-between p-2 bg-obsidian rounded border border-edge-bone">
-          <div><span className="text-bone">{r.icon} {r.name}</span><span className="text-xs text-faded ml-2">{r.current}/{r.max}</span>{r.resourceType === 'ammo' && <span className="text-xs text-ancient ml-2">🏹</span>}</div>
-          <div className="flex gap-1"><Button variant="secondary" size="sm" onClick={() => setEditingId(r.id)}>✏️</Button><Button variant="danger" size="sm" onClick={() => deleteResource(r.id)}>🗑️</Button></div>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-bone">{r.icon} {r.name}</span>
+            <span className="text-xs text-faded">{r.current}/{r.max}</span>
+            {r.resourceType === 'ammo' && <span className="text-xs text-ancient">🏹</span>}
+            {(r.onHitActions?.length ?? 0) > 0 && <span className="text-xs text-purple-400">⚡{r.onHitActions!.length}</span>}
+          </div>
+          <div className="flex gap-1">
+            {r.resourceType === 'ammo' && <Button variant="secondary" size="sm" onClick={() => setEffectsId(r.id)} title="Эффекты при попадании">⚡</Button>}
+            <Button variant="secondary" size="sm" onClick={() => setEditingId(r.id)}>✏️</Button>
+            <Button variant="danger" size="sm" onClick={() => deleteResource(r.id)}>🗑️</Button>
+          </div>
         </div>
       ))}
       <Button variant="gold" size="sm" onClick={addResource} className="w-full">+ Добавить ресурс</Button>
+      
+      {/* Модалка: редактирование ресурса */}
       <Modal isOpen={!!editingResource} onClose={() => setEditingId(null)} title="Редактировать ресурс">
         {editingResource && (
           <div className="space-y-3">
@@ -694,6 +736,27 @@ function ResourcesEditor({ resources, onChange }: { resources: Resource[]; onCha
             )}
             <Checkbox checked={editingResource.syncWithDocs ?? false} onChange={(v) => updateResource(editingResource.id, { syncWithDocs: v })} label="📄 Синхронизировать с Google Docs" />
             <Button variant="gold" onClick={() => setEditingId(null)} className="w-full">Готово</Button>
+          </div>
+        )}
+      </Modal>
+      
+      {/* 🔥 Модалка: эффекты боеприпасов при попадании */}
+      <Modal isOpen={!!effectsResource} onClose={() => setEffectsId(null)} title={`⚡ Эффекты: ${effectsResource?.name ?? ''}`} className="max-w-lg max-h-[85vh]">
+        {effectsResource && (
+          <div className="space-y-3">
+            <div className="p-2 bg-obsidian rounded border border-edge-bone">
+              <div className="text-xs text-faded">
+                ⚡ <strong>Эффекты боеприпасов</strong> — выполняются при каждом попадании этим типом стрел/пуль.
+              </div>
+              <div className="text-xs text-ancient mt-1 font-mono">
+                {'{hitRoll}'} = d20 • {'{hitTotal}'} = итого • {'{isCrit}'} = крит • {'{damage}'} = урон
+              </div>
+            </div>
+            <SpellChainEditor
+              actions={effectsResource.onHitActions ?? []}
+              onChange={(actions) => updateResource(effectsResource.id, { onHitActions: actions })}
+            />
+            <Button variant="gold" onClick={() => setEffectsId(null)} className="w-full">Готово</Button>
           </div>
         )}
       </Modal>
