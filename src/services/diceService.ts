@@ -1,3 +1,4 @@
+// src/services/diceService.ts
 import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult, RollModifier } from "../types";
 
@@ -570,6 +571,28 @@ class DiceService {
       icon: success ? '⚡' : '💨',
       isCrit,
       color: isCrit ? 'gold' : success ? 'green' : 'white',
+      timestamp: Date.now()
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🔥 BROADCAST WEAPON EFFECT — видят ВСЕ игроки!
+  // ═══════════════════════════════════════════════════════════════
+
+  async broadcastWeaponEffect(
+    unitName: string,
+    weaponName: string,
+    message: string
+  ): Promise<void> {
+    console.log('[DiceService] ⚡ Broadcasting weapon effect:', unitName, weaponName, message);
+    await broadcast({
+      id: msgId(),
+      type: 'custom',
+      unitName,
+      title: `⚡ ${weaponName}`,
+      subtitle: message,
+      icon: '⚡',
+      color: 'purple',
       timestamp: Date.now()
     });
   }
