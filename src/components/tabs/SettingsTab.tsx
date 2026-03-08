@@ -3,6 +3,7 @@ import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, Select, Input, NumberStepper, Checkbox, Modal, SubTabs } from '../ui';
 import { SpellEditorModal } from '../spell-editor';
+import { SpellChainEditor } from '../spell-editor';
 import { generateId } from '../../constants/spellActions';
 import { docsService } from '../../services/docsService';
 import { selectToken } from '../../services/hpTrackerService';
