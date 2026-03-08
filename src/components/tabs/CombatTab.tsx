@@ -6,6 +6,7 @@ import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, Em
 import { isHit } from '../../utils/dice';
 import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
+import { executeWeaponEffects } from '../../utils/weaponEffects';
 import type { DiceRollResult, DamageType, DamageCategory } from '../../types';
 import { DAMAGE_TYPE_NAMES, PHYSICAL_DAMAGE_TYPES, MAGICAL_DAMAGE_TYPES } from '../../types';
 
@@ -47,6 +48,10 @@ export function CombatTab() {
   const selectedRangedWeapon = rangedWeapons.find(w => w.id === selectedRangedWeaponId) ?? rangedWeapons[0];
   const selectedAmmo = ammoResources.find(r => r.id === selectedAmmoId) ?? ammoResources[0];
   
+  // ═══════════════════════════════════════════════════════════════
+  // БЛИЖНИЙ БОЙ
+  // ═══════════════════════════════════════════════════════════════
+  
   const handleMeleeAttack = async () => {
     if (!selectedMeleeWeapon) return;
     setIsMeleeAttacking(true);
@@ -68,13 +73,39 @@ export function CombatTab() {
         const dmg = await diceService.rollDamage(formula, `Урон ${selectedMeleeWeapon.name}`, unit.shortName ?? unit.name, isCrit);
         dmgRes.push(dmg);
         addCombatLog(unit.shortName ?? unit.name, selectedMeleeWeapon.name, `${isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
+        
         if (selectedMeleeWeapon.extraDamageFormula && selectedMeleeWeapon.extraDamageType) {
           const extra = await diceService.rollDamage(selectedMeleeWeapon.extraDamageFormula, `Доп. урон (${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? 'доп'})`, unit.shortName ?? unit.name, isCrit);
           dmgRes.push(extra);
         }
+        
+        // 🔥 Оружейные эффекты при попадании
+        if (selectedMeleeWeapon.onHitActions?.length) {
+          executeWeaponEffects(
+            selectedMeleeWeapon.onHitActions,
+            {
+              hitRoll: hitResult.rawD20 ?? 0,
+              hitTotal: hitResult.total,
+              isCrit: !!isCrit,
+              isCritFail: false,
+              damage: dmg.total,
+              weaponName: selectedMeleeWeapon.name,
+              unitName: unit.shortName ?? unit.name,
+              targetIndex: t,
+              shotIndex: 0,
+              values: {},
+              log: [],
+            },
+            addCombatLog
+          );
+        }
       }
     } finally { setMeleeAttackResults(atkRes); setMeleeDamageResults(dmgRes); setIsMeleeAttacking(false); }
   };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // ДАЛЬНИЙ БОЙ
+  // ═══════════════════════════════════════════════════════════════
   
   const handleRangedAttack = async () => {
     if (!selectedRangedWeapon || !selectedAmmo) return;
@@ -94,11 +125,15 @@ export function CombatTab() {
           const hit = await diceService.roll(hitFormula, `Стрела ${a+1}`, unit.shortName ?? unit.name, 'normal');
           if (hit.isCritFail) { log.push(`💀 Стрела ${a+1}: [${hit.rawD20}] = КРИТ ПРОМАХ!`); continue; }
           if (!isHit(hit)) { log.push(`❌ Стрела ${a+1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Промах`); continue; }
+          
+          let shotDamage = 0;
+          
           if (selectedAmmo.damageFormula && selectedAmmo.damageType) {
             const dexB = getStatDamageBonus(unit, 'dexterity');
             const f = dexB > 0 ? `${selectedAmmo.damageFormula}+${dexB}` : selectedAmmo.damageFormula;
             const dmg = await diceService.rollDamage(f, `Урон ${selectedAmmo.name}`, unit.shortName ?? unit.name, hit.isCrit);
             dmgRes.push(dmg);
+            shotDamage = dmg.total;
             log.push(`🎯 Стрела ${a+1}: [${hit.rawD20}]+${hitBonus}=${hit.total} ${hit.isCrit?'✨КРИТ ':''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType]??''}`);
             addCombatLog(unit.shortName??unit.name, `${selectedRangedWeapon.name} (${selectedAmmo.name})`, `${hit.isCrit?'✨КРИТ ':''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType]??''}`);
             if (selectedAmmo.extraDamageFormula && selectedAmmo.extraDamageType) {
@@ -106,12 +141,62 @@ export function CombatTab() {
               dmgRes.push(extra); log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType]??''}`);
             }
           } else { log.push(`🎯 Стрела ${a+1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); }
+          
+          // 🔥 Эффекты оружия при попадании
+          if (selectedRangedWeapon.onHitActions?.length) {
+            const effectLog: string[] = [];
+            executeWeaponEffects(
+              selectedRangedWeapon.onHitActions,
+              {
+                hitRoll: hit.rawD20 ?? 0,
+                hitTotal: hit.total,
+                isCrit: !!hit.isCrit,
+                isCritFail: false,
+                damage: shotDamage,
+                weaponName: selectedRangedWeapon.name,
+                unitName: unit.shortName ?? unit.name,
+                targetIndex: 0,
+                shotIndex: s,
+                values: {},
+                log: effectLog,
+              },
+              addCombatLog
+            );
+            for (const msg of effectLog) log.push(`    ⚡ ${msg}`);
+          }
+          
+          // 🔥 Эффекты боеприпасов при попадании
+          if (selectedAmmo.onHitActions?.length) {
+            const effectLog: string[] = [];
+            executeWeaponEffects(
+              selectedAmmo.onHitActions,
+              {
+                hitRoll: hit.rawD20 ?? 0,
+                hitTotal: hit.total,
+                isCrit: !!hit.isCrit,
+                isCritFail: false,
+                damage: shotDamage,
+                weaponName: selectedAmmo.name,
+                unitName: unit.shortName ?? unit.name,
+                targetIndex: 0,
+                shotIndex: s,
+                values: {},
+                log: effectLog,
+              },
+              addCombatLog
+            );
+            for (const msg of effectLog) log.push(`    ⚡ ${msg}`);
+          }
         }
       }
       await setResource(unit.id, selectedAmmo.id, ammoCur - totalNeeded);
       log.push(`📦 Списано ${totalNeeded} ${selectedAmmo.name}`);
     } finally { setRangedDamageResults(dmgRes); setRangedLog(log); setIsRangedAttacking(false); }
   };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // ПОЛУЧЕНИЕ УРОНА / ИСЦЕЛЕНИЕ
+  // ═══════════════════════════════════════════════════════════════
   
   const damagePreview = unit && incomingDamage > 0 ? calculateDamage(incomingDamage, damageType, unit, isUndeadAttacker) : null;
   
@@ -147,13 +232,24 @@ export function CombatTab() {
     return MAGICAL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] ?? t }));
   };
   
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════
+  
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true}>
         {meleeWeapons.length === 0 ? <p className="text-faded text-sm">Добавьте оружие ближнего боя в настройках</p> : (
           <div className="space-y-3">
-            <Select label="Оружие" value={selectedMeleeWeapon?.id??''} onChange={e=>setSelectedMeleeWeaponId(e.target.value)} options={meleeWeapons.map(w=>({value:w.id,label:w.name}))} />
-            {selectedMeleeWeapon && <div className="text-xs text-faded">{selectedMeleeWeapon.damageFormula} {DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType]??selectedMeleeWeapon.damageType} | Владение +{proficiencies[selectedMeleeWeapon.proficiencyType]??0}{(selectedMeleeWeapon.hitBonus??0)>0&&` | Бонус +${selectedMeleeWeapon.hitBonus}`}{selectedMeleeWeapon.notes&&<span className="block text-ancient">{selectedMeleeWeapon.notes}</span>}</div>}
+            <Select label="Оружие" value={selectedMeleeWeapon?.id??''} onChange={e=>setSelectedMeleeWeaponId(e.target.value)} options={meleeWeapons.map(w=>({value:w.id,label:`${w.name}${(w.onHitActions?.length??0)>0?' ⚡':''}`}))} />
+            {selectedMeleeWeapon && (
+              <div className="text-xs text-faded">
+                {selectedMeleeWeapon.damageFormula} {DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType]??selectedMeleeWeapon.damageType} | Владение +{proficiencies[selectedMeleeWeapon.proficiencyType]??0}
+                {(selectedMeleeWeapon.hitBonus??0)>0&&` | Бонус +${selectedMeleeWeapon.hitBonus}`}
+                {(selectedMeleeWeapon.onHitActions?.length??0)>0&&<span className="text-purple-400"> | ⚡{selectedMeleeWeapon.onHitActions!.length} эфф.</span>}
+                {selectedMeleeWeapon.notes&&<span className="block text-ancient">{selectedMeleeWeapon.notes}</span>}
+              </div>
+            )}
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
             <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full">⚔️ АТАКОВАТЬ</Button>
             {meleeAttackResults.length>0&&<div className="space-y-2"><div className="text-xs text-faded uppercase">Попадания:</div><DiceResultDisplay results={meleeAttackResults}/></div>}
@@ -165,9 +261,9 @@ export function CombatTab() {
       <Section title="Дальний бой" icon="🏹" collapsible defaultOpen={true}>
         {rangedWeapons.length===0?<p className="text-faded text-sm">Добавьте оружие дальнего боя в настройках</p>:ammoResources.length===0?<p className="text-faded text-sm">Добавьте боеприпасы в ресурсах</p>:(
           <div className="space-y-3">
-            <Select label="Оружие" value={selectedRangedWeapon?.id??''} onChange={e=>setSelectedRangedWeaponId(e.target.value)} options={rangedWeapons.map(w=>({value:w.id,label:`${w.name}${(w.multishot??1)>1?` (×${w.multishot})`:''}`}))} />
-            <Select label="Боеприпасы" value={selectedAmmo?.id??''} onChange={e=>setSelectedAmmoId(e.target.value)} options={ammoResources.map(r=>({value:r.id,label:`${r.icon??'🏹'} ${r.name} (${r.current??0}/${r.max??0}) — ${r.damageFormula??'нет урона'}`}))} />
-            {selectedRangedWeapon&&selectedAmmo&&<div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone"><div>🏹 {selectedRangedWeapon.name}: +{(selectedRangedWeapon.hitBonus??0)+(proficiencies.bows??0)} к попаданию</div>{(selectedRangedWeapon.multishot??1)>1&&<div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел</div>}<div className="mt-1">🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType&&(DAMAGE_TYPE_NAMES[selectedAmmo.damageType]??selectedAmmo.damageType)}</div></div>}
+            <Select label="Оружие" value={selectedRangedWeapon?.id??''} onChange={e=>setSelectedRangedWeaponId(e.target.value)} options={rangedWeapons.map(w=>({value:w.id,label:`${w.name}${(w.multishot??1)>1?` (×${w.multishot})`:''}${(w.onHitActions?.length??0)>0?' ⚡':''}`}))} />
+            <Select label="Боеприпасы" value={selectedAmmo?.id??''} onChange={e=>setSelectedAmmoId(e.target.value)} options={ammoResources.map(r=>({value:r.id,label:`${r.icon??'🏹'} ${r.name} (${r.current??0}/${r.max??0}) — ${r.damageFormula??'нет урона'}${(r.onHitActions?.length??0)>0?' ⚡':''}`}))} />
+            {selectedRangedWeapon&&selectedAmmo&&<div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone"><div>🏹 {selectedRangedWeapon.name}: +{(selectedRangedWeapon.hitBonus??0)+(proficiencies.bows??0)} к попаданию</div>{(selectedRangedWeapon.multishot??1)>1&&<div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел</div>}<div className="mt-1">🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType&&(DAMAGE_TYPE_NAMES[selectedAmmo.damageType]??selectedAmmo.damageType)}</div>{((selectedRangedWeapon.onHitActions?.length??0)+(selectedAmmo.onHitActions?.length??0))>0&&<div className="text-purple-400 mt-1">⚡ Эффекты: {(selectedRangedWeapon.onHitActions?.length??0)+(selectedAmmo.onHitActions?.length??0)} шагов</div>}</div>}
             <NumberStepper label="Количество выстрелов" value={rangedShotCount} onChange={setRangedShotCount} min={1} max={10} />
             <Button variant="danger" onClick={handleRangedAttack} loading={isRangedAttacking} disabled={!selectedRangedWeapon||!selectedAmmo||(selectedAmmo.current??0)<(selectedRangedWeapon?.ammoPerShot??selectedRangedWeapon?.multishot??1)} className="w-full">🏹 ВЫСТРЕЛИТЬ</Button>
             {rangedLog.length>0&&<div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">{rangedLog.map((l,i)=><div key={i} className="text-sm font-garamond">{l}</div>)}</div>}
