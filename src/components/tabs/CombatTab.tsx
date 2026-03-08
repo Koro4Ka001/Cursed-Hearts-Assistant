@@ -7,22 +7,24 @@ import { isHit } from '../../utils/dice';
 import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
 import type { DiceRollResult, DamageType, DamageCategory } from '../../types';
-import { DAMAGE_TYPE_NAMES } from '../../types';
+import { DAMAGE_TYPE_NAMES, PHYSICAL_DAMAGE_TYPES, MAGICAL_DAMAGE_TYPES } from '../../types';
 
 export function CombatTab() {
   const {
-    units, selectedUnitId, takeDamage, heal: healUnit, setResource, triggerEffect, addCombatLog
+    units, selectedUnitId, 
+    takeDamage, heal: healUnit, setMana, 
+    setResource, triggerEffect, addCombatLog
   } = useGameStore();
   const unit = units.find(u => u.id === selectedUnitId);
   
-  // Состояние ближней атаки
+  // ═══ Состояние ближней атаки ═══
   const [selectedMeleeWeaponId, setSelectedMeleeWeaponId] = useState<string>('');
   const [meleeTargetCount, setMeleeTargetCount] = useState(1);
   const [meleeAttackResults, setMeleeAttackResults] = useState<DiceRollResult[]>([]);
   const [meleeDamageResults, setMeleeDamageResults] = useState<DiceRollResult[]>([]);
   const [isMeleeAttacking, setIsMeleeAttacking] = useState(false);
   
-  // Состояние дальней атаки
+  // ═══ Состояние дальней атаки ═══
   const [selectedRangedWeaponId, setSelectedRangedWeaponId] = useState<string>('');
   const [selectedAmmoId, setSelectedAmmoId] = useState<string>('');
   const [rangedShotCount, setRangedShotCount] = useState(1);
@@ -30,14 +32,17 @@ export function CombatTab() {
   const [isRangedAttacking, setIsRangedAttacking] = useState(false);
   const [rangedLog, setRangedLog] = useState<string[]>([]);
   
-  // Состояние получения урона
+  // ═══ Состояние получения урона ═══
   const [incomingDamage, setIncomingDamage] = useState(0);
   const [isUndeadAttacker, setIsUndeadAttacker] = useState(false);
   const [damageCategory, setDamageCategory] = useState<DamageCategory>('physical');
   const [damageType, setDamageType] = useState<DamageType>('slashing');
   
-  // Состояние исцеления
+  // ═══ Состояние исцеления ═══
   const [healAmount, setHealAmount] = useState(0);
+  
+  // ═══ 🔥 Состояние управления маной ═══
+  const [manaAmount, setManaAmount] = useState(0);
   
   if (!unit) {
     return (
@@ -113,7 +118,6 @@ export function CombatTab() {
         );
         newDamageResults.push(damageResult);
         
-        // Логируем в боевой журнал
         addCombatLog(
           unit.shortName ?? unit.name,
           selectedMeleeWeapon.name,
@@ -209,7 +213,6 @@ export function CombatTab() {
             const critText = isCrit ? '✨ КРИТ! ×2 ' : '';
             log.push(`🎯 Стрела ${arrow + 1}: [${hitResult.rawD20}] + ${hitBonus} = ${hitResult.total} ${critText}→ 💥 ${damageResult.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? 'физ'}`);
             
-            // Логируем
             addCombatLog(
               unit.shortName ?? unit.name,
               `${selectedRangedWeapon.name} (${selectedAmmo.name})`,
@@ -260,7 +263,6 @@ export function CombatTab() {
     await takeDamage(unit.id, damagePreview.finalDamage);
     triggerEffect('shake');
     
-    // Логируем
     addCombatLog(
       unit.shortName ?? unit.name,
       `Получил урон`,
@@ -301,7 +303,6 @@ export function CombatTab() {
     await healUnit(unit.id, healAmount);
     triggerEffect('heal');
     
-    // Логируем
     addCombatLog(
       unit.shortName ?? unit.name,
       `Исцеление`,
@@ -329,18 +330,84 @@ export function CombatTab() {
     setHealAmount(0);
   };
   
-  // Опции типов урона
-  const physicalTypes: DamageType[] = ['slashing', 'piercing', 'bludgeoning', 'chopping'];
-  const magicalTypes: DamageType[] = ['fire', 'ice', 'lightning', 'acid', 'poison', 'necrotic', 'radiant', 'psychic', 'force', 'thunder', 'void'];
+  // ═══════════════════════════════════════════════════════════
+  // 🔥 ВОССТАНОВЛЕНИЕ / ТРАТА МАНЫ
+  // ═══════════════════════════════════════════════════════════
+  
+  const handleRestoreMana = async () => {
+    if (manaAmount <= 0) return;
+    
+    const curMana = unit.mana.current;
+    const maxMana = unit.mana.max;
+    const newMana = Math.min(maxMana, curMana + manaAmount);
+    const actualRestored = newMana - curMana;
+    
+    if (actualRestored <= 0) return;
+    
+    await setMana(unit.id, newMana);
+    triggerEffect('heal');
+    
+    addCombatLog(
+      unit.shortName ?? unit.name,
+      'Восстановление маны',
+      `+${actualRestored} 💠`
+    );
+    
+    try {
+      await diceService.showNotification(
+        `💠 ${unit.shortName ?? unit.name} восстановил ${actualRestored} маны (${newMana}/${maxMana})`
+      );
+    } catch { /* не критично */ }
+    
+    setManaAmount(0);
+  };
+  
+  const handleSpendMana = async () => {
+    if (manaAmount <= 0) return;
+    
+    const curMana = unit.mana.current;
+    const newMana = Math.max(0, curMana - manaAmount);
+    const actualSpent = curMana - newMana;
+    
+    if (actualSpent <= 0) return;
+    
+    await setMana(unit.id, newMana);
+    
+    addCombatLog(
+      unit.shortName ?? unit.name,
+      'Трата маны',
+      `-${actualSpent} 💠`
+    );
+    
+    try {
+      await diceService.showNotification(
+        `🔻 ${unit.shortName ?? unit.name} потратил ${actualSpent} маны (${newMana}/${unit.mana.max})`
+      );
+    } catch { /* не критично */ }
+    
+    setManaAmount(0);
+  };
+  
+  // ═══════════════════════════════════════════════════════════
+  // 🔥 ОПЦИИ ТИПОВ УРОНА (ИСПРАВЛЕНО!)
+  // ═══════════════════════════════════════════════════════════
   
   const getDamageTypeOptions = () => {
     if (damageCategory === 'pure') {
       return [{ value: 'pure', label: 'Чистый' }];
     }
     if (damageCategory === 'physical') {
-      return physicalTypes.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] ?? t }));
+      // slashing, piercing, bludgeoning, chopping
+      return PHYSICAL_DAMAGE_TYPES.map(t => ({ 
+        value: t, 
+        label: DAMAGE_TYPE_NAMES[t] ?? t 
+      }));
     }
-    return magicalTypes.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] ?? t }));
+    // 🔥 Магические — русские ID: 'огонь', 'вода', 'тьма'...
+    return MAGICAL_DAMAGE_TYPES.map(t => ({ 
+      value: t, 
+      label: DAMAGE_TYPE_NAMES[t] ?? t 
+    }));
   };
   
   return (
@@ -502,8 +569,9 @@ export function CombatTab() {
             onChange={(e) => {
               const cat = e.target.value as DamageCategory;
               setDamageCategory(cat);
+              // 🔥 FIX: Правильные дефолтные значения!
               if (cat === 'physical') setDamageType('slashing');
-              else if (cat === 'magical') setDamageType('fire');
+              else if (cat === 'magical') setDamageType('огонь');
               else setDamageType('pure');
             }}
             options={[
@@ -562,6 +630,50 @@ export function CombatTab() {
           >
             💚 Исцелить
           </Button>
+        </div>
+      </Section>
+      
+      {/* ═══ 🔥 УПРАВЛЕНИЕ МАНОЙ ═══ */}
+      <Section title="Управление маной" icon="💠" collapsible defaultOpen={true}>
+        <div className="space-y-3">
+          {/* Текущая мана */}
+          <div className="flex items-center justify-between p-2 bg-obsidian rounded border border-edge-bone">
+            <span className="text-mana-bright text-sm">💠 Мана</span>
+            <span className="text-bone font-bold">
+              {unit.mana.current} / {unit.mana.max}
+            </span>
+          </div>
+          
+          {unit.useManaAsHp && (
+            <div className="text-xs text-ancient p-2 bg-panel rounded border border-edge-bone">
+              ⚠️ Мана используется как жизнь — урон/хил через разделы выше
+            </div>
+          )}
+          
+          <NumberStepper
+            label="Количество маны"
+            value={manaAmount}
+            onChange={setManaAmount}
+            min={0}
+            max={9999}
+          />
+          
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="success"
+              onClick={handleRestoreMana}
+              disabled={manaAmount <= 0 || unit.mana.current >= unit.mana.max}
+            >
+              💠 Восстановить
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleSpendMana}
+              disabled={manaAmount <= 0 || unit.mana.current <= 0}
+            >
+              🔻 Потратить
+            </Button>
+          </div>
         </div>
       </Section>
     </div>
