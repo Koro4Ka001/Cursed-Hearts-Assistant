@@ -25,7 +25,7 @@ export function CombatTab() {
   const [meleeAttackResults, setMeleeAttackResults] = useState<DiceRollResult[]>([]);
   const [meleeDamageResults, setMeleeDamageResults] = useState<DiceRollResult[]>([]);
   const [isMeleeAttacking, setIsMeleeAttacking] = useState(false);
-  const [meleeLog, setMeleeLog] = useState<string[]>([]); // 🔥 ДОБАВЛЕНО: лог ближнего боя
+  const [meleeLog, setMeleeLog] = useState<string[]>([]);
   
   // ═══════════════════════════════════════════════════════════════
   // ДАЛЬНИЙ БОЙ — STATE
@@ -59,26 +59,15 @@ export function CombatTab() {
   const selectedAmmo = ammoResources.find(r => r.id === selectedAmmoId) ?? ammoResources[0];
   
   // ═══════════════════════════════════════════════════════════════
-  // 🔥 HELPER: транслировать эффект оружия
-  // ═══════════════════════════════════════════════════════════════
-  const broadcastWeaponEffect = async (unitName: string, msg: string) => {
-    try {
-      await diceService.showNotification(`⚡ ${unitName}: ${msg}`);
-    } catch (e) {
-      console.warn('[CombatTab] Broadcast weapon effect failed:', e);
-    }
-  };
-  
-  // ═══════════════════════════════════════════════════════════════
-  // БЛИЖНИЙ БОЙ — АТАКА (ОБНОВЛЁННЫЙ)
+  // БЛИЖНИЙ БОЙ
   // ═══════════════════════════════════════════════════════════════
   
   const handleMeleeAttack = async () => {
     if (!selectedMeleeWeapon) return;
     setIsMeleeAttacking(true);
-    setMeleeAttackResults([]); setMeleeDamageResults([]); setMeleeLog([]); // 🔥 Очищаем лог
+    setMeleeAttackResults([]); setMeleeDamageResults([]); setMeleeLog([]);
     const atkRes: DiceRollResult[] = []; const dmgRes: DiceRollResult[] = [];
-    const log: string[] = []; // 🔥 Собираем лог
+    const log: string[] = [];
     try {
       for (let t = 0; t < meleeTargetCount; t++) {
         if (meleeTargetCount > 1) log.push(`--- Цель ${t + 1} ---`);
@@ -114,9 +103,10 @@ export function CombatTab() {
           log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? ''}`);
         }
         
-        // 🔥 Оружейные эффекты при попадании (ИСПРАВЛЕНО)
+        // 🔥 Оружейные эффекты при попадании
         if (selectedMeleeWeapon.onHitActions?.length) {
-          console.log('[WeaponFX] Melee hit! Executing', selectedMeleeWeapon.onHitActions.length, 'effects. hitRoll:', hitResult.rawD20, 'hitTotal:', hitResult.total);
+          console.log('[WeaponFX] Melee onHitActions:', JSON.stringify(selectedMeleeWeapon.onHitActions, null, 2));
+          console.log('[WeaponFX] Context: hitRoll=', hitResult.rawD20, 'hitTotal=', hitResult.total, 'damage=', dmg.total);
           
           const effectLog: string[] = [];
           executeWeaponEffects(
@@ -137,27 +127,29 @@ export function CombatTab() {
             addCombatLog
           );
           
-          // 🔥 Показываем эффекты в логе И транслируем
+          console.log('[WeaponFX] Effect log:', effectLog);
+          
           for (const msg of effectLog) {
             log.push(`    ⚡ ${msg}`);
-            await broadcastWeaponEffect(unit.shortName ?? unit.name, msg);
-          }
-          
-          if (effectLog.length === 0) {
-            console.log('[WeaponFX] No effect messages produced (condition not met?)');
+            // 🔥 BROADCAST — видят ВСЕ игроки!
+            await diceService.broadcastWeaponEffect(
+              unit.shortName ?? unit.name,
+              selectedMeleeWeapon.name,
+              msg
+            );
           }
         }
       }
     } finally {
       setMeleeAttackResults(atkRes);
       setMeleeDamageResults(dmgRes);
-      setMeleeLog(log); // 🔥 Сохраняем лог
+      setMeleeLog(log);
       setIsMeleeAttacking(false);
     }
   };
   
   // ═══════════════════════════════════════════════════════════════
-  // ДАЛЬНИЙ БОЙ — АТАКА (ОБНОВЛЁННЫЙ)
+  // ДАЛЬНИЙ БОЙ
   // ═══════════════════════════════════════════════════════════════
   
   const handleRangedAttack = async () => {
@@ -195,9 +187,9 @@ export function CombatTab() {
             }
           } else { log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); }
           
-          // 🔥 Эффекты оружия при попадании (+ BROADCAST)
+          // 🔥 Эффекты оружия при попадании
           if (selectedRangedWeapon.onHitActions?.length) {
-            console.log('[WeaponFX] Ranged weapon hit! Executing', selectedRangedWeapon.onHitActions.length, 'weapon effects. hitTotal:', hit.total);
+            console.log('[WeaponFX] Ranged weapon onHitActions:', selectedRangedWeapon.onHitActions.length, 'hitTotal:', hit.total);
             const effectLog: string[] = [];
             executeWeaponEffects(
               selectedRangedWeapon.onHitActions,
@@ -218,13 +210,13 @@ export function CombatTab() {
             );
             for (const msg of effectLog) {
               log.push(`    ⚡ ${msg}`);
-              await broadcastWeaponEffect(unit.shortName ?? unit.name, msg); // 🔥 BROADCAST
+              await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, selectedRangedWeapon.name, msg);
             }
           }
           
-          // 🔥 Эффекты боеприпасов при попадании (+ BROADCAST)
+          // 🔥 Эффекты боеприпасов при попадании
           if (selectedAmmo.onHitActions?.length) {
-            console.log('[WeaponFX] Ammo hit! Executing', selectedAmmo.onHitActions.length, 'ammo effects. hitTotal:', hit.total);
+            console.log('[WeaponFX] Ammo onHitActions:', selectedAmmo.onHitActions.length, 'hitTotal:', hit.total);
             const effectLog: string[] = [];
             executeWeaponEffects(
               selectedAmmo.onHitActions,
@@ -245,7 +237,7 @@ export function CombatTab() {
             );
             for (const msg of effectLog) {
               log.push(`    ⚡ ${msg}`);
-              await broadcastWeaponEffect(unit.shortName ?? unit.name, msg); // 🔥 BROADCAST
+              await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, selectedAmmo.name, msg);
             }
           }
         }
@@ -314,12 +306,10 @@ export function CombatTab() {
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
             <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full">⚔️ АТАКОВАТЬ</Button>
             
-            {/* 🔥 ДОБАВЛЕНО: Лог ближнего боя (как у дальнего) */}
+            {/* 🔥 Лог ближнего боя */}
             {meleeLog.length > 0 && (
               <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
-                {meleeLog.map((l, i) => (
-                  <div key={i} className="text-sm font-garamond">{l}</div>
-                ))}
+                {meleeLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}
               </div>
             )}
             
