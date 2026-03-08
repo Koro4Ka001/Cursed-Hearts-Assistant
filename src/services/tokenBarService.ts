@@ -11,13 +11,18 @@ import type { Unit } from "../types";
 const METADATA_KEY = "cursed-hearts-assistant";
 
 const CONFIG = {
-  BAR_HEIGHT: 8,          
+  // 🔥 Базовые размеры (для токена 1x1 = 150 world units)
+  BAR_HEIGHT_BASE: 8,          
   BAR_WIDTH_RATIO: 0.77,
-  MIN_BAR_WIDTH: 30,
-  MAX_BAR_WIDTH: 250,
-  BAR_GAP: 2,             
-  BAR_OFFSET_Y: 5,
+  BAR_GAP_BASE: 2,             
+  BAR_OFFSET_Y_BASE: 5,
   
+  // 🔥 Лимиты масштабирования
+  MIN_BAR_WIDTH: 30,
+  MIN_BAR_HEIGHT: 6,
+  MAX_BAR_HEIGHT: 30,
+  
+  // Цвета
   BG_COLOR: "#0a0505",    
   STROKE_COLOR: "#000000",
   
@@ -29,8 +34,20 @@ const CONFIG = {
   MANA_FILL: "#2244aa",     
   
   ANIM_INTERVAL: 100,
-  SCALE_CHANGE_THRESHOLD: 0.01, // 🔥 Порог для детекта изменения размера
+  SCALE_CHANGE_THRESHOLD: 0.01,
 } as const;
+
+// 🔥 Layout теперь включает высоту и отступы
+interface BarLayout {
+  barW: number;
+  barH: number;
+  barX: number;
+  hpY: number;
+  manaY: number;
+  barGap: number;
+  scaleX: number;
+  scaleY: number;
+}
 
 interface BarIds {
   hpBg?: string;
@@ -49,9 +66,9 @@ interface BarState {
   tokenX: number;
   tokenY: number;
   barW: number;
+  barH: number;  // 🔥 Теперь сохраняем высоту тоже
   isDead: boolean;
   ids: BarIds;
-  // 🔥 Сохраняем scale для отслеживания изменений размера
   scaleX: number;
   scaleY: number;
 }
@@ -85,8 +102,6 @@ class TokenBarService {
   private async doInit(): Promise<void> {
     await this.cleanup(); 
     this.startAnim();
-    
-    // 🔥 Подписываемся на изменения items для отслеживания resize токенов
     this.subscribeToItemChanges();
     
     try {
@@ -102,10 +117,9 @@ class TokenBarService {
       console.warn("[Bars] Could not subscribe to scene changes:", e);
     }
     this.initialized = true;
-    console.log("[Bars] Ready (with scale tracking)");
+    console.log("[Bars] Ready (with proportional scaling)");
   }
 
-  // 🔥 Подписка на изменение токенов (resize/move)
   private subscribeToItemChanges(): void {
     if (this.itemsChangeUnsub) return;
     
@@ -129,7 +143,6 @@ class TokenBarService {
             Math.abs(token.position.y - state.tokenY) > 1;
           
           if (scaleChanged || posChanged) {
-            // Пересоздаём бары с правильным размером
             await this.createBars(
               tokenId, state.hp, state.maxHp, 
               state.mana, state.maxMana, state.useManaAsHp
@@ -162,7 +175,8 @@ class TokenBarService {
     return CONFIG.HP_COLOR_HIGH;
   }
 
-  private calculateLayout(token: Image, useManaAsHp: boolean) {
+  // 🔥 ПОЛНОСТЬЮ ПЕРЕПИСАННЫЙ calculateLayout — пропорциональное масштабирование
+  private calculateLayout(token: Image, useManaAsHp: boolean): BarLayout {
     const scaleX = Math.abs(Number(token.scale?.x) || 1);
     const scaleY = Math.abs(Number(token.scale?.y) || 1);
     
@@ -175,17 +189,31 @@ class TokenBarService {
     const worldWidth = (imgW / dpi) * GRID_WORLD_SIZE * scaleX;
     const worldHeight = (imgH / dpi) * GRID_WORLD_SIZE * scaleY;
     
+    // 🔥 Средний масштаб для пропорционального увеличения высоты/отступов
+    const avgScale = (scaleX + scaleY) / 2;
+    
+    // 🔥 Ширина бара — пропорциональна токену, БЕЗ жёсткого MAX
     let barW = Math.round(worldWidth * CONFIG.BAR_WIDTH_RATIO);
     barW = Math.max(CONFIG.MIN_BAR_WIDTH, barW);
-    barW = Math.min(CONFIG.MAX_BAR_WIDTH, barW);
+    // Нет MAX_BAR_WIDTH — бар всегда пропорционален токену!
+    
+    // 🔥 Высота бара масштабируется с токеном
+    let barH = Math.round(CONFIG.BAR_HEIGHT_BASE * Math.max(1, avgScale * 0.7));
+    barH = Math.max(CONFIG.MIN_BAR_HEIGHT, Math.min(CONFIG.MAX_BAR_HEIGHT, barH));
+    
+    // 🔥 Отступы масштабируются
+    const barGap = Math.round(CONFIG.BAR_GAP_BASE * Math.max(1, avgScale * 0.5));
+    const barOffsetY = Math.round(CONFIG.BAR_OFFSET_Y_BASE * Math.max(1, avgScale * 0.5));
     
     const barX = Math.round(token.position.x - barW / 2);
-    const baseY = Math.round(token.position.y + worldHeight / 2 + CONFIG.BAR_OFFSET_Y);
+    const baseY = Math.round(token.position.y + worldHeight / 2 + barOffsetY);
     
     const hpY = baseY;
-    const manaY = useManaAsHp ? baseY : baseY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
+    const manaY = useManaAsHp ? baseY : baseY + barH + barGap;
     
-    return { barW, barX, hpY, manaY, scaleX, scaleY };
+    console.log(`[Bars] Layout: scale=${avgScale.toFixed(1)} worldW=${worldWidth.toFixed(0)} barW=${barW} barH=${barH}`);
+    
+    return { barW, barH, barX, hpY, manaY, barGap, scaleX, scaleY };
   }
   
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
@@ -227,7 +255,8 @@ class TokenBarService {
       const token = items[0];
       if (!isImage(token)) return;
 
-      const { barW, barX, hpY, manaY, scaleX, scaleY } = this.calculateLayout(token as Image, useManaAsHp);
+      const layout = this.calculateLayout(token as Image, useManaAsHp);
+      const { barW, barH, barX, hpY, manaY, scaleX, scaleY } = layout;
       
       const dead = this.isDead(hp);
       const hpPct = Math.max(0, Math.min(1, hp / maxHp));
@@ -237,6 +266,7 @@ class TokenBarService {
       const shapes: Shape[] = [];
       const barIds: BarIds = {};
 
+      // 🔥 Используем barH вместо CONFIG.BAR_HEIGHT
       const createRect = (
         role: keyof BarIds, 
         x: number, y: number, w: number, h: number, 
@@ -266,31 +296,31 @@ class TokenBarService {
       };
 
       if (showHp && !dead) {
-        createRect('hpBg', barX, hpY, barW, CONFIG.BAR_HEIGHT, CONFIG.BG_COLOR, 10, true);
+        createRect('hpBg', barX, hpY, barW, barH, CONFIG.BG_COLOR, 10, true);
         if (hpPct > 0) {
-          createRect('hpFill', barX, hpY, Math.round(Math.max(1, barW * hpPct)), CONFIG.BAR_HEIGHT, this.getHpColor(hp, maxHp), 11, true, true);
+          createRect('hpFill', barX, hpY, Math.round(Math.max(1, barW * hpPct)), barH, this.getHpColor(hp, maxHp), 11, true, true);
         }
       }
 
       if (!dead) {
-        createRect('manaBg', barX, manaY, barW, CONFIG.BAR_HEIGHT, CONFIG.BG_COLOR, 10, true);
+        createRect('manaBg', barX, manaY, barW, barH, CONFIG.BG_COLOR, 10, true);
         if (manaPct > 0) {
-          createRect('manaFill', barX, manaY, Math.round(Math.max(1, barW * manaPct)), CONFIG.BAR_HEIGHT, CONFIG.MANA_FILL, 11, true, true);
+          createRect('manaFill', barX, manaY, Math.round(Math.max(1, barW * manaPct)), barH, CONFIG.MANA_FILL, 11, true, true);
         }
       }
 
       if (shapes.length > 0) await OBR.scene.items.addItems(shapes);
       
-      // 🔥 Сохраняем scale в state
       this.states.set(tokenId, { 
         tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
-        tokenX: token.position.x, tokenY: token.position.y, barW,
+        tokenX: token.position.x, tokenY: token.position.y, 
+        barW, barH,  // 🔥 Сохраняем высоту
         isDead: dead, ids: barIds,
         scaleX, scaleY
       });
 
       if (showHp && dead && this.mode === 'quality') {
-        await this.createDeathEffect(tokenId, barX, hpY, barW);
+        await this.createDeathEffect(tokenId, barX, hpY, barW, barH);
       }
     } catch (e: unknown) {
       console.error("[Bars] Create FAIL:", e);
@@ -376,16 +406,18 @@ class TokenBarService {
     }
   }
 
-  private async createDeathEffect(tokenId: string, barX: number, barY: number, barW: number): Promise<void> {
+  // 🔥 Принимает barH для пропорционального death effect
+  private async createDeathEffect(tokenId: string, barX: number, barY: number, barW: number, barH: number): Promise<void> {
     const state = this.states.get(tokenId);
     if (!state || state.ids.crack1) return;
     try {
-      const size = Math.min(barW, 40);
+      const size = Math.min(barW, Math.max(40, barW * 0.3));
       const centerX = barX + barW / 2;
-      const centerY = barY + CONFIG.BAR_HEIGHT / 2;
+      const centerY = barY + barH / 2;
+      const crackH = Math.max(6, barH);
       const make = (role: 'crack1' | 'crack2', rot: number) => buildShape()
-        .shapeType("RECTANGLE").width(size).height(6)
-        .position({ x: centerX - size/2, y: centerY - 3 })
+        .shapeType("RECTANGLE").width(size).height(crackH)
+        .position({ x: centerX - size/2, y: centerY - crackH/2 })
         .rotation(rot).fillColor("#000000").strokeColor("#ff0000").strokeWidth(2)
         .attachedTo(tokenId).layer("ATTACHMENT").locked(true).disableHit(true)
         .metadata({ [METADATA_KEY]: { type: "crack", role, tokenId } }).build();
