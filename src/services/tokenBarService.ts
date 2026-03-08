@@ -12,11 +12,11 @@ const METADATA_KEY = "cursed-hearts-assistant";
 
 const CONFIG = {
   BAR_HEIGHT: 8,          
-  BAR_WIDTH_RATIO: 0.80,  // 🔥 Было 0.9
-  MIN_BAR_WIDTH: 30,      // 🔥 Было 40
-  MAX_BAR_WIDTH: 250,     // 🔥 Было 300
+  BAR_WIDTH_RATIO: 0.77,
+  MIN_BAR_WIDTH: 30,
+  MAX_BAR_WIDTH: 250,
   BAR_GAP: 2,             
-  BAR_OFFSET_Y: 3,        // 🔥 Было -65. Теперь бары НИЖЕ токена
+  BAR_OFFSET_Y: 5,
   
   BG_COLOR: "#0a0505",    
   STROKE_COLOR: "#000000",
@@ -29,7 +29,7 @@ const CONFIG = {
   MANA_FILL: "#2244aa",     
   
   ANIM_INTERVAL: 100,
-  GRID_CELL_SIZE: 150,     // 🔥 OBR стандартный размер ячейки
+  SCALE_CHANGE_THRESHOLD: 0.01, // 🔥 Порог для детекта изменения размера
 } as const;
 
 interface BarIds {
@@ -51,6 +51,9 @@ interface BarState {
   barW: number;
   isDead: boolean;
   ids: BarIds;
+  // 🔥 Сохраняем scale для отслеживания изменений размера
+  scaleX: number;
+  scaleY: number;
 }
 
 export type BarPerformanceMode = 'quality' | 'performance';
@@ -61,6 +64,7 @@ class TokenBarService {
   private animInterval: number | null = null;
   private frame = 0;
   private mode: BarPerformanceMode = 'quality';
+  private itemsChangeUnsub: (() => void) | null = null;
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -81,6 +85,10 @@ class TokenBarService {
   private async doInit(): Promise<void> {
     await this.cleanup(); 
     this.startAnim();
+    
+    // 🔥 Подписываемся на изменения items для отслеживания resize токенов
+    this.subscribeToItemChanges();
+    
     try {
       OBR.scene.onReadyChange(async (ready) => {
         if (ready) {
@@ -94,7 +102,44 @@ class TokenBarService {
       console.warn("[Bars] Could not subscribe to scene changes:", e);
     }
     this.initialized = true;
-    console.log("[Bars] Ready");
+    console.log("[Bars] Ready (with scale tracking)");
+  }
+
+  // 🔥 Подписка на изменение токенов (resize/move)
+  private subscribeToItemChanges(): void {
+    if (this.itemsChangeUnsub) return;
+    
+    try {
+      this.itemsChangeUnsub = OBR.scene.items.onChange(async (items) => {
+        if (this.states.size === 0) return;
+        
+        for (const [tokenId, state] of this.states) {
+          const token = items.find(i => i.id === tokenId);
+          if (!token || !isImage(token)) continue;
+          
+          const scaleX = Math.abs(Number(token.scale?.x) || 1);
+          const scaleY = Math.abs(Number(token.scale?.y) || 1);
+          
+          const scaleChanged = 
+            Math.abs(scaleX - state.scaleX) > CONFIG.SCALE_CHANGE_THRESHOLD ||
+            Math.abs(scaleY - state.scaleY) > CONFIG.SCALE_CHANGE_THRESHOLD;
+          
+          const posChanged = 
+            Math.abs(token.position.x - state.tokenX) > 1 ||
+            Math.abs(token.position.y - state.tokenY) > 1;
+          
+          if (scaleChanged || posChanged) {
+            // Пересоздаём бары с правильным размером
+            await this.createBars(
+              tokenId, state.hp, state.maxHp, 
+              state.mana, state.maxMana, state.useManaAsHp
+            );
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("[Bars] Could not subscribe to item changes:", e);
+    }
   }
 
   public setPerformanceMode(mode: BarPerformanceMode) {
@@ -117,34 +162,31 @@ class TokenBarService {
     return CONFIG.HP_COLOR_HIGH;
   }
 
-  // 🔥 FIX: Правильный расчёт размеров с учётом DPI
   private calculateLayout(token: Image, useManaAsHp: boolean) {
-  const scaleX = Math.abs(Number(token.scale?.x) || 1);
-  const scaleY = Math.abs(Number(token.scale?.y) || 1);
-  
-  const imgW = Number(token.image?.width) || 150;
-  const imgH = Number(token.image?.height) || 150;
-  
-  // 🔥 FIX: Учитываем DPI изображения для правильного размера в мировых координатах
-  // В OBR: grid.dpi = сколько пикселей изображения = 1 ячейка сетки (150 мировых единиц)
-  const dpi = Number(token.grid?.dpi) || 150;
-  const GRID_WORLD_SIZE = 150; // OBR: 1 ячейка = 150 мировых единиц
-  
-  const worldWidth = (imgW / dpi) * GRID_WORLD_SIZE * scaleX;
-  const worldHeight = (imgH / dpi) * GRID_WORLD_SIZE * scaleY;
-  
-  let barW = Math.round(worldWidth * CONFIG.BAR_WIDTH_RATIO);
-  barW = Math.max(CONFIG.MIN_BAR_WIDTH, barW);
-  barW = Math.min(CONFIG.MAX_BAR_WIDTH, barW);
-  
-  const barX = Math.round(token.position.x - barW / 2);
-  const baseY = Math.round(token.position.y + worldHeight / 2 + CONFIG.BAR_OFFSET_Y);
-  
-  const hpY = baseY;
-  const manaY = useManaAsHp ? baseY : baseY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
-  
-  return { barW, barX, hpY, manaY };
-}
+    const scaleX = Math.abs(Number(token.scale?.x) || 1);
+    const scaleY = Math.abs(Number(token.scale?.y) || 1);
+    
+    const imgW = Number(token.image?.width) || 150;
+    const imgH = Number(token.image?.height) || 150;
+    
+    const dpi = Number(token.grid?.dpi) || 150;
+    const GRID_WORLD_SIZE = 150;
+    
+    const worldWidth = (imgW / dpi) * GRID_WORLD_SIZE * scaleX;
+    const worldHeight = (imgH / dpi) * GRID_WORLD_SIZE * scaleY;
+    
+    let barW = Math.round(worldWidth * CONFIG.BAR_WIDTH_RATIO);
+    barW = Math.max(CONFIG.MIN_BAR_WIDTH, barW);
+    barW = Math.min(CONFIG.MAX_BAR_WIDTH, barW);
+    
+    const barX = Math.round(token.position.x - barW / 2);
+    const baseY = Math.round(token.position.y + worldHeight / 2 + CONFIG.BAR_OFFSET_Y);
+    
+    const hpY = baseY;
+    const manaY = useManaAsHp ? baseY : baseY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
+    
+    return { barW, barX, hpY, manaY, scaleX, scaleY };
+  }
   
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
     try {
@@ -185,7 +227,7 @@ class TokenBarService {
       const token = items[0];
       if (!isImage(token)) return;
 
-      const { barW, barX, hpY, manaY } = this.calculateLayout(token as Image, useManaAsHp);
+      const { barW, barX, hpY, manaY, scaleX, scaleY } = this.calculateLayout(token as Image, useManaAsHp);
       
       const dead = this.isDead(hp);
       const hpPct = Math.max(0, Math.min(1, hp / maxHp));
@@ -202,7 +244,6 @@ class TokenBarService {
         noStroke = false
       ): Shape | null => {
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)) {
-          console.error(`[Bars] Invalid Rect: ${role}`, {x, y, w, h});
           return null;
         }
         const shape = buildShape()
@@ -240,10 +281,12 @@ class TokenBarService {
 
       if (shapes.length > 0) await OBR.scene.items.addItems(shapes);
       
+      // 🔥 Сохраняем scale в state
       this.states.set(tokenId, { 
         tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
         tokenX: token.position.x, tokenY: token.position.y, barW,
-        isDead: dead, ids: barIds
+        isDead: dead, ids: barIds,
+        scaleX, scaleY
       });
 
       if (showHp && dead && this.mode === 'quality') {
@@ -352,15 +395,6 @@ class TokenBarService {
       state.ids.crack1 = c1.id;
       state.ids.crack2 = c2.id;
     } catch (e) { console.error("[Bars] Death FX error:", e); }
-  }
-
-  private async removeDeathEffect(tokenId: string): Promise<void> {
-    const state = this.states.get(tokenId);
-    if (!state) return;
-    const toDel = [state.ids.crack1, state.ids.crack2].filter(Boolean) as string[];
-    if (toDel.length) { try { await OBR.scene.items.deleteItems(toDel); } catch {} }
-    delete state.ids.crack1;
-    delete state.ids.crack2;
   }
 
   async removeBars(tokenId: string): Promise<void> {
