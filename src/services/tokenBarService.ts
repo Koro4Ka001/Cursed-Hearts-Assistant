@@ -11,18 +11,15 @@ import type { Unit } from "../types";
 const METADATA_KEY = "cursed-hearts-assistant";
 
 const CONFIG = {
-  // 🔥 Базовые размеры (для токена 1x1 = 150 world units)
   BAR_HEIGHT_BASE: 8,          
   BAR_WIDTH_RATIO: 0.77,
   BAR_GAP_BASE: 2,             
-  BAR_OFFSET_Y_BASE: 3,
+  BAR_OFFSET_Y_BASE: 5,
   
-  // 🔥 Лимиты масштабирования
   MIN_BAR_WIDTH: 30,
   MIN_BAR_HEIGHT: 6,
   MAX_BAR_HEIGHT: 30,
   
-  // Цвета
   BG_COLOR: "#0a0505",    
   STROKE_COLOR: "#000000",
   
@@ -37,7 +34,6 @@ const CONFIG = {
   SCALE_CHANGE_THRESHOLD: 0.01,
 } as const;
 
-// 🔥 Layout теперь включает высоту и отступы
 interface BarLayout {
   barW: number;
   barH: number;
@@ -66,7 +62,7 @@ interface BarState {
   tokenX: number;
   tokenY: number;
   barW: number;
-  barH: number;  // 🔥 Теперь сохраняем высоту тоже
+  barH: number;
   isDead: boolean;
   ids: BarIds;
   scaleX: number;
@@ -100,15 +96,19 @@ class TokenBarService {
   }
 
   private async doInit(): Promise<void> {
-    await this.cleanup(); 
+    // 🔥 НЕ делаем cleanup() — это убивало бары других игроков!
+    // Вместо этого просто стартуем анимацию и подписки.
+    // Бары будут пересозданы через syncAllBars() из App.tsx
+    
     this.startAnim();
     this.subscribeToItemChanges();
     
     try {
       OBR.scene.onReadyChange(async (ready) => {
         if (ready) {
-          console.log("[Bars] Scene changed, clearing bar states");
+          console.log("[Bars] Scene became ready, clearing local state");
           this.states.clear();
+          // 🔥 При смене сцены — не чистим чужие бары, просто сбрасываем свой кэш
         } else {
           this.states.clear();
         }
@@ -117,7 +117,7 @@ class TokenBarService {
       console.warn("[Bars] Could not subscribe to scene changes:", e);
     }
     this.initialized = true;
-    console.log("[Bars] Ready (with proportional scaling)");
+    console.log("[Bars] Ready (safe init, no global cleanup)");
   }
 
   private subscribeToItemChanges(): void {
@@ -175,7 +175,6 @@ class TokenBarService {
     return CONFIG.HP_COLOR_HIGH;
   }
 
-  // 🔥 ПОЛНОСТЬЮ ПЕРЕПИСАННЫЙ calculateLayout — пропорциональное масштабирование
   private calculateLayout(token: Image, useManaAsHp: boolean): BarLayout {
     const scaleX = Math.abs(Number(token.scale?.x) || 1);
     const scaleY = Math.abs(Number(token.scale?.y) || 1);
@@ -189,19 +188,14 @@ class TokenBarService {
     const worldWidth = (imgW / dpi) * GRID_WORLD_SIZE * scaleX;
     const worldHeight = (imgH / dpi) * GRID_WORLD_SIZE * scaleY;
     
-    // 🔥 Средний масштаб для пропорционального увеличения высоты/отступов
     const avgScale = (scaleX + scaleY) / 2;
     
-    // 🔥 Ширина бара — пропорциональна токену, БЕЗ жёсткого MAX
     let barW = Math.round(worldWidth * CONFIG.BAR_WIDTH_RATIO);
     barW = Math.max(CONFIG.MIN_BAR_WIDTH, barW);
-    // Нет MAX_BAR_WIDTH — бар всегда пропорционален токену!
     
-    // 🔥 Высота бара масштабируется с токеном
     let barH = Math.round(CONFIG.BAR_HEIGHT_BASE * Math.max(1, avgScale * 0.7));
     barH = Math.max(CONFIG.MIN_BAR_HEIGHT, Math.min(CONFIG.MAX_BAR_HEIGHT, barH));
     
-    // 🔥 Отступы масштабируются
     const barGap = Math.round(CONFIG.BAR_GAP_BASE * Math.max(1, avgScale * 0.5));
     const barOffsetY = Math.round(CONFIG.BAR_OFFSET_Y_BASE * Math.max(1, avgScale * 0.5));
     
@@ -211,11 +205,10 @@ class TokenBarService {
     const hpY = baseY;
     const manaY = useManaAsHp ? baseY : baseY + barH + barGap;
     
-    console.log(`[Bars] Layout: scale=${avgScale.toFixed(1)} worldW=${worldWidth.toFixed(0)} barW=${barW} barH=${barH}`);
-    
     return { barW, barH, barX, hpY, manaY, barGap, scaleX, scaleY };
   }
   
+  // 🔥 Удаляет бары ТОЛЬКО для конкретного токена (не глобально!)
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
@@ -247,6 +240,7 @@ class TokenBarService {
       const mana = Number(manaInput) || 0;
       const maxMana = Number(maxManaInput) || 1;
 
+      // 🔥 Удаляем только бары ЭТОГО токена
       await this.removeExistingBarsFromScene(tokenId);
       this.states.delete(tokenId);
 
@@ -266,7 +260,6 @@ class TokenBarService {
       const shapes: Shape[] = [];
       const barIds: BarIds = {};
 
-      // 🔥 Используем barH вместо CONFIG.BAR_HEIGHT
       const createRect = (
         role: keyof BarIds, 
         x: number, y: number, w: number, h: number, 
@@ -314,7 +307,7 @@ class TokenBarService {
       this.states.set(tokenId, { 
         tokenId, hp, maxHp, mana, maxMana, useManaAsHp,
         tokenX: token.position.x, tokenY: token.position.y, 
-        barW, barH,  // 🔥 Сохраняем высоту
+        barW, barH,
         isDead: dead, ids: barIds,
         scaleX, scaleY
       });
@@ -406,7 +399,6 @@ class TokenBarService {
     }
   }
 
-  // 🔥 Принимает barH для пропорционального death effect
   private async createDeathEffect(tokenId: string, barX: number, barY: number, barW: number, barH: number): Promise<void> {
     const state = this.states.get(tokenId);
     if (!state || state.ids.crack1) return;
@@ -434,8 +426,11 @@ class TokenBarService {
     this.states.delete(tokenId);
   }
 
+  // 🔥 removeAllBars — удаляет только бары НАШИХ токенов (из states)
   async removeAllBars(): Promise<void> {
-    await this.cleanup();
+    for (const tokenId of this.states.keys()) {
+      await this.removeExistingBarsFromScene(tokenId);
+    }
     this.states.clear();
   }
 
@@ -452,6 +447,7 @@ class TokenBarService {
         );
       }
     }
+    // Удаляем бары только для токенов, которые больше не в нашем списке
     const toRemove: string[] = [];
     for (const tokenId of this.states.keys()) {
       if (!validTokens.has(tokenId)) toRemove.push(tokenId);
@@ -459,6 +455,8 @@ class TokenBarService {
     for (const tokenId of toRemove) await this.removeBars(tokenId);
   }
 
+  // 🔥 cleanup теперь ТОЛЬКО для явного вызова (настройки: выкл бары)
+  // НЕ вызывается при init!
   private async cleanup(): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
