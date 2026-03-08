@@ -63,12 +63,19 @@ export function createEmptyElementModifier(element: string): ElementModifier {
 /** @deprecated */
 export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
 
-/** @deprecated */
-export interface ElementAffinity {
+/** @deprecated - используйте SpellV2 */
+export interface Spell {
   id: string;
-  element: string;
-  bonusType: AffinityBonusType;
-  value: number;
+  name: string;
+  manaCost: number;
+  costType?: 'mana' | 'health';
+  elements?: string[];
+  type: string;
+  equipmentBonus?: number;
+  damageFormula?: string;
+  damageType?: DamageType;
+  projectiles?: string;
+  description?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
