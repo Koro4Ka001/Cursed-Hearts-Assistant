@@ -1,3 +1,5 @@
+// src/components/UnitSelector.tsx
+import { useState } from 'react';
 import { useGameStore } from '../stores/useGameStore';
 import { Button } from './ui';
 
@@ -6,18 +8,39 @@ export function UnitSelector() {
     units,
     selectedUnitId,
     selectUnit,
-    isSyncing,
-    syncFromDocs,
+    pullStatsFromDocs,
+    addNotification,
     settings,
+    connections,
     setActiveTab
   } = useGameStore();
+  
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const selectedUnit = units.find(u => u.id === selectedUnitId);
   
   const handleSync = async () => {
-    if (selectedUnitId) {
-      // showNotifications = true для ручной синхронизации
-      await syncFromDocs(selectedUnitId, true);
+    if (!selectedUnitId || !selectedUnit) return;
+    
+    if (!settings.googleDocsUrl) {
+      addNotification('Настройте URL Google Docs в настройках', 'warning');
+      return;
+    }
+    
+    if (!selectedUnit.googleDocsHeader) {
+      addNotification('Укажите заголовок Google Docs для персонажа', 'warning');
+      return;
+    }
+    
+    setIsSyncing(true);
+    try {
+      await pullStatsFromDocs(selectedUnitId);
+      addNotification(`📥 ${selectedUnit.shortName || selectedUnit.name}: синхронизировано`, 'success');
+    } catch (e) {
+      console.error('[UnitSelector] Sync failed:', e);
+      addNotification('Ошибка синхронизации', 'error');
+    } finally {
+      setIsSyncing(false);
     }
   };
   
@@ -36,7 +59,7 @@ export function UnitSelector() {
   }
   
   // Проверяем, можно ли синхронизировать
-  const canSync = selectedUnit?.googleDocsHeader && settings.googleDocsUrl;
+  const canSync = !!(selectedUnit?.googleDocsHeader && settings.googleDocsUrl);
   
   // Формируем подсказку для кнопки синхронизации
   const getSyncTitle = (): string => {
