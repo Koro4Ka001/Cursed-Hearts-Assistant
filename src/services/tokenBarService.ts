@@ -12,7 +12,7 @@ const METADATA_KEY = "cursed-hearts-assistant";
 
 const CONFIG = {
   BAR_HEIGHT: 8,          
-  BAR_WIDTH_RATIO: 0.85,  // 🔥 Было 0.9
+  BAR_WIDTH_RATIO: 0.75,  // 🔥 Было 0.9
   MIN_BAR_WIDTH: 30,      // 🔥 Было 40
   MAX_BAR_WIDTH: 250,     // 🔥 Было 300
   BAR_GAP: 2,             
@@ -119,35 +119,33 @@ class TokenBarService {
 
   // 🔥 FIX: Правильный расчёт размеров с учётом DPI
   private calculateLayout(token: Image, useManaAsHp: boolean) {
-    const scaleX = Number(token.scale?.x) || 1;
-    const scaleY = Number(token.scale?.y) || 1;
-    
-    const imageWidth = Number(token.image?.width) || 150;
-    const imageHeight = Number(token.image?.height) || 150;
-    
-    // 🔥 DPI: сколько пикселей изображения = 1 ячейка сетки
-    const dpi = Number(token.grid?.dpi) || 150;
-    const G = CONFIG.GRID_CELL_SIZE;
-    
-    // Реальный размер токена в мировых координатах
-    const worldWidth = (imageWidth / dpi) * G * scaleX;
-    const worldHeight = (imageHeight / dpi) * G * scaleY;
-
-    let barW = Math.max(CONFIG.MIN_BAR_WIDTH, worldWidth * CONFIG.BAR_WIDTH_RATIO);
-    barW = Math.min(CONFIG.MAX_BAR_WIDTH, barW);
-    barW = Math.round(barW);
-    
-    // Центрируем бар под токеном
-    const barX = Math.round(token.position.x - barW / 2);
-    // Бар ниже токена на BAR_OFFSET_Y
-    const baseY = Math.round(token.position.y + worldHeight / 2 + CONFIG.BAR_OFFSET_Y);
-
-    const hpY = baseY;
-    const manaY = useManaAsHp ? baseY : baseY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
-
-    return { barW, barX, hpY, manaY };
-  }
-
+  const scaleX = Math.abs(Number(token.scale?.x) || 1);
+  const scaleY = Math.abs(Number(token.scale?.y) || 1);
+  
+  const imgW = Number(token.image?.width) || 150;
+  const imgH = Number(token.image?.height) || 150;
+  
+  // 🔥 FIX: Учитываем DPI изображения для правильного размера в мировых координатах
+  // В OBR: grid.dpi = сколько пикселей изображения = 1 ячейка сетки (150 мировых единиц)
+  const dpi = Number(token.grid?.dpi) || 150;
+  const GRID_WORLD_SIZE = 150; // OBR: 1 ячейка = 150 мировых единиц
+  
+  const worldWidth = (imgW / dpi) * GRID_WORLD_SIZE * scaleX;
+  const worldHeight = (imgH / dpi) * GRID_WORLD_SIZE * scaleY;
+  
+  let barW = Math.round(worldWidth * CONFIG.BAR_WIDTH_RATIO);
+  barW = Math.max(CONFIG.MIN_BAR_WIDTH, barW);
+  barW = Math.min(CONFIG.MAX_BAR_WIDTH, barW);
+  
+  const barX = Math.round(token.position.x - barW / 2);
+  const baseY = Math.round(token.position.y + worldHeight / 2 + CONFIG.BAR_OFFSET_Y);
+  
+  const hpY = baseY;
+  const manaY = useManaAsHp ? baseY : baseY + CONFIG.BAR_HEIGHT + CONFIG.BAR_GAP;
+  
+  return { barW, barX, hpY, manaY };
+}
+  
   private async removeExistingBarsFromScene(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
