@@ -12,11 +12,11 @@ const METADATA_KEY = "cursed-hearts-assistant";
 
 const CONFIG = {
   BAR_HEIGHT: 8,          
-  BAR_WIDTH_RATIO: 0.77,  // 🔥 Было 0.9
+  BAR_WIDTH_RATIO: 0.80,  // 🔥 Было 0.9
   MIN_BAR_WIDTH: 30,      // 🔥 Было 40
   MAX_BAR_WIDTH: 250,     // 🔥 Было 300
   BAR_GAP: 2,             
-  BAR_OFFSET_Y: 5,        // 🔥 Было -65. Теперь бары НИЖЕ токена
+  BAR_OFFSET_Y: 3,        // 🔥 Было -65. Теперь бары НИЖЕ токена
   
   BG_COLOR: "#0a0505",    
   STROKE_COLOR: "#000000",
