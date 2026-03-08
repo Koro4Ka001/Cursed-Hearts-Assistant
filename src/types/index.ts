@@ -14,6 +14,9 @@ export type DamageType =
   | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'
   | 'pure';
 
+// 🔥 ДОБАВЛЕНО: Категория урона (используется в CombatTab)
+export type DamageCategory = 'physical' | 'magical' | 'pure';
+
 export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
 export type WeaponType = 'melee' | 'ranged';
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
@@ -84,6 +87,8 @@ export interface Weapon {
   multishot?: number;
   ammoPerShot?: number;
   notes?: string;
+  extraDamageFormula?: string;   // 🔥 ДОБАВЛЕНО
+  extraDamageType?: DamageType;  // 🔥 ДОБАВЛЕНО
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -91,9 +96,9 @@ export interface Weapon {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type SpellActionType = 
-  | 'roll_attack' // НОВОЕ
-  | 'roll_cast'   // НОВОЕ
-  | 'roll_check'  // Deprecated
+  | 'roll_attack'
+  | 'roll_cast'
+  | 'roll_check'
   | 'roll_dice'
   | 'roll_table'
   | 'roll_damage'
@@ -183,7 +188,7 @@ export interface SpellAction {
   critMultiplier?: number;
   addDamageBonus?: boolean;
   saveDamageAs?: string;
-  forcePureOnCrit?: boolean; // ГАЛОЧКА
+  forcePureOnCrit?: boolean;
   
   setKey?: string;
   setValue?: string | number | boolean;
@@ -260,7 +265,6 @@ export interface CastContext {
   success: boolean;
   error?: string;
   
-  // Флаги для логики
   doubleDamageDice?: boolean;
   manaDiscount?: number;
 }
@@ -289,13 +293,13 @@ export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type ActionCategory = 
-  | 'check'       // Проверки характеристик
-  | 'social'      // Социальные взаимодействия
-  | 'exploration' // Исследование
-  | 'item'        // Использование предметов
-  | 'ability'     // Особые способности
-  | 'reaction'    // Реакции
-  | 'other';      // Прочее
+  | 'check'
+  | 'social'
+  | 'exploration'
+  | 'item'
+  | 'ability'
+  | 'reaction'
+  | 'other';
 
 export const ACTION_CATEGORY_NAMES: Record<ActionCategory, string> = {
   check: 'Проверка',
