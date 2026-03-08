@@ -94,8 +94,9 @@ export interface Weapon {
   multishot?: number;
   ammoPerShot?: number;
   notes?: string;
-  extraDamageFormula?: string;   // 🔥 ДОБАВЛЕНО
-  extraDamageType?: DamageType;  // 🔥 ДОБАВЛЕНО
+  extraDamageFormula?: string;
+  extraDamageType?: DamageType;
+  onHitActions?: SpellAction[];  // 🔥 Цепочка действий при попадании
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -426,7 +427,9 @@ export interface Resource {
   damageType?: DamageType;
   extraDamageFormula?: string;
   extraDamageType?: DamageType;
+  onHitActions?: SpellAction[];  // 🔥 Для амуниции — эффекты при попадании
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ЮНИТ
