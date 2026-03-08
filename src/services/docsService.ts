@@ -1,8 +1,4 @@
-/**
- * Сервис для работы с Google Docs через Google Apps Script Web App
- * 
- * ВАЖНО: POST запросы отправляются с Content-Type: text/plain для обхода CORS
- */
+// src/services/docsService.ts
 
 interface DocsStatsResponse {
   success: boolean;
@@ -26,39 +22,23 @@ class DocsService {
   private url: string = '';
   private isConnected: boolean = false;
   
-  /**
-   * Установить URL Google Apps Script Web App
-   */
   setUrl(url: string): void {
-    this.url = url;
+    this.url = url.trim();
     this.isConnected = false;
   }
   
-  /**
-   * Получить текущий URL
-   */
   getUrl(): string {
     return this.url;
   }
   
-  /**
-   * Проверить, установлен ли URL
-   */
   hasUrl(): boolean {
     return this.url.length > 0;
   }
   
-  /**
-   * Проверить подключение
-   */
   isDocsConnected(): boolean {
     return this.isConnected && this.hasUrl();
   }
   
-  /**
-   * POST запрос к Google Apps Script
-   * ВАЖНО: Content-Type: text/plain для обхода CORS
-   */
   private async post(data: Record<string, unknown>): Promise<DocsActionResponse> {
     if (!this.url) {
       return { success: false, error: 'URL не настроен' };
@@ -73,25 +53,27 @@ class DocsService {
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      const result = await response.json() as DocsActionResponse;
+      const text = await response.text();
+      let result: DocsActionResponse;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        throw new Error(`Ответ не JSON: ${text.substring(0, 100)}`);
+      }
+      
       this.isConnected = true;
       return result;
     } catch (error) {
       this.isConnected = false;
-      console.error('Docs POST error:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Неизвестная ошибка' 
-      };
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      console.error('Docs POST error:', msg);
+      return { success: false, error: msg };
     }
   }
   
-  /**
-   * GET запрос к Google Apps Script
-   */
   private async get(params: Record<string, string>): Promise<DocsStatsResponse> {
     if (!this.url) {
       return { success: false, error: 'URL не настроен' };
@@ -102,165 +84,104 @@ class DocsService {
       const response = await fetch(`${this.url}?${query}`, { redirect: 'follow' });
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      const result = await response.json() as DocsStatsResponse;
+      const text = await response.text();
+      let result: DocsStatsResponse;
+      try {
+        result = JSON.parse(text);
+      } catch {
+        throw new Error(`Ответ не JSON: ${text.substring(0, 100)}`);
+      }
+      
       this.isConnected = true;
       return result;
     } catch (error) {
       this.isConnected = false;
-      console.error('Docs GET error:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Неизвестная ошибка' 
-      };
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      console.error('Docs GET error:', msg);
+      return { success: false, error: msg };
     }
   }
   
-  /**
-   * Получить статы персонажа из Google Docs
-   */
   async getStats(character: string): Promise<DocsStatsResponse> {
     return this.get({ action: 'stats', character });
   }
   
-  /**
-   * Установить HP персонажа
-   */
-  async setHealth(
-    character: string, 
-    current: number, 
-    max?: number
-  ): Promise<DocsActionResponse> {
-    const data: Record<string, unknown> = {
-      action: 'setHealth',
-      character,
-      current
-    };
-    
-    if (max !== undefined) {
-      data['max'] = max;
-    }
-    
+  async setHealth(character: string, current: number, max?: number): Promise<DocsActionResponse> {
+    const data: Record<string, unknown> = { action: 'setHealth', character, current };
+    if (max !== undefined) data['max'] = max;
     return this.post(data);
   }
   
-  /**
-   * Установить ману персонажа
-   */
-  async setMana(
-    character: string, 
-    current: number, 
-    max?: number
-  ): Promise<DocsActionResponse> {
-    const data: Record<string, unknown> = {
-      action: 'setMana',
-      character,
-      current
-    };
-    
-    if (max !== undefined) {
-      data['max'] = max;
-    }
-    
+  async setMana(character: string, current: number, max?: number): Promise<DocsActionResponse> {
+    const data: Record<string, unknown> = { action: 'setMana', character, current };
+    if (max !== undefined) data['max'] = max;
     return this.post(data);
   }
   
-  /**
-   * Потратить ману
-   */
   async spendMana(character: string, amount: number): Promise<DocsActionResponse> {
-    return this.post({
-      action: 'spendMana',
-      character,
-      amount
-    });
+    return this.post({ action: 'spendMana', character, amount });
   }
   
-  /**
-   * Восстановить ману
-   */
   async restoreMana(character: string, amount: number): Promise<DocsActionResponse> {
-    return this.post({
-      action: 'restoreMana',
-      character,
-      amount
-    });
+    return this.post({ action: 'restoreMana', character, amount });
   }
   
-  /**
-   * Исцелить персонажа
-   */
   async heal(character: string, amount: number): Promise<DocsActionResponse> {
-    return this.post({
-      action: 'heal',
-      character,
-      amount
-    });
+    return this.post({ action: 'heal', character, amount });
   }
   
-  /**
-   * Установить значение ресурса
-   * Формат в Google Docs: "Название [current]/max"
-   */
-  async setResource(
-    character: string, 
-    resourceName: string, 
-    current: number,
-    max?: number
-  ): Promise<DocsActionResponse> {
-    const data: Record<string, unknown> = {
-      action: 'setResource',
-      character,
-      name: resourceName,
-      current
-    };
-    
-    if (max !== undefined) {
-      data['max'] = max;
-    }
-    
+  async setResource(character: string, resourceName: string, current: number, max?: number): Promise<DocsActionResponse> {
+    const data: Record<string, unknown> = { action: 'setResource', character, name: resourceName, current };
+    if (max !== undefined) data['max'] = max;
     return this.post(data);
   }
   
-  /**
-   * Записать лог действия
-   */
   async log(character: string, message: string): Promise<DocsActionResponse> {
-    return this.post({
-      action: 'log',
-      character,
-      message
-    });
+    return this.post({ action: 'log', character, message });
   }
   
-  /**
-   * Тестовое подключение
-   */
+  // 🔥 Улучшенный тест — парсит JSON ответ и проверяет success
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     if (!this.url) {
       return { success: false, error: 'URL не настроен' };
     }
     
     try {
+      console.log('[Docs] Testing connection to:', this.url.substring(0, 50) + '...');
+      
       const response = await fetch(`${this.url}?action=ping`, { redirect: 'follow' });
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      this.isConnected = true;
-      return { success: true };
+      const text = await response.text();
+      console.log('[Docs] Test response:', text.substring(0, 200));
+      
+      let result: { success?: boolean; message?: string; error?: string };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        throw new Error(`Ответ не JSON: "${text.substring(0, 100)}"`);
+      }
+      
+      if (result.success) {
+        this.isConnected = true;
+        console.log('[Docs] Connection test passed ✅');
+        return { success: true };
+      }
+      
+      return { success: false, error: result.error ?? 'Сервер вернул success: false' };
     } catch (error) {
       this.isConnected = false;
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Неизвестная ошибка' 
-      };
+      const msg = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      console.error('[Docs] Connection test failed:', msg);
+      return { success: false, error: msg };
     }
   }
 }
 
-// Экспортируем синглтон
 export const docsService = new DocsService();
