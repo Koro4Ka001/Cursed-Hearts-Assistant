@@ -1,31 +1,11 @@
 // src/services/diceService.ts
+
 import OBR from "@owlbear-rodeo/sdk";
-import type { DiceRollResult, RollModifier } from "../types";
+import type { DiceRollResult, RollModifier, BroadcastMessage } from "../types";
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
 export const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
-
-// ═══════════════════════════════════════════════════════════════
-// BROADCAST MESSAGE TYPE
-// ═══════════════════════════════════════════════════════════════
-
-export interface BroadcastMessage {
-  id: string;
-  type: 'roll' | 'damage' | 'hit' | 'miss' | 'spell' | 'heal' | 'death' | 'rok-card' | 'custom';
-  unitName: string;
-  title: string;
-  subtitle?: string;
-  icon?: string;
-  rolls?: number[];
-  total?: number;
-  isCrit?: boolean;
-  isCritFail?: boolean;
-  color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white';
-  hpBar?: { current: number; max: number };
-  details?: string[];
-  timestamp: number;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // LOCAL EVENT EMITTER
@@ -216,10 +196,6 @@ class DiceService {
     return "local"; 
   }
 
-  /**
-   * Основной метод броска
-   * @param silent - Если true, не отправляет broadcast уведомление (для внутренних расчетов)
-   */
   async roll(
     formula: string,
     label?: string,
@@ -422,7 +398,7 @@ class DiceService {
       type: dead ? 'death' : 'damage',
       unitName,
       title: `−${damage} HP`,
-      subtitle: dead ? '☠️ ПАЛИ В БОЮ' : undefined,
+      subtitle: dead ? '☠️ ПАЛ В БОЮ' : undefined,
       icon: dead ? '💀' : '💔',
       color: 'blood',
       hpBar: { current: Math.max(0, currentHP), max: maxHP },
@@ -447,10 +423,6 @@ class DiceService {
       timestamp: Date.now()
     });
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // 🃏 КРАСИВЫЙ BROADCAST ДЛЯ КАРТ РОКА
-  // ═══════════════════════════════════════════════════════════════
 
   async broadcastRokCard(
     unitName: string,
@@ -522,40 +494,38 @@ class DiceService {
       []
     );
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // broadcastSpell (для spellExecutor)
-  // ═══════════════════════════════════════════════════════════════
   
   async broadcastSpell(
     spellName: string,
     unitName: string,
     damage: number,
     damageType?: string,
-    isCrit?: boolean
+    isCrit?: boolean,
+    manaCost?: { formula?: string; value: number }
   ): Promise<void> {
     const subtitle = damageType 
       ? `${damage} ${damageType}` 
       : `${damage} урона`;
+    
+    const fullSubtitle = manaCost 
+      ? `${subtitle} | 💠${manaCost.formula ? ` ${manaCost.formula}=` : ''}${manaCost.value}`
+      : subtitle;
     
     await broadcast({
       id: msgId(),
       type: 'spell',
       unitName,
       title: spellName,
-      subtitle: isCrit ? `✨ КРИТ! ${subtitle}` : subtitle,
+      subtitle: isCrit ? `✨ КРИТ! ${fullSubtitle}` : fullSubtitle,
       icon: '✨',
       total: damage,
       isCrit,
       color: isCrit ? 'gold' : 'purple',
+      manaCost,
       timestamp: Date.now()
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // broadcastAction (для actionExecutor)
-  // ═══════════════════════════════════════════════════════════════
-  
   async broadcastAction(
     actionName: string,
     unitName: string,
@@ -574,10 +544,6 @@ class DiceService {
       timestamp: Date.now()
     });
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // 🔥 BROADCAST WEAPON EFFECT — видят ВСЕ игроки!
-  // ═══════════════════════════════════════════════════════════════
 
   async broadcastWeaponEffect(
     unitName: string,
