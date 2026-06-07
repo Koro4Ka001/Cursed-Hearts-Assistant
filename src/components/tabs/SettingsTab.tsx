@@ -1,3 +1,5 @@
+// src/components/tabs/SettingsTab.tsx
+
 import { useState, useEffect, useRef } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from '../../stores/useGameStore';
@@ -7,7 +9,7 @@ import { SpellChainEditor } from '../spell-editor';
 import { generateId } from '../../constants/spellActions';
 import { docsService } from '../../services/docsService';
 import { selectToken } from '../../services/hpTrackerService';
-import { GAME_ELEMENTS } from '../../constants/elements'; // 🔥 Берем элементы отсюда
+import { GAME_ELEMENTS } from '../../constants/elements';
 import type { 
   Unit, Weapon, Spell, SpellV2, Resource, DamageType, ProficiencyType, WeaponType,
   ElementModifier
@@ -18,10 +20,6 @@ import {
   ELEMENT_NAMES, isSpellV2, createEmptyElementModifier
 } from '../../types';
 import { SPELL_TYPES } from '../../constants/elements';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// КОМПОНЕНТ
-// ═══════════════════════════════════════════════════════════════════════════
 
 export function SettingsTab() {
   const { 
@@ -65,10 +63,6 @@ export function SettingsTab() {
       setIsTesting(false);
     }
   };
-  
-  // ─────────────────────────────────────────────────────────────────────────
-  // ИМПОРТ / ЭКСПОРТ
-  // ─────────────────────────────────────────────────────────────────────────
   
   const handleExportAll = () => {
     const data = {
@@ -242,9 +236,11 @@ export function SettingsTab() {
               <div className="space-y-2 pt-2 border-t border-edge-bone">
                 <Checkbox checked={settings.syncHP ?? true} onChange={(v) => updateSettings({ syncHP: v })} label="Синхронизировать HP" />
                 <Checkbox checked={settings.syncMana ?? true} onChange={(v) => updateSettings({ syncMana: v })} label="Синхронизировать ману" />
+                <Checkbox checked={settings.syncRage ?? true} onChange={(v) => updateSettings({ syncRage: v })} label="🔥 Синхронизировать Rage" />
                 <Checkbox checked={settings.syncResources ?? true} onChange={(v) => updateSettings({ syncResources: v })} label="Синхронизировать ресурсы" />
                 <Checkbox checked={settings.writeLogs ?? true} onChange={(v) => updateSettings({ writeLogs: v })} label="Логировать действия" />
                 <Checkbox checked={settings.showTokenBars ?? true} onChange={(v) => updateSettings({ showTokenBars: v })} label="🗺️ HP/Mana бары на токенах" />
+                <Checkbox checked={settings.showRokCards ?? false} onChange={(v) => updateSettings({ showRokCards: v })} label="🃏 Показывать карты Рока" />
               </div>
               <NumberStepper label="Авто-синхронизация (мин)" value={settings.autoSyncInterval ?? 5} onChange={(v) => updateSettings({ autoSyncInterval: v })} min={1} max={60} />
             </div>
@@ -281,9 +277,9 @@ export function SettingsTab() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // РЕДАКТОР ЮНИТА
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 interface UnitEditorProps {
   unit: Unit;
@@ -309,7 +305,8 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
     { id: 'armor', label: 'Броня' },
     { id: 'weapons', label: 'Оружие' },
     { id: 'spells', label: '✨ Закл.' },
-    { id: 'resources', label: 'Ресурсы' }
+    { id: 'resources', label: 'Ресурсы' },
+    { id: 'rage', label: '🔥 Rage' }
   ];
   
   return (
@@ -328,6 +325,7 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
       {editorTab === 'weapons' && <WeaponsEditor weapons={localUnit.weapons ?? []} onChange={(weapons) => update({ weapons })} />}
       {editorTab === 'spells' && <SpellsEditorV2 spells={localUnit.spells ?? []} resources={localUnit.resources ?? []} onChange={(spells) => update({ spells })} />}
       {editorTab === 'resources' && <ResourcesEditor resources={localUnit.resources ?? []} onChange={(resources) => update({ resources })} />}
+      {editorTab === 'rage' && <RageEditor localUnit={localUnit} update={update} />}
       
       <div className="flex gap-2 pt-3 border-t border-edge-bone sticky bottom-0 bg-dark">
         <Button variant="secondary" onClick={onCancel} className="flex-1">Отмена</Button>
@@ -337,9 +335,9 @@ function UnitEditor({ unit, onSave, onCancel }: UnitEditorProps) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// BASIC & STATS EDITOR
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// BASIC EDITOR
+// ═══════════════════════════════════════════════════════════════
 
 function BasicEditor({ localUnit, update }: { localUnit: Unit; update: (p: Partial<Unit>) => void }) {
   return (
@@ -359,6 +357,34 @@ function BasicEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
       </div>
       
       <Checkbox checked={localUnit.useManaAsHp ?? false} onChange={(v) => update({ useManaAsHp: v })} label="💠 Мана = Жизнь" />
+      
+      {/* 🔥 RAGE TOGGLE */}
+      <div className="space-y-2 pt-2 border-t border-edge-bone">
+        <Checkbox checked={localUnit.hasRage ?? false} onChange={(v) => update({ 
+          hasRage: v,
+          rage: v ? { current: 0, max: localUnit.rageConfig?.max ?? 100 } : undefined
+        })} label="🔥 Имеется Rage" />
+        
+        {localUnit.hasRage && (
+          <div className="grid grid-cols-2 gap-2 p-2 bg-obsidian rounded border border-edge-bone">
+            <NumberStepper 
+              label="Текущий Rage" 
+              value={localUnit.rage?.current ?? 0} 
+              onChange={(v) => update({ rage: { ...(localUnit.rage ?? { current: 0, max: 100 }), current: v } })}
+              max={999} 
+            />
+            <NumberStepper 
+              label="Макс Rage" 
+              value={localUnit.rage?.max ?? localUnit.rageConfig?.max ?? 100} 
+              onChange={(v) => update({ 
+                rage: { ...(localUnit.rage ?? { current: 0, max: 100 }), max: v },
+                rageConfig: { ...(localUnit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 }), max: v }
+              })}
+              max={999} 
+            />
+          </div>
+        )}
+      </div>
       
       <div className="space-y-2 pt-2 border-t border-edge-bone">
         <Checkbox checked={localUnit.hasRokCards ?? false} onChange={(v) => update({ hasRokCards: v })} label="🃏 Имеет колоду Рока" />
@@ -398,10 +424,6 @@ function StatsEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ELEMENT MODIFIERS EDITOR (ИСПРАВЛЕННЫЙ)
-// ═══════════════════════════════════════════════════════════════════════════
 
 function ElementModifiersEditor({ modifiers, onChange }: { modifiers: ElementModifier[]; onChange: (modifiers: ElementModifier[]) => void; }) {
   const [newElementId, setNewElementId] = useState('');
@@ -502,10 +524,6 @@ function ElementModifiersEditor({ modifiers, onChange }: { modifiers: ElementMod
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ARMOR EDITOR
-// ═══════════════════════════════════════════════════════════════════════════
-
 function ArmorEditor({ localUnit, update }: { localUnit: Unit; update: (p: Partial<Unit>) => void }) {
   return (
     <div className="space-y-4">
@@ -527,10 +545,6 @@ function ArmorEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SPELLS EDITOR V2
-// ═══════════════════════════════════════════════════════════════════════════
 
 function SpellsEditorV2({ spells, resources, onChange }: { spells: (Spell | SpellV2)[]; resources: Resource[]; onChange: (spells: (Spell | SpellV2)[]) => void; }) {
   const [editingSpell, setEditingSpell] = useState<Spell | SpellV2 | null>(null);
@@ -571,10 +585,6 @@ function SpellsEditorV2({ spells, resources, onChange }: { spells: (Spell | Spel
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// WEAPONS EDITOR
-// ═══════════════════════════════════════════════════════════════════════════
 
 function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (weapons: Weapon[]) => void; }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -618,7 +628,6 @@ function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (we
       ))}
       <Button variant="gold" size="sm" onClick={addWeapon} className="w-full">+ Добавить оружие</Button>
       
-      {/* Модалка: редактирование оружия */}
       <Modal isOpen={!!editingWeapon} onClose={() => setEditingId(null)} title="Редактировать оружие">
         {editingWeapon && (
           <div className="space-y-3">
@@ -642,7 +651,6 @@ function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (we
         )}
       </Modal>
       
-      {/* 🔥 Модалка: эффекты при попадании */}
       <Modal isOpen={!!effectsWeapon} onClose={() => setEffectsId(null)} title={`⚡ Эффекты: ${effectsWeapon?.name ?? ''}`} className="max-w-lg max-h-[85vh]">
         {effectsWeapon && (
           <div className="space-y-3">
@@ -668,10 +676,6 @@ function WeaponsEditor({ weapons, onChange }: { weapons: Weapon[]; onChange: (we
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// RESOURCES EDITOR
-// ═══════════════════════════════════════════════════════════════════════════
 
 function ResourcesEditor({ resources, onChange }: { resources: Resource[]; onChange: (resources: Resource[]) => void; }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -711,7 +715,6 @@ function ResourcesEditor({ resources, onChange }: { resources: Resource[]; onCha
       ))}
       <Button variant="gold" size="sm" onClick={addResource} className="w-full">+ Добавить ресурс</Button>
       
-      {/* Модалка: редактирование ресурса */}
       <Modal isOpen={!!editingResource} onClose={() => setEditingId(null)} title="Редактировать ресурс">
         {editingResource && (
           <div className="space-y-3">
@@ -740,7 +743,6 @@ function ResourcesEditor({ resources, onChange }: { resources: Resource[]; onCha
         )}
       </Modal>
       
-      {/* 🔥 Модалка: эффекты боеприпасов при попадании */}
       <Modal isOpen={!!effectsResource} onClose={() => setEffectsId(null)} title={`⚡ Эффекты: ${effectsResource?.name ?? ''}`} className="max-w-lg max-h-[85vh]">
         {effectsResource && (
           <div className="space-y-3">
@@ -760,6 +762,40 @@ function ResourcesEditor({ resources, onChange }: { resources: Resource[]; onCha
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🔥 RAGE EDITOR
+// ═══════════════════════════════════════════════════════════════
+
+function RageEditor({ localUnit, update }: { localUnit: Unit; update: (p: Partial<Unit>) => void }) {
+  return (
+    <div className="space-y-3">
+      <Checkbox checked={localUnit.hasRage ?? false} onChange={(v) => update({ 
+        hasRage: v,
+        rage: v ? { current: 0, max: localUnit.rageConfig?.max ?? 100 } : undefined
+      })} label="🔥 Имеется Rage" />
+      
+      {localUnit.hasRage && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <NumberStepper label="Текущий Rage" value={localUnit.rage?.current ?? 0} onChange={(v) => update({ rage: { ...(localUnit.rage ?? { current: 0, max: 100 }), current: v } })} max={999} />
+            <NumberStepper label="Макс Rage" value={localUnit.rage?.max ?? 100} onChange={(v) => update({ rage: { ...(localUnit.rage ?? { current: 0, max: 100 }), max: v } })} max={999} />
+          </div>
+          
+          <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-2">
+            <div className="text-xs text-faded uppercase">Конфигурация Rage</div>
+            <div className="grid grid-cols-2 gap-2">
+              <NumberStepper label="За получение урона" value={localUnit.rageConfig?.onTakeDamage ?? 5} onChange={(v) => update({ rageConfig: { ...(localUnit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 }), onTakeDamage: v } })} min={0} max={50} />
+              <NumberStepper label="За блокировку" value={localUnit.rageConfig?.onArmorBlock ?? 2} onChange={(v) => update({ rageConfig: { ...(localUnit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 }), onArmorBlock: v } })} min={0} max={50} />
+              <NumberStepper label="За нанесение урона" value={localUnit.rageConfig?.onDealDamage ?? 4} onChange={(v) => update({ rageConfig: { ...(localUnit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 }), onDealDamage: v } })} min={0} max={50} />
+              <NumberStepper label="Максимум" value={localUnit.rageConfig?.max ?? 100} onChange={(v) => update({ rageConfig: { ...(localUnit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 }), max: v } })} min={10} max={1000} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
