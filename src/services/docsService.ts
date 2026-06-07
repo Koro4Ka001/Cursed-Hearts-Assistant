@@ -4,6 +4,7 @@ interface DocsStatsResponse {
   success: boolean;
   health?: { current: number; max: number };
   mana?: { current: number; max: number };
+  rage?: { current: number; max: number }; // 🔥
   resources?: Record<string, { current: number; max: number }>;
   characterName?: string;
   error?: string;
@@ -15,6 +16,7 @@ interface DocsActionResponse {
   max?: number;
   health?: { current: number; max: number };
   mana?: { current: number; max: number };
+  rage?: { current: number; max: number }; // 🔥
   error?: string;
 }
 
@@ -121,6 +123,13 @@ class DocsService {
     return this.post(data);
   }
   
+  // 🔥 RAGE
+  async setRage(character: string, current: number, max?: number): Promise<DocsActionResponse> {
+    const data: Record<string, unknown> = { action: 'setRage', character, current };
+    if (max !== undefined) data['max'] = max;
+    return this.post(data);
+  }
+  
   async spendMana(character: string, amount: number): Promise<DocsActionResponse> {
     return this.post({ action: 'spendMana', character, amount });
   }
@@ -143,7 +152,6 @@ class DocsService {
     return this.post({ action: 'log', character, message });
   }
   
-  // 🔥 Улучшенный тест — парсит JSON ответ и проверяет success
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     if (!this.url) {
       return { success: false, error: 'URL не настроен' };
