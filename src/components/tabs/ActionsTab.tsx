@@ -22,9 +22,9 @@ import {
   ACTION_CATEGORY_ICONS 
 } from '../../types';
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: ВЫЧИСЛЕНИЕ СТОИМОСТИ (ПОДДЕРЖКА ФОРМУЛ)
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 function evaluateCost(cost: ActionCost): { value: number; formula?: string; rolled?: boolean } {
   if (typeof cost.amount === 'number') {
@@ -61,14 +61,14 @@ function evaluateCost(cost: ActionCost): { value: number; formula?: string; roll
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // КОМПОНЕНТ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export function ActionsTab() {
   const { 
     units, selectedUnitId, updateUnit, 
-    spendMana, setHP, setMana,
+    spendMana, setHP, setMana, spendRage,
     addNotification, triggerEffect 
   } = useGameStore();
   
@@ -99,9 +99,9 @@ export function ActionsTab() {
   const customActions = unit.customActions ?? [];
   const resources = unit.resources ?? [];
   
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // СВОРАЧИВАНИЕ КАТЕГОРИЙ
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   
   const toggleCategory = (category: string) => {
     setCollapsedCategories(prev => {
@@ -115,9 +115,9 @@ export function ActionsTab() {
     });
   };
   
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // ВЫПОЛНЕНИЕ ДЕЙСТВИЯ V2
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   
   const executeActionV2 = async (action: CustomActionV2) => {
     setIsExecuting(true);
@@ -145,6 +145,12 @@ export function ActionsTab() {
           setIsExecuting(false);
           return;
         }
+      } else if (cost.type === 'rage' && unit.hasRage) {
+        if ((unit.rage?.current ?? 0) < evaluated.value) {
+          addNotification(`Недостаточно Rage! Нужно ${evaluated.value}${evaluated.formula ? ` (${evaluated.formula})` : ''}`, 'warning');
+          setIsExecuting(false);
+          return;
+        }
       } else if (cost.type === 'resource' && cost.resourceId) {
         const resource = resources.find(r => r.id === cost.resourceId);
         if (!resource || resource.current < evaluated.value) {
@@ -159,9 +165,9 @@ export function ActionsTab() {
     const costLog: string[] = [];
     for (const { cost, value, formula, rolled } of costResults) {
       if (rolled) {
-        costLog.push(`💠 ${cost.type === 'mana' ? 'Мана' : cost.type === 'health' ? 'HP' : 'Ресурс'}: ${formula} = ${value}`);
+        costLog.push(`💠 ${cost.type === 'mana' ? 'Мана' : cost.type === 'health' ? 'HP' : cost.type === 'rage' ? 'Rage' : 'Ресурс'}: ${formula} = ${value}`);
       } else {
-        costLog.push(`💠 ${cost.type === 'mana' ? 'Мана' : cost.type === 'health' ? 'HP' : 'Ресурс'}: ${value}`);
+        costLog.push(`💠 ${cost.type === 'mana' ? 'Мана' : cost.type === 'health' ? 'HP' : cost.type === 'rage' ? 'Rage' : 'Ресурс'}: ${value}`);
       }
     }
     setActionLog(costLog);
@@ -172,6 +178,8 @@ export function ActionsTab() {
         await spendMana(unit.id, value);
       } else if (cost.type === 'health') {
         await setHP(unit.id, unit.health.current - value);
+      } else if (cost.type === 'rage' && unit.hasRage) {
+        await spendRage(unit.id, value);
       } else if (cost.type === 'resource' && cost.resourceId) {
         const resource = resources.find(r => r.id === cost.resourceId);
         if (resource) {
@@ -253,9 +261,9 @@ export function ActionsTab() {
     }
   };
   
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // ВЫПОЛНЕНИЕ СТАРОГО ДЕЙСТВИЯ (fallback)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   
   const executeLegacyAction = async (action: CustomAction) => {
     setIsExecuting(true);
@@ -285,9 +293,9 @@ export function ActionsTab() {
     }
   };
   
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // ОБРАБОТЧИКИ
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   
   const executeAction = async (action: CustomAction | CustomActionV2) => {
     if (isCustomActionV2(action)) {
@@ -332,9 +340,9 @@ export function ActionsTab() {
     return acc;
   }, {} as Record<string, (CustomAction | CustomActionV2)[]>);
   
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // РЕНДЕР
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
