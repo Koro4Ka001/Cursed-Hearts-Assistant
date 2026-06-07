@@ -1,27 +1,28 @@
 // src/stores/useGameStore.ts
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Unit, AppSettings, RollModifier, ElementModifier } from '../types';
+import type { Unit, AppSettings, RollModifier, ElementModifier, RageEffect } from '../types';
 import { tokenBarService } from '../services/tokenBarService';
 import { docsService } from '../services/docsService';
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // ГЕНЕРАТОР ID
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 9);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // UNDO СИСТЕМА
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 interface UndoEntry {
   id: string;
   timestamp: number;
   description: string;
-  type: 'hp' | 'mana' | 'resource';
+  type: 'hp' | 'mana' | 'resource' | 'rage';
   unitId: string;
   unitName: string;
   resourceId?: string;
@@ -31,9 +32,9 @@ interface UndoEntry {
 
 const MAX_UNDO_HISTORY = 20;
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // МИГРАЦИЯ ДАННЫХ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 const PHYSICAL_TYPES = ['slashing', 'piercing', 'bludgeoning', 'chopping', 'pure'];
 
@@ -45,7 +46,15 @@ function migrateUnit(unit: Unit): Unit {
   );
   
   if (!hasOldData) {
-    return { ...unit, elementModifiers: unit.elementModifiers ?? [] };
+    return { 
+      ...unit, 
+      elementModifiers: unit.elementModifiers ?? [],
+      hasRage: unit.hasRage ?? false,
+      rage: unit.rage ?? { current: 0, max: 100 },
+      rageConfig: unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 },
+      rageEffects: unit.rageEffects ?? [],
+      activeRageEffects: unit.activeRageEffects ?? []
+    };
   }
   
   console.log(`[MIGRATION] Migrating unit "${unit.name}"...`);
@@ -103,15 +112,20 @@ function migrateUnit(unit: Unit): Unit {
     ...unit,
     elementModifiers: modifiers,
     elementAffinities: undefined,
-    magicBonuses: undefined
+    magicBonuses: undefined,
+    hasRage: unit.hasRage ?? false,
+    rage: unit.rage ?? { current: 0, max: 100 },
+    rageConfig: unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 },
+    rageEffects: unit.rageEffects ?? [],
+    activeRageEffects: unit.activeRageEffects ?? []
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // ТИПЫ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
-type TabId = 'combat' | 'magic' | 'actions' | 'notes' | 'settings';
+type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'settings';
 
 interface Notification {
   id: string;
@@ -154,14 +168,23 @@ interface GameState {
   deleteUnit: (id: string) => void;
   selectUnit: (id: string | null) => void;
   
-  // HP / Мана / Ресурсы
+  // HP / Мана / Rage / Ресурсы
   setHP: (unitId: string, value: number) => Promise<void>;
   setMana: (unitId: string, value: number) => Promise<void>;
+  setRage: (unitId: string, value: number) => Promise<void>;
+  addRage: (unitId: string, amount: number) => Promise<void>;
+  spendRage: (unitId: string, amount: number) => Promise<void>;
+  resetRage: (unitId: string) => Promise<void>;
   spendMana: (unitId: string, amount: number) => Promise<void>;
   heal: (unitId: string, amount: number) => Promise<void>;
   takeDamage: (unitId: string, amount: number) => Promise<void>;
   setResource: (unitId: string, resourceId: string, current: number) => Promise<void>;
   spendResource: (unitId: string, resourceId: string, amount: number) => Promise<void>;
+  
+  // Rage эффекты
+  activateRageEffect: (unitId: string, effect: RageEffect) => Promise<void>;
+  decrementRageEffects: (unitId: string) => Promise<void>;
+  removeActiveRageEffect: (unitId: string, effectId: string) => Promise<void>;
   
   // Undo
   undo: () => Promise<void>;
@@ -185,9 +208,9 @@ interface GameState {
   startAutoSync: () => void;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
   if (!settings.showTokenBars || !unit.owlbearTokenId) return;
@@ -206,9 +229,6 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
   }
 }
 
-/**
- * Гарантирует что docsService.url актуален
- */
 function ensureDocsUrl(settings: AppSettings): boolean {
   if (!settings.googleDocsUrl) return false;
   if (docsService.getUrl() !== settings.googleDocsUrl) {
@@ -218,9 +238,9 @@ function ensureDocsUrl(settings: AppSettings): boolean {
   return true;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // DEFAULT UNIT
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 function createDefaultUnit(): Unit {
   return {
@@ -230,6 +250,11 @@ function createDefaultUnit(): Unit {
     googleDocsHeader: '',
     health: { current: 100, max: 100 },
     mana: { current: 50, max: 50 },
+    rage: { current: 0, max: 100 },
+    hasRage: false,
+    rageConfig: { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 },
+    rageEffects: [],
+    activeRageEffects: [],
     stats: {
       physicalPower: 0, dexterity: 0, vitality: 0,
       intelligence: 0, charisma: 0, initiative: 0
@@ -250,15 +275,15 @@ function createDefaultUnit(): Unit {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // АВТО-СИНХРОНИЗАЦИЯ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 let autoSyncIntervalId: ReturnType<typeof setInterval> | null = null;
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // STORE
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export const useGameStore = create<GameState>()(
   persist(
@@ -269,10 +294,12 @@ export const useGameStore = create<GameState>()(
       settings: {
         syncHP: true,
         syncMana: true,
+        syncRage: true,
         syncResources: true,
         writeLogs: true,
         showTokenBars: true,
-        autoSyncInterval: 5
+        autoSyncInterval: 5,
+        showRokCards: false
       },
       notifications: [],
       combatLog: [],
@@ -307,7 +334,7 @@ export const useGameStore = create<GameState>()(
         
         const { units, settings } = get();
         const unit = units.find(u => u.id === id);
-        if (unit && (updates.health || updates.mana)) {
+        if (unit && (updates.health || updates.mana || updates.rage)) {
           updateTokenBars(unit, settings);
         }
       },
@@ -359,15 +386,12 @@ export const useGameStore = create<GameState>()(
         const updatedUnit = { ...unit, health: { ...unit.health, current: newHP } };
         await updateTokenBars(updatedUnit, settings);
         
-        // Google Docs sync (push)
         if (connections.docs && settings.syncHP && unit.googleDocsHeader) {
           if (!ensureDocsUrl(settings)) return;
           try {
             const result = await docsService.setHealth(unit.googleDocsHeader, newHP, unit.health.max);
             if (result.success) {
               console.log(`[Store] 📄 Synced HP to Docs: ${unit.shortName} = ${newHP}`);
-            } else {
-              console.warn(`[Store] 📄 HP sync failed: ${result.error}`);
             }
           } catch (e) {
             console.warn('[Store] Docs sync HP exception:', e);
@@ -406,18 +430,15 @@ export const useGameStore = create<GameState>()(
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
-        const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
+        const updatedUnit = { ...unit, mana: { ...u.mana, current: newMana } };
         await updateTokenBars(updatedUnit, settings);
         
-        // Google Docs sync (push)
         if (connections.docs && settings.syncMana && unit.googleDocsHeader) {
           if (!ensureDocsUrl(settings)) return;
           try {
             const result = await docsService.setMana(unit.googleDocsHeader, newMana, unit.mana.max);
             if (result.success) {
               console.log(`[Store] 📄 Synced Mana to Docs: ${unit.shortName} = ${newMana}`);
-            } else {
-              console.warn(`[Store] 📄 Mana sync failed: ${result.error}`);
             }
           } catch (e) {
             console.warn('[Store] Docs sync Mana exception:', e);
@@ -430,6 +451,138 @@ export const useGameStore = create<GameState>()(
         if (!unit) return;
         await get().setMana(unitId, unit.mana.current - amount);
       },
+      
+      // ═══════════════════════════════════════════════════════════════
+      // 🔥 RAGE
+      // ═══════════════════════════════════════════════════════════════
+      
+      setRage: async (unitId, value) => {
+        const { units, settings, connections } = get();
+        const unit = units.find(u => u.id === unitId);
+        if (!unit || !unit.hasRage) return;
+        
+        const previousValue = unit.rage?.current ?? 0;
+        const max = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
+        const newRage = Math.max(0, Math.min(value, max));
+        
+        const undoEntry: UndoEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          description: `${unit.shortName}: Rage ${previousValue} → ${newRage}`,
+          type: 'rage',
+          unitId,
+          unitName: unit.shortName ?? unit.name,
+          resourceId: 'rage',
+          previousValue,
+          newValue: newRage
+        };
+        
+        set(state => ({
+          units: state.units.map(u => 
+            u.id === unitId 
+              ? { ...u, rage: { ...(u.rage ?? { current: 0, max }), current: newRage } } 
+              : u
+          ),
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
+          connections: { ...state.connections, lastSyncTime: Date.now() }
+        }));
+        
+        // Google Docs sync
+        if (connections.docs && settings.syncRage && unit.googleDocsHeader) {
+          if (!ensureDocsUrl(settings)) return;
+          try {
+            const result = await docsService.setRage(unit.googleDocsHeader, newRage, max);
+            if (result.success) {
+              console.log(`[Store] 🔥 Synced Rage to Docs: ${unit.shortName} = ${newRage}`);
+            }
+          } catch (e) {
+            console.warn('[Store] Docs sync Rage exception:', e);
+          }
+        }
+      },
+      
+      addRage: async (unitId, amount) => {
+        const unit = get().units.find(u => u.id === unitId);
+        if (!unit || !unit.hasRage) return;
+        const current = unit.rage?.current ?? 0;
+        const max = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
+        await get().setRage(unitId, Math.min(current + amount, max));
+      },
+      
+      spendRage: async (unitId, amount) => {
+        const unit = get().units.find(u => u.id === unitId);
+        if (!unit || !unit.hasRage) return;
+        await get().setRage(unitId, (unit.rage?.current ?? 0) - amount);
+      },
+      
+      resetRage: async (unitId) => {
+        await get().setRage(unitId, 0);
+      },
+      
+      activateRageEffect: async (unitId, effect) => {
+        const { units } = get();
+        const unit = units.find(u => u.id === unitId);
+        if (!unit || !unit.hasRage) return;
+        
+        // Проверяем хватает ли Rage
+        const currentRage = unit.rage?.current ?? 0;
+        if (currentRage < effect.cost) {
+          get().addNotification(`Недостаточно Rage! Нужно ${effect.cost}`, 'warning');
+          return;
+        }
+        
+        // Тратим Rage
+        await get().spendRage(unitId, effect.cost);
+        
+        // Добавляем активный эффект
+        const activeEffect = { ...effect, currentRounds: effect.durationRounds };
+        
+        set(state => ({
+          units: state.units.map(u => 
+            u.id === unitId 
+              ? { ...u, activeRageEffects: [...(u.activeRageEffects ?? []), activeEffect] } 
+              : u
+          )
+        }));
+        
+        get().addNotification(`🔥 Активировано: ${effect.name}`, 'success');
+      },
+      
+      decrementRageEffects: async (unitId) => {
+        const { units } = get();
+        const unit = units.find(u => u.id === unitId);
+        if (!unit) return;
+        
+        const activeEffects = unit.activeRageEffects ?? [];
+        const remainingEffects = activeEffects
+          .map(e => ({ ...e, currentRounds: e.currentRounds - 1 }))
+          .filter(e => e.currentRounds > 0);
+        
+        if (remainingEffects.length !== activeEffects.length) {
+          get().addNotification('⏳ Эффект Rage закончился', 'info');
+        }
+        
+        set(state => ({
+          units: state.units.map(u => 
+            u.id === unitId ? { ...u, activeRageEffects: remainingEffects } : u
+          )
+        }));
+      },
+      
+      removeActiveRageEffect: async (unitId, effectId) => {
+        const { units } = get();
+        set(state => ({
+          units: state.units.map(u => 
+            u.id === unitId 
+              ? { ...u, activeRageEffects: (u.activeRageEffects ?? []).filter(e => e.id !== effectId) } 
+              : u
+          )
+        }));
+      },
+      
+      // ═══════════════════════════════════════════════════════════════
+      // ОСТАЛЬНОЕ (heal, takeDamage, resources, undo, docs...)
+      // ═══════════════════════════════════════════════════════════════
       
       heal: async (unitId, amount) => {
         const unit = get().units.find(u => u.id === unitId);
@@ -450,76 +603,6 @@ export const useGameStore = create<GameState>()(
           await get().setHP(unitId, unit.health.current - amount);
         }
       },
-
-// ═══════════════════════════════════════════════════════════════
-// RAGE
-// ══════════════════════════════════════════════════════════════
-
-setRage: async (unitId, value) => {
-  const { units, settings, connections } = get();
-  const unit = units.find(u => u.id === unitId);
-  if (!unit || !unit.hasRage) return;
-  
-  const previousValue = unit.rage?.current ?? 0;
-  const newRage = Math.max(0, Math.min(value, unit.rage?.max ?? 100));
-  
-  const undoEntry: UndoEntry = {
-    id: generateId(),
-    timestamp: Date.now(),
-    description: `${unit.shortName}: Rage ${previousValue} → ${newRage}`,
-    type: 'resource',
-    unitId,
-    unitName: unit.shortName ?? unit.name,
-    resourceId: 'rage',
-    previousValue,
-    newValue: newRage
-  };
-  
-  set(state => ({
-    units: state.units.map(u => 
-      u.id === unitId 
-        ? { ...u, rage: { ...(u.rage ?? { current: 0, max: 100 }), current: newRage } } 
-        : u
-    ),
-    undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
-    connections: { ...state.connections, lastSyncTime: Date.now() }
-  }));
-  
-  // Google Docs sync
-  if (connections.docs && settings.syncRage && unit.googleDocsHeader) {
-    if (!ensureDocsUrl(settings)) return;
-    try {
-      const result = await docsService.setRage(unit.googleDocsHeader, newRage, unit.rage?.max ?? 100);
-      if (result.success) {
-        console.log(`[Store] 📄 Synced Rage to Docs: ${unit.shortName} = ${newRage}`);
-      }
-    } catch (e) {
-      console.warn('[Store] Docs sync Rage exception:', e);
-    }
-  }
-},
-
-addRage: async (unitId, amount) => {
-  const unit = get().units.find(u => u.id === unitId);
-  if (!unit || !unit.hasRage) return;
-  const current = unit.rage?.current ?? 0;
-  const max = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
-  await get().setRage(unitId, Math.min(current + amount, max));
-},
-
-spendRage: async (unitId, amount) => {
-  const unit = get().units.find(u => u.id === unitId);
-  if (!unit || !unit.hasRage) return;
-  await get().setRage(unitId, (unit.rage?.current ?? 0) - amount);
-},
-
-resetRage: async (unitId) => {
-  await get().setRage(unitId, 0);
-},
-      
-      // ═══════════════════════════════════════════════════════════════
-      // RESOURCES
-      // ═══════════════════════════════════════════════════════════════
       
       setResource: async (unitId, resourceId, current) => {
         const { units, settings, connections } = get();
@@ -558,7 +641,6 @@ resetRage: async (unitId) => {
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
-        // Google Docs sync
         if (connections.docs && settings.syncResources && unit.googleDocsHeader && resource.syncWithDocs) {
           if (!ensureDocsUrl(settings)) return;
           try {
@@ -576,10 +658,6 @@ resetRage: async (unitId) => {
         if (!resource) return;
         await get().setResource(unitId, resourceId, resource.current - amount);
       },
-      
-      // ═══════════════════════════════════════════════════════════════
-      // UNDO
-      // ═══════════════════════════════════════════════════════════════
       
       undo: async () => {
         const { undoHistory, units, settings, addNotification } = get();
@@ -621,9 +699,22 @@ resetRage: async (unitId) => {
               ),
               undoHistory: restHistory
             }));
-            await updateTokenBars({ ...unit, mana: { ...unit.mana, current: lastEntry.previousValue } }, settings);
+            await updateTokenBars({ ...unit, mana: { ...u.mana, current: lastEntry.previousValue } }, settings);
             if (get().connections.docs && settings.syncMana && unit.googleDocsHeader) {
               try { await docsService.setMana(unit.googleDocsHeader, lastEntry.previousValue, unit.mana.max); } catch {}
+            }
+            break;
+          }
+          case 'rage': {
+            set(state => ({
+              units: state.units.map(u => 
+                u.id === lastEntry.unitId 
+                  ? { ...u, rage: { ...(u.rage ?? { current: 0, max: 100 }), current: lastEntry.previousValue } } : u
+              ),
+              undoHistory: restHistory
+            }));
+            if (get().connections.docs && settings.syncRage && unit.googleDocsHeader) {
+              try { await docsService.setRage(unit.googleDocsHeader, lastEntry.previousValue, unit.rage?.max ?? 100); } catch {}
             }
             break;
           }
@@ -655,10 +746,6 @@ resetRage: async (unitId) => {
         get().addNotification('История отмены очищена', 'info');
       },
       
-      // ═══════════════════════════════════════════════════════════════
-      // 🔥 PULL FROM DOCS (docs → local) — источник истины!
-      // ═══════════════════════════════════════════════════════════════
-      
       pullStatsFromDocs: async (unitId: string) => {
         const { units, settings, connections } = get();
         const unit = units.find(u => u.id === unitId);
@@ -677,7 +764,6 @@ resetRage: async (unitId) => {
           const updates: Partial<Unit> = {};
           let changed = false;
           
-          // HP из Docs
           if (stats.health && settings.syncHP) {
             if (stats.health.current !== unit.health.current || stats.health.max !== unit.health.max) {
               updates.health = { current: stats.health.current, max: stats.health.max };
@@ -685,7 +771,6 @@ resetRage: async (unitId) => {
             }
           }
           
-          // Мана из Docs
           if (stats.mana && settings.syncMana) {
             if (stats.mana.current !== unit.mana.current || stats.mana.max !== unit.mana.max) {
               updates.mana = { current: stats.mana.current, max: stats.mana.max };
@@ -693,7 +778,13 @@ resetRage: async (unitId) => {
             }
           }
           
-          // Ресурсы из Docs
+          if (stats.rage && settings.syncRage && unit.hasRage) {
+            if (stats.rage.current !== (unit.rage?.current ?? 0) || stats.rage.max !== (unit.rage?.max ?? 100)) {
+              updates.rage = { current: stats.rage.current, max: stats.rage.max };
+              changed = true;
+            }
+          }
+          
           if (stats.resources && settings.syncResources) {
             const updatedResources = unit.resources.map(r => {
               if (r.syncWithDocs && stats.resources?.[r.name]) {
@@ -714,17 +805,15 @@ resetRage: async (unitId) => {
               connections: { ...state.connections, lastSyncTime: Date.now() }
             }));
             
-            // Обновляем token bars
             const updatedUnit = { ...unit, ...updates } as Unit;
             await updateTokenBars(updatedUnit, settings);
             
             console.log(
               `[Store] 📥 Pulled from Docs: ${unit.shortName}`,
               `HP=${stats.health?.current}/${stats.health?.max}`,
-              `Mana=${stats.mana?.current}/${stats.mana?.max}`
+              `Mana=${stats.mana?.current}/${stats.mana?.max}`,
+              `Rage=${stats.rage?.current}/${stats.rage?.max}`
             );
-          } else {
-            console.log(`[Store] 📥 ${unit.shortName}: already in sync with Docs`);
           }
         } catch (e) {
           console.warn(`[Store] 📥 Pull failed for ${unit.shortName}:`, e);
@@ -756,10 +845,6 @@ resetRage: async (unitId) => {
         }
       },
       
-      // ═══════════════════════════════════════════════════════════════
-      // PUSH TO DOCS (local → docs)
-      // ═══════════════════════════════════════════════════════════════
-      
       syncUnitToDocs: async (unit: Unit) => {
         const { settings, connections } = get();
         if (!connections.docs || !unit.googleDocsHeader) return;
@@ -771,6 +856,9 @@ resetRage: async (unitId) => {
           }
           if (settings.syncMana) {
             await docsService.setMana(unit.googleDocsHeader, unit.mana.current, unit.mana.max);
+          }
+          if (settings.syncRage && unit.hasRage) {
+            await docsService.setRage(unit.googleDocsHeader, unit.rage?.current ?? 0, unit.rage?.max ?? 100);
           }
           if (settings.syncResources) {
             for (const resource of unit.resources) {
@@ -785,16 +873,11 @@ resetRage: async (unitId) => {
         }
       },
       
-      // ═══════════════════════════════════════════════════════════════
-      // SETTINGS
-      // ═══════════════════════════════════════════════════════════════
-      
       updateSettings: (updates) => {
         set(state => ({
           settings: { ...state.settings, ...updates }
         }));
         
-        // Синхронизируем URL docsService при изменении
         if (updates.googleDocsUrl !== undefined) {
           if (updates.googleDocsUrl) {
             docsService.setUrl(updates.googleDocsUrl);
@@ -813,10 +896,6 @@ resetRage: async (unitId) => {
           }
         }
       },
-      
-      // ═══════════════════════════════════════════════════════════════
-      // UI & NOTIFICATIONS
-      // ═══════════════════════════════════════════════════════════════
       
       addNotification: (message, type = 'info') => {
         const notification: Notification = {
@@ -846,7 +925,6 @@ resetRage: async (unitId) => {
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
-        // Логируем в Google Docs
         if (connections.docs && settings.writeLogs) {
           ensureDocsUrl(settings);
           const unit = get().units.find(u => u.shortName === unitName || u.name === unitName);
@@ -862,10 +940,6 @@ resetRage: async (unitId) => {
       },
       
       setNextRollModifier: (mod) => set({ nextRollModifier: mod }),
-      
-      // ═══════════════════════════════════════════════════════════════
-      // CONNECTIONS
-      // ═══════════════════════════════════════════════════════════════
       
       setConnection: (type, connected) => {
         set(state => ({
@@ -887,7 +961,6 @@ resetRage: async (unitId) => {
           autoSyncIntervalId = null;
         }
         
-        // Периодическая синхронизация: pull из Docs (источник истины)
         const doSync = () => {
           const { connections } = get();
           if (!connections.docs) return;
@@ -926,7 +999,6 @@ resetRage: async (unitId) => {
           state.units = state.units.map(migrateUnit);
           state.undoHistory = state.undoHistory ?? [];
           
-          // Восстанавливаем URL docsService из настроек
           if (state.settings?.googleDocsUrl) {
             docsService.setUrl(state.settings.googleDocsUrl);
             console.log('[Store] 📄 Restored Docs URL from persisted settings');
