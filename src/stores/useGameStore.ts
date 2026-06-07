@@ -450,6 +450,72 @@ export const useGameStore = create<GameState>()(
           await get().setHP(unitId, unit.health.current - amount);
         }
       },
+
+// ═══════════════════════════════════════════════════════════════
+// RAGE
+// ══════════════════════════════════════════════════════════════
+
+setRage: async (unitId, value) => {
+  const { units, settings, connections } = get();
+  const unit = units.find(u => u.id === unitId);
+  if (!unit || !unit.hasRage) return;
+  
+  const previousValue = unit.rage?.current ?? 0;
+  const newRage = Math.max(0, Math.min(value, unit.rage?.max ?? 100));
+  
+  const undoEntry: UndoEntry = {
+    id: generateId(),
+    timestamp: Date.now(),
+    description: `${unit.shortName}: Rage ${previousValue} → ${newRage}`,
+    type: 'resource',
+    unitId,
+    unitName: unit.shortName ?? unit.name,
+    resourceId: 'rage',
+    previousValue,
+    newValue: newRage
+  };
+  
+  set(state => ({
+    units: state.units.map(u => 
+      u.id === unitId 
+        ? { ...u, rage: { ...(u.rage ?? { current: 0, max: 100 }), current: newRage } } 
+        : u
+    ),
+    undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
+    connections: { ...state.connections, lastSyncTime: Date.now() }
+  }));
+  
+  // Google Docs sync
+  if (connections.docs && settings.syncRage && unit.googleDocsHeader) {
+    if (!ensureDocsUrl(settings)) return;
+    try {
+      const result = await docsService.setRage(unit.googleDocsHeader, newRage, unit.rage?.max ?? 100);
+      if (result.success) {
+        console.log(`[Store] 📄 Synced Rage to Docs: ${unit.shortName} = ${newRage}`);
+      }
+    } catch (e) {
+      console.warn('[Store] Docs sync Rage exception:', e);
+    }
+  }
+},
+
+addRage: async (unitId, amount) => {
+  const unit = get().units.find(u => u.id === unitId);
+  if (!unit || !unit.hasRage) return;
+  const current = unit.rage?.current ?? 0;
+  const max = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
+  await get().setRage(unitId, Math.min(current + amount, max));
+},
+
+spendRage: async (unitId, amount) => {
+  const unit = get().units.find(u => u.id === unitId);
+  if (!unit || !unit.hasRage) return;
+  await get().setRage(unitId, (unit.rage?.current ?? 0) - amount);
+},
+
+resetRage: async (unitId) => {
+  await get().setRage(unitId, 0);
+},
       
       // ═══════════════════════════════════════════════════════════════
       // RESOURCES
