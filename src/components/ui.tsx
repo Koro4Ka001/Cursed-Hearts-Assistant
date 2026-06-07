@@ -372,11 +372,11 @@ export function Select({ label, options, className, ...props }: SelectProps) {
 }
 
 // ════════════════════════════════════════════════════════════
-// PROGRESS BAR — Сосуд с кровью / Магический кристалл
+// PROGRESS BAR — Сосуд с кровью / Магический кристалл / Ярость
 // ════════════════════════════════════════════════════════════
 
 interface ProgressBarProps {
-  type: 'hp' | 'mana';
+  type: 'hp' | 'mana' | 'rage'; // 🔥 Добавил 'rage'
   value: number;
   max: number;
   showText?: boolean;
@@ -401,6 +401,17 @@ export function ProgressBar({
         <div className="hp-bar-fill" style={{ width: `${pct}%` }} />
         {showText && (
           <div className="hp-bar-label">❤ {v}/{m}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === 'rage') { // 🔥 RAGE BAR
+    return (
+      <div className={cn('rage-bar-wrap', className)}>
+        <div className="rage-bar-fill" style={{ width: `${pct}%` }} />
+        {showText && (
+          <div className="rage-bar-label"> {v}/{m}</div>
         )}
       </div>
     );
