@@ -535,3 +535,4 @@ function RageEffectEditorModal({ isOpen, onClose, effect, onSave }: RageEffectEd
       </div>
     </Modal>
   );
+}
