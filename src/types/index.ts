@@ -281,7 +281,8 @@ export interface SpellV2 {
   id: string;
   name: string;
   version: 2;
-  cost: number;
+  // 🔥 ИЗМЕНЕНО: стоимость теперь может быть формулой
+  cost: number | string;
   costResource: 'mana' | 'health' | 'resource';
   costResourceId?: string;
   spellType: 'targeted' | 'aoe' | 'self' | 'utility' | 'summon';
@@ -333,7 +334,8 @@ export interface ActionCost {
   id: string;
   type: 'mana' | 'health' | 'resource';
   resourceId?: string;
-  amount: number;
+  // 🔥 ИЗМЕНЕНО: количество теперь может быть формулой
+  amount: number | string;
 }
 
 export interface CustomActionV2 {
