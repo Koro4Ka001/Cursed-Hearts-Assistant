@@ -1,7 +1,7 @@
 // src/components/action-editor/ActionEditorModal.tsx
 
 import { useState, useEffect } from 'react';
-import { Modal, Button, Input, Select, NumberStepper, SubTabs } from '../ui';
+import { Modal, Button, Input, Select, SubTabs } from '../ui';
 import { SpellChainEditor } from '../spell-editor/SpellChainEditor';
 import { cn } from '../../utils/cn';
 import type { 
@@ -359,7 +359,8 @@ export function ActionEditorModal({
             <div className="space-y-4 p-1">
               <div className="text-xs text-faded mb-2">
                 Добавьте ресурсы, которые тратятся при использовании действия.
-                Оставьте пустым, если действие бесплатное.
+                <br/>
+                <span className="text-gold">💡 Совет:</span> Можно писать формулы, например <code>2d6</code> или <code>1d10+5</code>.
               </div>
               
               <CostsEditor
@@ -462,11 +463,18 @@ function CostsEditor({
             />
           )}
           
-          <NumberStepper
-            value={cost.amount}
-            onChange={(v) => updateCost(cost.id, { amount: v })}
-            min={0}
-            max={999}
+          {/* 🔥 ИЗМЕНЕНО: Input вместо NumberStepper для поддержки формул */}
+          <Input
+            value={String(cost.amount)}
+            onChange={(e) => {
+              const val = e.target.value;
+              // Разрешаем только цифры, d, +, -
+              if (/^[\d+d+\-\s]*$/.test(val)) {
+                updateCost(cost.id, { amount: val as any });
+              }
+            }}
+            placeholder="10 или 2d6"
+            className="w-24 font-mono text-sm"
           />
           
           <Button variant="danger" size="sm" onClick={() => deleteCost(cost.id)}>
