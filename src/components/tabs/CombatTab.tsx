@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState } from '../ui';
+import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState, ProgressBar } from '../ui';
 import { isHit } from '../../utils/dice';
 import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
@@ -12,7 +12,7 @@ import { DAMAGE_TYPE_NAMES, PHYSICAL_DAMAGE_TYPES, MAGICAL_DAMAGE_TYPES } from '
 
 export function CombatTab() {
   const {
-    units, selectedUnitId, takeDamage, heal: healUnit,
+    units, selectedUnitId, takeDamage, heal: healUnit, addRage,
     setResource, triggerEffect, addCombatLog
   } = useGameStore();
   const unit = units.find(u => u.id === selectedUnitId);
@@ -59,6 +59,38 @@ export function CombatTab() {
   const selectedAmmo = ammoResources.find(r => r.id === selectedAmmoId) ?? ammoResources[0];
   
   // ═══════════════════════════════════════════════════════════════
+  // 🔥 АВТОМАТИЧЕСКОЕ НАЧИСЛЕНИЕ RAGE ПРИ УРОНЕ
+  // ═══════════════════════════════════════════════════════════════
+  
+  const handleAddRageOnDamage = async (damageDealt: number, armorBlocked: boolean) => {
+    if (!unit.hasRage) return;
+    
+    const config = unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 };
+    
+    if (armorBlocked) {
+      // Урон не пробил броню
+      await addRage(unit.id, config.onArmorBlock);
+      addCombatLog(unit.shortName ?? unit.name, 'Rage', `+${config.onArmorBlock} (броня)`);
+    } else if (damageDealt > 0) {
+      // Урон прошёл
+      await addRage(unit.id, config.onTakeDamage);
+      addCombatLog(unit.shortName ?? unit.name, 'Rage', `+${config.onTakeDamage} (урон)`);
+    }
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
+  // 🔥 АВТОМАТИЧЕСКОЕ НАЧИСЛЕНИЕ RAGE ПРИ НАНЕСЕНИИ УРОНА
+  // ═══════════════════════════════════════════════════════════════
+  
+  const handleAddRageOnDealDamage = async (damageDealt: number) => {
+    if (!unit.hasRage || damageDealt <= 0) return;
+    
+    const config = unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 };
+    await addRage(unit.id, config.onDealDamage);
+    addCombatLog(unit.shortName ?? unit.name, 'Rage', `+${config.onDealDamage} (атака)`);
+  };
+  
+  // ═══════════════════════════════════════════════════════════════
   // БЛИЖНИЙ БОЙ
   // ═══════════════════════════════════════════════════════════════
   
@@ -93,6 +125,9 @@ export function CombatTab() {
         const formula = statBonus > 0 ? `${base}+${statBonus}` : base;
         const dmg = await diceService.rollDamage(formula, `Урон ${selectedMeleeWeapon.name}`, unit.shortName ?? unit.name, isCrit);
         dmgRes.push(dmg);
+        
+        // 🔥 Начисляем Rage за нанесённый урон
+        await handleAddRageOnDealDamage(dmg.total);
         
         log.push(`🎯 [${hitResult.rawD20}]+${hitBonus}=${hitResult.total} ${isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
         addCombatLog(unit.shortName ?? unit.name, selectedMeleeWeapon.name, `${isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
@@ -131,7 +166,6 @@ export function CombatTab() {
           
           for (const msg of effectLog) {
             log.push(`    ⚡ ${msg}`);
-            // 🔥 BROADCAST — видят ВСЕ игроки!
             await diceService.broadcastWeaponEffect(
               unit.shortName ?? unit.name,
               selectedMeleeWeapon.name,
@@ -181,6 +215,10 @@ export function CombatTab() {
             shotDamage = dmg.total;
             log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} ${hit.isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
             addCombatLog(unit.shortName ?? unit.name, `${selectedRangedWeapon.name} (${selectedAmmo.name})`, `${hit.isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
+            
+            // 🔥 Начисляем Rage за нанесённый урон
+            await handleAddRageOnDealDamage(dmg.total);
+            
             if (selectedAmmo.extraDamageFormula && selectedAmmo.extraDamageType) {
               const extra = await diceService.rollDamage(selectedAmmo.extraDamageFormula, `Доп. урон`, unit.shortName ?? unit.name, hit.isCrit);
               dmgRes.push(extra); log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? ''}`);
@@ -255,7 +293,15 @@ export function CombatTab() {
   
   const handleTakeDamage = async () => {
     if (!damagePreview || damagePreview.finalDamage === 0) return;
+    
+    // 🔥 Проверяем, пробил ли урон броню
+    const armorBlocked = incomingDamage > 0 && damagePreview.finalDamage === 0;
+    
     await takeDamage(unit.id, damagePreview.finalDamage);
+    
+    // 🔥 Начисляем Rage за полученный урон
+    await handleAddRageOnDamage(incomingDamage, armorBlocked);
+    
     triggerEffect('shake');
     addCombatLog(unit.shortName ?? unit.name, 'Получил урон', `${damagePreview.finalDamage} ${DAMAGE_TYPE_NAMES[damageType] ?? damageType}`);
     if (unit.useManaAsHp) {
@@ -291,6 +337,40 @@ export function CombatTab() {
   
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
+      {/* 🔥 ШКАЛА RAGE */}
+      {unit.hasRage && (
+        <Section title="🔥 Ярость" icon="🔥">
+          <div className="space-y-2">
+            <ProgressBar 
+              type="rage" 
+              value={unit.rage?.current ?? 0} 
+              max={unit.rage?.max ?? unit.rageConfig?.max ?? 100} 
+            />
+            <div className="flex gap-2">
+              <NumberStepper 
+                label="Изменить Rage" 
+                value={0} 
+                onChange={async (v) => {
+                  if (v > 0) await addRage(unit.id, v);
+                  else if (v < 0) await useGameStore.getState().spendRage(unit.id, Math.abs(v));
+                }} 
+                min={-100} 
+                max={100}
+                step={10}
+              />
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => useGameStore.getState().resetRage(unit.id)}
+                className="mt-4"
+              >
+                Сброс
+              </Button>
+            </div>
+          </div>
+        </Section>
+      )}
+      
       <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true}>
         {meleeWeapons.length === 0 ? <p className="text-faded text-sm">Добавьте оружие ближнего боя в настройках</p> : (
           <div className="space-y-3">
@@ -306,7 +386,6 @@ export function CombatTab() {
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
             <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full">⚔️ АТАКОВАТЬ</Button>
             
-            {/* 🔥 Лог ближнего боя */}
             {meleeLog.length > 0 && (
               <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
                 {meleeLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}
