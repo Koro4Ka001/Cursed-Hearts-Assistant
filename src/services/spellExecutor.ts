@@ -491,7 +491,17 @@ const stepExecutors: Record<string, StepExecutor> = {
   },
 
   modify_resource: (action, context) => {
-    const amount = action.resourceAmount ?? 0;
+    // 🔥 ИЗМЕНЕНО: Поддержка формул в resourceAmount
+    let amount = action.resourceAmount ?? 0;
+    if (typeof amount === 'string') {
+        try {
+            amount = rollDice(amount).total;
+        } catch (e) {
+            console.error('Invalid resource formula', amount);
+            amount = 0;
+        }
+    }
+
     const op = action.resourceOperation === 'restore' ? '+' : '-';
     const type = action.resourceType ?? 'mana';
     context.log.push(`💠 ${op}${amount} ${type}`);
@@ -546,6 +556,13 @@ function checkTransitionCondition(transition: { condition: string; conditionKey?
   }
 }
 
+function checkStepCondition(condition: any, context: CastContext): boolean {
+    // Упрощенная проверка для условий шагов
+    if (condition.type === 'always') return true;
+    // Можно расширить логику при необходимости
+    return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ГЛАВНАЯ ФУНКЦИЯ ВЫПОЛНЕНИЯ
 // ═══════════════════════════════════════════════════════════════════════════
@@ -557,12 +574,27 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
   const actionMap = new Map<string, number>();
   sortedActions.forEach((action, index) => actionMap.set(action.id, index));
   
-  let manaCost = spell.cost;
+  // 🔥 ИЗМЕНЕНО: Вычисление стоимости (поддержка формул)
+  let baseCost: number = 0;
+  if (typeof spell.cost === 'string') {
+    try {
+        const roll = rollDice(spell.cost);
+        baseCost = roll.total;
+        context.log.push(`💠 Стоимость (бросок): ${spell.cost} = ${baseCost}`);
+    } catch (e) {
+        console.error('Invalid cost formula', spell.cost);
+        baseCost = 0;
+    }
+  } else {
+    baseCost = spell.cost;
+  }
+
+  let manaCost = baseCost;
   const manaReduction = getElementBonus(caster, spell.elements, 'mana');
   manaCost = Math.max(0, manaCost - manaReduction);
   
   context.log.push(`═══ ${spell.name} ═══`);
-  if (manaReduction > 0) context.log.push(`💠 Мана: ${spell.cost} - ${manaReduction} (предрасп.) = ${manaCost}`);
+  if (manaReduction > 0) context.log.push(`💠 Мана: ${baseCost} - ${manaReduction} (предрасп.) = ${manaCost}`);
   
   let projectileCount = 1;
   if (spell.projectiles && spell.projectiles !== '1') {
@@ -641,7 +673,9 @@ export const spellExecutor = {
   execute: executeSpell,
   calculateManaCost: (spell: SpellV2, caster: Unit): number => {
     const manaReduction = getElementBonus(caster, spell.elements, 'mana');
-    return Math.max(0, spell.cost - manaReduction);
+    // Базовая стоимость без броска (для превью)
+    const base = typeof spell.cost === 'number' ? spell.cost : 0;
+    return Math.max(0, base - manaReduction);
   },
   getElementBonus,
 };
