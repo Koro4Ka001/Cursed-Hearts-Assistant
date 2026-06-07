@@ -13,13 +13,53 @@ import type {
   CustomAction, 
   CustomActionV2, 
   DiceRollResult, 
-  CastContext
+  CastContext,
+  ActionCost
 } from '../../types';
 import { 
   isCustomActionV2, 
   ACTION_CATEGORY_NAMES, 
   ACTION_CATEGORY_ICONS 
 } from '../../types';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: ВЫЧИСЛЕНИЕ СТОИМОСТИ (ПОДДЕРЖКА ФОРМУЛ)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function evaluateCost(cost: ActionCost): { value: number; formula?: string; rolled?: boolean } {
+  if (typeof cost.amount === 'number') {
+    return { value: cost.amount };
+  }
+  
+  // Это формула — бросаем кубы
+  try {
+    const formula = cost.amount;
+    const rolls: number[] = [];
+    const tokens = formula.toLowerCase().replace(/\s/g, '').match(/[+-]?(\d*d\d+|\d+)/g) || [];
+    let total = 0;
+    
+    for (const token of tokens) {
+      const diceMatch = token.match(/([+-]?)(\d*)d(\d+)/);
+      if (diceMatch) {
+        const count = parseInt(diceMatch[2] || '1', 10);
+        const sides = parseInt(diceMatch[3]!, 10);
+        for (let i = 0; i < count; i++) {
+          const roll = Math.floor(Math.random() * sides) + 1;
+          rolls.push(roll);
+          total += roll;
+        }
+      } else {
+        const num = parseInt(token, 10);
+        if (!isNaN(num)) total += num;
+      }
+    }
+    
+    return { value: total, formula, rolled: true };
+  } catch (e) {
+    console.error('[ActionsTab] Invalid cost formula:', cost.amount);
+    return { value: 0 };
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // КОМПОНЕНТ
@@ -80,45 +120,65 @@ export function ActionsTab() {
   // ─────────────────────────────────────────────────────────────────────────
   
   const executeActionV2 = async (action: CustomActionV2) => {
-    // Проверяем и тратим ресурсы
-    for (const cost of action.costs) {
-      if (cost.type === 'mana') {
-        if (unit.mana.current < cost.amount) {
-          addNotification(`Недостаточно маны! Нужно ${cost.amount}`, 'warning');
-          return;
-        }
-      } else if (cost.type === 'health') {
-        if (unit.health.current < cost.amount) {
-          addNotification(`Недостаточно HP! Нужно ${cost.amount}`, 'warning');
-          return;
-        }
-      } else if (cost.type === 'resource' && cost.resourceId) {
-        const resource = resources.find(r => r.id === cost.resourceId);
-        if (!resource || resource.current < cost.amount) {
-          addNotification(`Недостаточно ресурса "${resource?.name ?? 'неизвестно'}"!`, 'warning');
-          return;
-        }
-      }
-    }
-    
     setIsExecuting(true);
     setActionResults([]);
     setActionLog([]);
     setLastContext(null);
     
-    // Тратим ресурсы
+    // 🔥 ИЗМЕНЕНО: Сначала вычисляем стоимость (бросаем кубы если формула)
+    const costResults: Array<{ cost: ActionCost; value: number; formula?: string; rolled?: boolean }> = [];
+    
     for (const cost of action.costs) {
+      const evaluated = evaluateCost(cost);
+      costResults.push({ cost, ...evaluated });
+      
+      // Проверяем наличие ресурсов
       if (cost.type === 'mana') {
-        await spendMana(unit.id, cost.amount);
+        if (unit.mana.current < evaluated.value) {
+          addNotification(`Недостаточно маны! Нужно ${evaluated.value}${evaluated.formula ? ` (${evaluated.formula})` : ''}`, 'warning');
+          setIsExecuting(false);
+          return;
+        }
       } else if (cost.type === 'health') {
-        await setHP(unit.id, unit.health.current - cost.amount);
+        if (unit.health.current < evaluated.value) {
+          addNotification(`Недостаточно HP! Нужно ${evaluated.value}${evaluated.formula ? ` (${evaluated.formula})` : ''}`, 'warning');
+          setIsExecuting(false);
+          return;
+        }
+      } else if (cost.type === 'resource' && cost.resourceId) {
+        const resource = resources.find(r => r.id === cost.resourceId);
+        if (!resource || resource.current < evaluated.value) {
+          addNotification(`Недостаточно ресурса "${resource?.name ?? 'неизвестно'}"! Нужно ${evaluated.value}`, 'warning');
+          setIsExecuting(false);
+          return;
+        }
+      }
+    }
+    
+    // 🔥 ИЗМЕНЕНО: Логируем стоимость с формулами
+    const costLog: string[] = [];
+    for (const { cost, value, formula, rolled } of costResults) {
+      if (rolled) {
+        costLog.push(`💠 ${cost.type === 'mana' ? 'Мана' : cost.type === 'health' ? 'HP' : 'Ресурс'}: ${formula} = ${value}`);
+      } else {
+        costLog.push(`💠 ${cost.type === 'mana' ? 'Мана' : cost.type === 'health' ? 'HP' : 'Ресурс'}: ${value}`);
+      }
+    }
+    setActionLog(costLog);
+    
+    // Тратим ресурсы (уже вычисленные числа)
+    for (const { cost, value } of costResults) {
+      if (cost.type === 'mana') {
+        await spendMana(unit.id, value);
+      } else if (cost.type === 'health') {
+        await setHP(unit.id, unit.health.current - value);
       } else if (cost.type === 'resource' && cost.resourceId) {
         const resource = resources.find(r => r.id === cost.resourceId);
         if (resource) {
           updateUnit(unit.id, {
             resources: resources.map(r => 
               r.id === cost.resourceId 
-                ? { ...r, current: r.current - cost.amount }
+                ? { ...r, current: r.current - value }
                 : r
             )
           });
@@ -150,10 +210,12 @@ export function ActionsTab() {
         caster: unit,
         targetCount: 1,
         rollModifier: useModifier,
-        onLog: (msg) => console.log('[Action]', msg),
+        onLog: (msg) => {
+          console.log('[Action]', msg);
+          setActionLog(prev => [...prev, msg]);
+        },
       });
       
-      setActionLog(result.log);
       setLastContext(result.context);
       
       // Конвертируем rolls
