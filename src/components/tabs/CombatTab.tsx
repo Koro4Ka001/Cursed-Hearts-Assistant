@@ -166,6 +166,7 @@ export function CombatTab() {
           
           for (const msg of effectLog) {
             log.push(`    ⚡ ${msg}`);
+            // 🔥 BROADCAST — видят ВСЕ игроки!
             await diceService.broadcastWeaponEffect(
               unit.shortName ?? unit.name,
               selectedMeleeWeapon.name,
@@ -386,6 +387,7 @@ export function CombatTab() {
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
             <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full">⚔️ АТАКОВАТЬ</Button>
             
+            {/* 🔥 Лог ближнего боя */}
             {meleeLog.length > 0 && (
               <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
                 {meleeLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}
