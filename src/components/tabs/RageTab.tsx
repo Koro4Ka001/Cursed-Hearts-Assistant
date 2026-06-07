@@ -53,10 +53,6 @@ export function RageTab() {
   const currentRage = unit.rage?.current ?? 0;
   const maxRage = unit.rage?.max ?? rageConfig.max ?? 100;
   
-  // ═══════════════════════════════════════════════════════════════
-  // ОБРАБОТЧИКИ
-  // ═══════════════════════════════════════════════════════════════
-  
   const handleSaveEffect = (effect: RageEffect) => {
     if (isCreating) {
       updateUnit(unit.id, { rageEffects: [...rageEffects, { ...effect, id: generateId() }] });
@@ -92,13 +88,8 @@ export function RageTab() {
     setCustomRageAmount(0);
   };
   
-  // ═══════════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════════
-  
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
-      {/* 🔥 ШКАЛА RAGE */}
       <Section title="🔥 Ярость" icon="🔥">
         <div className="space-y-3">
           <ProgressBar type="rage" value={currentRage} max={maxRage} />
@@ -141,7 +132,6 @@ export function RageTab() {
         </div>
       </Section>
       
-      {/* ⚡ АКТИВНЫЕ ЭФФЕКТЫ */}
       <Section title="⚡ Активные эффекты" icon="⚡">
         {activeEffects.length === 0 ? (
           <p className="text-faded text-sm text-center py-4">Нет активных эффектов</p>
@@ -186,7 +176,6 @@ export function RageTab() {
         )}
       </Section>
       
-      {/* 🔥 СПОСОБНОСТИ RAGE */}
       <Section title="🔥 Способности" icon="🔥">
         {rageEffects.length === 0 ? (
           <p className="text-faded text-sm text-center py-4">Нет способностей</p>
@@ -259,7 +248,6 @@ export function RageTab() {
         </Button>
       </Section>
       
-      {/* 📝 НАСТРОЙКИ КОНФИГУРАЦИИ */}
       <Section title="⚙️ Настройки Rage" icon="⚙️" collapsible defaultOpen={false}>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
@@ -304,7 +292,6 @@ export function RageTab() {
         </div>
       </Section>
       
-      {/* ✏️ РЕДАКТОР ЭФФЕКТА */}
       <RageEffectEditorModal
         isOpen={showEffectEditor}
         onClose={() => {
@@ -318,10 +305,6 @@ export function RageTab() {
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════
-// РЕДАКТОР ЭФФЕКТА RAGE
-// ═══════════════════════════════════════════════════════════════
 
 interface RageEffectEditorModalProps {
   isOpen: boolean;
@@ -552,4 +535,3 @@ function RageEffectEditorModal({ isOpen, onClose, effect, onSave }: RageEffectEd
       </div>
     </Modal>
   );
-}
