@@ -14,13 +14,56 @@ export type DamageType =
   | 'slashing' | 'piercing' | 'bludgeoning' | 'chopping'
   | 'pure';
 
-// 🔥 ДОБАВЛЕНО: Категория урона (используется в CombatTab)
 export type DamageCategory = 'physical' | 'magical' | 'pure';
 
 export type ProficiencyType = 'swords' | 'axes' | 'hammers' | 'polearms' | 'unarmed' | 'bows';
 export type WeaponType = 'melee' | 'ranged';
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
 export type StatKey = 'physicalPower' | 'dexterity' | 'vitality' | 'intelligence' | 'charisma' | 'initiative';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔥 RAGE ТИПЫ
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface RageConfig {
+  onTakeDamage: number;      // +5 когда нанесли урон за одну атаку
+  onArmorBlock: number;      // +2 когда урон не пробил броню
+  onDealDamage: number;      // +4 когда сам наносишь урон
+  max: number;               // 100
+}
+
+export interface RageEffect {
+  id: string;
+  name: string;
+  icon: string;
+  cost: number;
+  durationRounds: number;
+  currentRounds: number;
+  effects: RageEffectEntry[];
+  description?: string;
+}
+
+export interface RageEffectEntry {
+  type: 'modify_stat' | 'add_damage' | 'transform' | 'custom';
+  statKey?: StatKey;
+  statValue?: number;
+  damageType?: DamageType;
+  damageValue?: number;
+  description?: string;
+}
+
+export function createEmptyRageEffect(): RageEffect {
+  return {
+    id: '',
+    name: 'Новая способность',
+    icon: '⚡',
+    cost: 50,
+    durationRounds: 3,
+    currentRounds: 0,
+    effects: [],
+    description: ''
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // МОДИФИКАТОР ЭЛЕМЕНТА
@@ -56,7 +99,7 @@ export function createEmptyElementModifier(element: string): ElementModifier {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
 // СТАРЫЕ ТИПЫ (для миграции)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -96,7 +139,7 @@ export interface Weapon {
   notes?: string;
   extraDamageFormula?: string;
   extraDamageType?: DamageType;
-  onHitActions?: SpellAction[];  // 🔥 Цепочка действий при попадании
+  onHitActions?: SpellAction[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -203,9 +246,9 @@ export interface SpellAction {
   setValueFromContext?: string;
   setValueFormula?: string;
   
-  resourceType?: 'mana' | 'health' | 'resource';
+  resourceType?: 'mana' | 'health' | 'resource' | 'rage';
   resourceId?: string;
-  resourceAmount?: number;
+  resourceAmount?: number | string;
   resourceAmountFormula?: string;
   resourceOperation?: 'spend' | 'restore';
   
@@ -281,9 +324,8 @@ export interface SpellV2 {
   id: string;
   name: string;
   version: 2;
-  // 🔥 ИЗМЕНЕНО: стоимость теперь может быть формулой
   cost: number | string;
-  costResource: 'mana' | 'health' | 'resource';
+  costResource: 'mana' | 'health' | 'resource' | 'rage';
   costResourceId?: string;
   spellType: 'targeted' | 'aoe' | 'self' | 'utility' | 'summon';
   projectiles: string;
@@ -299,7 +341,7 @@ export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // КАСТОМНЫЕ ДЕЙСТВИЯ V2
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
 
 export type ActionCategory = 
   | 'check'
@@ -308,7 +350,8 @@ export type ActionCategory =
   | 'item'
   | 'ability'
   | 'reaction'
-  | 'other';
+  | 'other'
+  | 'rage';
 
 export const ACTION_CATEGORY_NAMES: Record<ActionCategory, string> = {
   check: 'Проверка',
@@ -317,24 +360,25 @@ export const ACTION_CATEGORY_NAMES: Record<ActionCategory, string> = {
   item: 'Предмет',
   ability: 'Способность',
   reaction: 'Реакция',
-  other: 'Прочее'
+  other: 'Прочее',
+  rage: '🔥 Rage'
 };
 
 export const ACTION_CATEGORY_ICONS: Record<ActionCategory, string> = {
-  check: '🎲',
+  check: '',
   social: '🗣️',
   exploration: '🔍',
   item: '🧪',
   ability: '⚡',
   reaction: '🛡️',
-  other: '✨'
+  other: '✨',
+  rage: '🔥'
 };
 
 export interface ActionCost {
   id: string;
-  type: 'mana' | 'health' | 'resource';
+  type: 'mana' | 'health' | 'resource' | 'rage';
   resourceId?: string;
-  // 🔥 ИЗМЕНЕНО: количество теперь может быть формулой
   amount: number | string;
 }
 
@@ -413,7 +457,7 @@ export interface CustomAction {
   steps: ActionStep[];
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
 // РЕСУРСЫ
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -429,13 +473,12 @@ export interface Resource {
   damageType?: DamageType;
   extraDamageFormula?: string;
   extraDamageType?: DamageType;
-  onHitActions?: SpellAction[];  // 🔥 Для амуниции — эффекты при попадании
+  onHitActions?: SpellAction[];
 }
 
-
 // ═══════════════════════════════════════════════════════════════════════════
-// ЮНИТ
-// ═══════════════════════════════════════════════════════════════════════════
+//  ЮНИТ С RAGE
+// ══════════════════════════════════════════════════════════════════════════
 
 export interface Unit {
   id: string;
@@ -446,6 +489,16 @@ export interface Unit {
   
   health: { current: number; max: number };
   mana: { current: number; max: number };
+  
+  // 🔥 RAGE
+  hasRage?: boolean;
+  rage?: {
+    current: number;
+    max: number;
+  };
+  rageConfig?: RageConfig;
+  rageEffects?: RageEffect[];
+  activeRageEffects?: RageEffect[];
   
   stats: {
     physicalPower: number;
@@ -518,10 +571,11 @@ export interface BroadcastMessage {
   total?: number;
   isCrit?: boolean;
   isCritFail?: boolean;
-  color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white';
+  color?: 'gold' | 'blood' | 'mana' | 'green' | 'purple' | 'white' | 'rage';
   hpBar?: { current: number; max: number };
   details?: string[];
   timestamp: number;
+  manaCost?: { formula?: string; value: number }; // 🔥 Затраты маны
 }
 
 export interface AppSettings {
@@ -529,9 +583,11 @@ export interface AppSettings {
   syncHP?: boolean;
   syncMana?: boolean;
   syncResources?: boolean;
+  syncRage?: boolean; // 🔥
   writeLogs?: boolean;
   showTokenBars?: boolean;
   autoSyncInterval?: number;
+  showRokCards?: boolean; // 🔥 Скрыть Rok Cards
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
