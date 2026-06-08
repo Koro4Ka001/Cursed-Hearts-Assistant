@@ -17,9 +17,6 @@ export function CombatTab() {
   } = useGameStore();
   const unit = units.find(u => u.id === selectedUnitId);
   
-  // ═══════════════════════════════════════════════════════════════
-  // БЛИЖНИЙ БОЙ — STATE
-  // ═══════════════════════════════════════════════════════════════
   const [selectedMeleeWeaponId, setSelectedMeleeWeaponId] = useState<string>('');
   const [meleeTargetCount, setMeleeTargetCount] = useState(1);
   const [meleeAttackResults, setMeleeAttackResults] = useState<DiceRollResult[]>([]);
@@ -27,9 +24,6 @@ export function CombatTab() {
   const [isMeleeAttacking, setIsMeleeAttacking] = useState(false);
   const [meleeLog, setMeleeLog] = useState<string[]>([]);
   
-  // ═══════════════════════════════════════════════════════════════
-  // ДАЛЬНИЙ БОЙ — STATE
-  // ═══════════════════════════════════════════════════════════════
   const [selectedRangedWeaponId, setSelectedRangedWeaponId] = useState<string>('');
   const [selectedAmmoId, setSelectedAmmoId] = useState<string>('');
   const [rangedShotCount, setRangedShotCount] = useState(1);
@@ -37,9 +31,6 @@ export function CombatTab() {
   const [isRangedAttacking, setIsRangedAttacking] = useState(false);
   const [rangedLog, setRangedLog] = useState<string[]>([]);
   
-  // ═══════════════════════════════════════════════════════════════
-  // ПОЛУЧЕНИЕ УРОНА / ИСЦЕЛЕНИЕ — STATE
-  // ═══════════════════════════════════════════════════════════════
   const [incomingDamage, setIncomingDamage] = useState(0);
   const [isUndeadAttacker, setIsUndeadAttacker] = useState(false);
   const [damageCategory, setDamageCategory] = useState<DamageCategory>('physical');
@@ -58,29 +49,19 @@ export function CombatTab() {
   const selectedRangedWeapon = rangedWeapons.find(w => w.id === selectedRangedWeaponId) ?? rangedWeapons[0];
   const selectedAmmo = ammoResources.find(r => r.id === selectedAmmoId) ?? ammoResources[0];
   
-  // ═══════════════════════════════════════════════════════════════
-  // 🔥 АВТОМАТИЧЕСКОЕ НАЧИСЛЕНИЕ RAGE ПРИ УРОНЕ
-  // ═══════════════════════════════════════════════════════════════
-  
   const handleAddRageOnDamage = async (damageDealt: number, armorBlocked: boolean) => {
     if (!unit.hasRage) return;
     
     const config = unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 };
     
     if (armorBlocked) {
-      // Урон не пробил броню
       await addRage(unit.id, config.onArmorBlock);
       addCombatLog(unit.shortName ?? unit.name, 'Rage', `+${config.onArmorBlock} (броня)`);
-    } else if (damageDealt > 0) {
-      // Урон прошёл
+    } else {
       await addRage(unit.id, config.onTakeDamage);
       addCombatLog(unit.shortName ?? unit.name, 'Rage', `+${config.onTakeDamage} (урон)`);
     }
   };
-  
-  // ═══════════════════════════════════════════════════════════════
-  // 🔥 АВТОМАТИЧЕСКОЕ НАЧИСЛЕНИЕ RAGE ПРИ НАНЕСЕНИИ УРОНА
-  // ═══════════════════════════════════════════════════════════════
   
   const handleAddRageOnDealDamage = async (damageDealt: number) => {
     if (!unit.hasRage || damageDealt <= 0) return;
@@ -89,10 +70,6 @@ export function CombatTab() {
     await addRage(unit.id, config.onDealDamage);
     addCombatLog(unit.shortName ?? unit.name, 'Rage', `+${config.onDealDamage} (атака)`);
   };
-  
-  // ═══════════════════════════════════════════════════════════════
-  // БЛИЖНИЙ БОЙ
-  // ═══════════════════════════════════════════════════════════════
   
   const handleMeleeAttack = async () => {
     if (!selectedMeleeWeapon) return;
@@ -126,7 +103,6 @@ export function CombatTab() {
         const dmg = await diceService.rollDamage(formula, `Урон ${selectedMeleeWeapon.name}`, unit.shortName ?? unit.name, isCrit);
         dmgRes.push(dmg);
         
-        // 🔥 Начисляем Rage за нанесённый урон
         await handleAddRageOnDealDamage(dmg.total);
         
         log.push(`🎯 [${hitResult.rawD20}]+${hitBonus}=${hitResult.total} ${isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
@@ -138,7 +114,6 @@ export function CombatTab() {
           log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? ''}`);
         }
         
-        // 🔥 Оружейные эффекты при попадании
         if (selectedMeleeWeapon.onHitActions?.length) {
           console.log('[WeaponFX] Melee onHitActions:', JSON.stringify(selectedMeleeWeapon.onHitActions, null, 2));
           console.log('[WeaponFX] Context: hitRoll=', hitResult.rawD20, 'hitTotal=', hitResult.total, 'damage=', dmg.total);
@@ -166,7 +141,6 @@ export function CombatTab() {
           
           for (const msg of effectLog) {
             log.push(`    ⚡ ${msg}`);
-            // 🔥 BROADCAST — видят ВСЕ игроки!
             await diceService.broadcastWeaponEffect(
               unit.shortName ?? unit.name,
               selectedMeleeWeapon.name,
@@ -182,10 +156,6 @@ export function CombatTab() {
       setIsMeleeAttacking(false);
     }
   };
-  
-  // ═══════════════════════════════════════════════════════════════
-  // ДАЛЬНИЙ БОЙ
-  // ═══════════════════════════════════════════════════════════════
   
   const handleRangedAttack = async () => {
     if (!selectedRangedWeapon || !selectedAmmo) return;
@@ -217,7 +187,6 @@ export function CombatTab() {
             log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} ${hit.isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
             addCombatLog(unit.shortName ?? unit.name, `${selectedRangedWeapon.name} (${selectedAmmo.name})`, `${hit.isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
             
-            // 🔥 Начисляем Rage за нанесённый урон
             await handleAddRageOnDealDamage(dmg.total);
             
             if (selectedAmmo.extraDamageFormula && selectedAmmo.extraDamageType) {
@@ -226,7 +195,6 @@ export function CombatTab() {
             }
           } else { log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); }
           
-          // 🔥 Эффекты оружия при попадании
           if (selectedRangedWeapon.onHitActions?.length) {
             console.log('[WeaponFX] Ranged weapon onHitActions:', selectedRangedWeapon.onHitActions.length, 'hitTotal:', hit.total);
             const effectLog: string[] = [];
@@ -253,7 +221,6 @@ export function CombatTab() {
             }
           }
           
-          // 🔥 Эффекты боеприпасов при попадании
           if (selectedAmmo.onHitActions?.length) {
             console.log('[WeaponFX] Ammo onHitActions:', selectedAmmo.onHitActions.length, 'hitTotal:', hit.total);
             const effectLog: string[] = [];
@@ -286,21 +253,14 @@ export function CombatTab() {
     } finally { setRangedDamageResults(dmgRes); setRangedLog(log); setIsRangedAttacking(false); }
   };
   
-  // ═══════════════════════════════════════════════════════════════
-  // ПОЛУЧЕНИЕ УРОНА / ИСЦЕЛЕНИЕ
-  // ═══════════════════════════════════════════════════════════════
-  
   const damagePreview = unit && incomingDamage > 0 ? calculateDamage(incomingDamage, damageType, unit, isUndeadAttacker) : null;
   
   const handleTakeDamage = async () => {
     if (!damagePreview || damagePreview.finalDamage === 0) return;
     
-    // 🔥 Проверяем, пробил ли урон броню
     const armorBlocked = incomingDamage > 0 && damagePreview.finalDamage === 0;
     
     await takeDamage(unit.id, damagePreview.finalDamage);
-    
-    // 🔥 Начисляем Rage за полученный урон
     await handleAddRageOnDamage(incomingDamage, armorBlocked);
     
     triggerEffect('shake');
@@ -332,13 +292,8 @@ export function CombatTab() {
     return MAGICAL_DAMAGE_TYPES.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] ?? t }));
   };
   
-  // ═══════════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════════
-  
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
-      {/* 🔥 ШКАЛА RAGE */}
       {unit.hasRage && (
         <Section title="🔥 Ярость" icon="🔥">
           <div className="space-y-2">
@@ -387,7 +342,6 @@ export function CombatTab() {
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
             <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full">⚔️ АТАКОВАТЬ</Button>
             
-            {/* 🔥 Лог ближнего боя */}
             {meleeLog.length > 0 && (
               <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
                 {meleeLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}
