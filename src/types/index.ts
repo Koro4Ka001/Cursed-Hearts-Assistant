@@ -2,9 +2,9 @@
 
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // БАЗОВЫЕ ТИПЫ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export type DamageType = 
   | 'огонь' | 'вода' | 'земля' | 'воздух' 
@@ -21,15 +21,15 @@ export type WeaponType = 'melee' | 'ranged';
 export type RollModifier = 'normal' | 'advantage' | 'disadvantage';
 export type StatKey = 'physicalPower' | 'dexterity' | 'vitality' | 'intelligence' | 'charisma' | 'initiative';
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // 🔥 RAGE ТИПЫ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export interface RageConfig {
-  onTakeDamage: number;      // +5 когда нанесли урон за одну атаку
-  onArmorBlock: number;      // +2 когда урон не пробил броню
-  onDealDamage: number;      // +4 когда сам наносишь урон
-  max: number;               // 100
+  onTakeDamage: number;
+  onArmorBlock: number;
+  onDealDamage: number;
+  max: number;
 }
 
 export interface RageEffect {
@@ -65,9 +65,9 @@ export function createEmptyRageEffect(): RageEffect {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // МОДИФИКАТОР ЭЛЕМЕНТА
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export interface ElementModifier {
   id: string;
@@ -99,9 +99,9 @@ export function createEmptyElementModifier(element: string): ElementModifier {
   };
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // СТАРЫЕ ТИПЫ (для миграции)
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 /** @deprecated */
 export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
@@ -121,9 +121,9 @@ export interface Spell {
   description?: string;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // ОРУЖИЕ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export interface Weapon {
   id: string;
@@ -142,9 +142,9 @@ export interface Weapon {
   onHitActions?: SpellAction[];
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // 🔮 КОНСТРУКТОР ЗАКЛИНАНИЙ V2
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export type SpellActionType = 
   | 'roll_attack'
@@ -339,9 +339,9 @@ export function isSpellV2(spell: Spell | SpellV2): spell is SpellV2 {
   return 'version' in spell && spell.version === 2;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // КАСТОМНЫЕ ДЕЙСТВИЯ V2
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export type ActionCategory = 
   | 'check'
@@ -365,7 +365,7 @@ export const ACTION_CATEGORY_NAMES: Record<ActionCategory, string> = {
 };
 
 export const ACTION_CATEGORY_ICONS: Record<ActionCategory, string> = {
-  check: '',
+  check: '🎲',
   social: '🗣️',
   exploration: '🔍',
   item: '🧪',
@@ -412,9 +412,9 @@ export function createEmptyCustomActionV2(): CustomActionV2 {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // КАСТОМНЫЕ ДЕЙСТВИЯ (СТАРАЯ ВЕРСИЯ)
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 /** @deprecated */
 export interface ActionBonus {
@@ -457,9 +457,9 @@ export interface CustomAction {
   steps: ActionStep[];
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // РЕСУРСЫ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export interface Resource {
   id: string;
@@ -476,9 +476,9 @@ export interface Resource {
   onHitActions?: SpellAction[];
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  ЮНИТ С RAGE
-// ══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// ЮНИТ
+// ═══════════════════════════════════════════════════════════════
 
 export interface Unit {
   id: string;
@@ -492,13 +492,12 @@ export interface Unit {
   
   // 🔥 RAGE
   hasRage?: boolean;
-  rage?: {
-    current: number;
-    max: number;
-  };
+  rage?: { current: number; max: number };
   rageConfig?: RageConfig;
   rageEffects?: RageEffect[];
   activeRageEffects?: RageEffect[];
+  
+  notes?: string;
   
   stats: {
     physicalPower: number;
@@ -543,9 +542,9 @@ export interface Unit {
   damageMultipliers?: Record<string, number>;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // ОСТАЛЬНОЕ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export interface DiceRollResult {
   formula: string;
@@ -575,24 +574,24 @@ export interface BroadcastMessage {
   hpBar?: { current: number; max: number };
   details?: string[];
   timestamp: number;
-  manaCost?: { formula?: string; value: number }; // 🔥 Затраты маны
+  manaCost?: { formula?: string; value: number };
 }
 
 export interface AppSettings {
   googleDocsUrl?: string;
   syncHP?: boolean;
   syncMana?: boolean;
+  syncRage?: boolean;
   syncResources?: boolean;
-  syncRage?: boolean; // 🔥
   writeLogs?: boolean;
   showTokenBars?: boolean;
   autoSyncInterval?: number;
-  showRokCards?: boolean; // 🔥 Скрыть Rok Cards
+  showRokCards?: boolean;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // КОНСТАНТЫ И МАППИНГИ
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 export const DAMAGE_TYPE_NAMES = ELEMENT_NAMES_MAP;
 export const ELEMENT_NAMES = ELEMENT_NAMES_MAP;
