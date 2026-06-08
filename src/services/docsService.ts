@@ -4,7 +4,7 @@ interface DocsStatsResponse {
   success: boolean;
   health?: { current: number; max: number };
   mana?: { current: number; max: number };
-  rage?: { current: number; max: number }; // 🔥
+  rage?: { current: number; max: number };
   resources?: Record<string, { current: number; max: number }>;
   characterName?: string;
   error?: string;
@@ -16,7 +16,7 @@ interface DocsActionResponse {
   max?: number;
   health?: { current: number; max: number };
   mana?: { current: number; max: number };
-  rage?: { current: number; max: number }; // 🔥
+  rage?: { current: number; max: number };
   error?: string;
 }
 
@@ -123,7 +123,6 @@ class DocsService {
     return this.post(data);
   }
   
-  // 🔥 RAGE
   async setRage(character: string, current: number, max?: number): Promise<DocsActionResponse> {
     const data: Record<string, unknown> = { action: 'setRage', character, current };
     if (max !== undefined) data['max'] = max;
