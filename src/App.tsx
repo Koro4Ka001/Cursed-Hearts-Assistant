@@ -1,4 +1,5 @@
 // src/App.tsx
+
 import { useEffect, useState, useRef, Component, type ReactNode } from 'react';
 import OBR from '@owlbear-rodeo/sdk';
 import { useGameStore } from './stores/useGameStore';
@@ -11,6 +12,7 @@ import { StatBars } from './components/StatBars';
 import { CombatTab } from './components/tabs/CombatTab';
 import { MagicTab } from './components/tabs/MagicTab';
 import { ActionsTab } from './components/tabs/ActionsTab';
+import { RageTab } from './components/tabs/RageTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner, UndoButton } from './components/ui';
@@ -41,16 +43,17 @@ class ErrorBoundary extends Component<EBProps, EBState> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TYPES & TABS (убран 'cards')
+// TYPES & TABS
 // ═══════════════════════════════════════════════════════════════
 
 type ViewMode = 'compact' | 'medium' | 'large';
-type TabId = 'combat' | 'magic' | 'actions' | 'notes' | 'settings';
+type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'settings';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'combat', icon: '⚔️', label: 'Бой' },
   { id: 'magic', icon: '✨', label: 'Магия' },
   { id: 'actions', icon: '⚡', label: 'Действия' },
+  { id: 'rage', icon: '🔥', label: 'Rage' },
   { id: 'notes', icon: '📝', label: 'Заметки' },
   { id: 'settings', icon: '⚙️', label: 'Настройки' }
 ];
@@ -62,7 +65,7 @@ const VIEW_SIZES: Record<ViewMode, { width: number; height: number }> = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// TAB CONTENT (shared)
+// TAB CONTENT
 // ═══════════════════════════════════════════════════════════════
 
 function TabContent({ activeTab }: { activeTab: string }) {
@@ -71,6 +74,7 @@ function TabContent({ activeTab }: { activeTab: string }) {
       {activeTab === 'combat' && <ErrorBoundary tabName="Бой"><CombatTab /></ErrorBoundary>}
       {activeTab === 'magic' && <ErrorBoundary tabName="Магия"><MagicTab /></ErrorBoundary>}
       {activeTab === 'actions' && <ErrorBoundary tabName="Действия"><ActionsTab /></ErrorBoundary>}
+      {activeTab === 'rage' && <ErrorBoundary tabName="Rage"><RageTab /></ErrorBoundary>}
       {activeTab === 'notes' && <ErrorBoundary tabName="Заметки"><NotesTab /></ErrorBoundary>}
       {activeTab === 'settings' && <ErrorBoundary tabName="Настройки"><SettingsTab /></ErrorBoundary>}
     </>
@@ -111,6 +115,11 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   const mana = unit.mana.current;
   const maxMana = unit.mana.max || 1;
   const manaPct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
+  
+  const hasRage = unit.hasRage ?? false;
+  const rage = unit.rage?.current ?? 0;
+  const maxRage = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
+  const ragePct = Math.max(0, Math.min(100, (rage / maxRage) * 100));
 
   const unitIdx = units.findIndex(u => u.id === selectedUnitId);
   const prevUnit = () => { if (unitIdx > 0) selectUnit(units[unitIdx - 1]!.id); };
@@ -146,6 +155,14 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
         <div className="compact-bar-fill compact-bar-mana-fill" style={{ width: `${manaPct}%` }} />
         <span className="compact-bar-text">💠 {mana}/{maxMana}</span>
       </div>
+      
+      {hasRage && (
+        <div className="compact-bar">
+          <div className="compact-bar-bg" style={{ background: 'linear-gradient(180deg, #1a0a0a, #2d1f1f)', border: '1px solid #4a2a2a' }} />
+          <div className="compact-bar-fill" style={{ width: `${ragePct}%`, background: 'linear-gradient(90deg, #8b0000, #dc143c, #ff4500)' }} />
+          <span className="compact-bar-text">🔥 {rage}/{maxRage}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -253,9 +270,8 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 
   return (
     <div className={cn('h-full flex flex-col bg-abyss text-bone overflow-hidden app-frame', effectClass)}>
-      {/* Декоративные элементы */}
       <div className="bg-runes">
-        {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ','ᛊ','ᛏ','ᚹ'].map((r, i) => <span key={i} className="bg-rune">{r}</span>)}
+        {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ','ᛊ','ᛏ',''].map((r, i) => <span key={i} className="bg-rune">{r}</span>)}
       </div>
       <div className="absolute inset-0 pointer-events-none z-0">
         {[1,2,3,4,5].map(i => <div key={i} className={`ember ember-${i}`} />)}
@@ -264,7 +280,6 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
       <div className="gold-dust" />
 
       <div className="relative z-10 flex flex-col h-full">
-        {/* Кнопки режима */}
         <div className="mode-switcher">
           {undoHistory.length > 0 && (
             <button onClick={() => undo()} className="compact-mode-btn text-gold" title={`Отменить: ${undoHistory[0]?.description}`}>
@@ -278,7 +293,6 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         <UnitSelector />
         <StatBars />
 
-        {/* Табы */}
         <div className="flex border-b border-gold-dark/30 bg-obsidian/80 shrink-0 backdrop-blur-sm">
           {TABS.map(tab => (
             <button
@@ -295,14 +309,12 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
           ))}
         </div>
 
-        {/* Контент */}
         <div className="flex-1 overflow-hidden" key={activeTab}>
           <div className="tab-content-enter h-full">
             <TabContent activeTab={activeTab} />
           </div>
         </div>
 
-        {/* Статус-бар */}
         <div className="status-bar">
           <div className="flex items-center gap-3">
             <span className={cn('status-dot', connections.owlbear ? 'status-online' : 'status-offline')}>OBR {connections.owlbear ? '●' : '○'}</span>
@@ -345,15 +357,12 @@ export function App() {
 
     const init = async () => {
       try {
-        // 1. OBR
         await initOBR();
         setConnection('owlbear', true);
 
-        // 2. Dice
         await diceService.initialize();
         setConnection('dice', true);
 
-        // 3. Token bars
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
@@ -364,7 +373,6 @@ export function App() {
           console.warn('[App] Token bars init failed:', e);
         }
 
-        // 4. Google Docs — подключение + pull (источник истины!)
         const url = useGameStore.getState().settings.googleDocsUrl;
         if (url) {
           docsService.setUrl(url);
@@ -376,7 +384,6 @@ export function App() {
               console.log('[App] 📥 Pulling HP/Mana from Google Docs (source of truth)...');
               await useGameStore.getState().pullAllFromDocs();
               
-              // После pull — обновляем бары
               const freshState = useGameStore.getState();
               if (freshState.settings.showTokenBars) {
                 await tokenBarService.syncAllBars(freshState.units);
@@ -401,7 +408,7 @@ export function App() {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {['ᚱ','ᛟ','ᚺ','ᛉ','ᚦ'].map((r, i) => (
+          {['ᚱ','','ᚺ','','ᚦ'].map((r, i) => (
             <span key={i} className="loading-rune" style={{ top: `${15 + i * 15}%`, left: `${10 + i * 18}%`, animationDelay: `${i * 0.5}s` }}>{r}</span>
           ))}
         </div>
@@ -422,7 +429,6 @@ export function App() {
       {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
       {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
 
-      {/* Уведомления */}
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className="pointer-events-auto">
