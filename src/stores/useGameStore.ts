@@ -53,7 +53,8 @@ function migrateUnit(unit: Unit): Unit {
       rage: unit.rage ?? { current: 0, max: 100 },
       rageConfig: unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 },
       rageEffects: unit.rageEffects ?? [],
-      activeRageEffects: unit.activeRageEffects ?? []
+      activeRageEffects: unit.activeRageEffects ?? [],
+      notes: unit.notes ?? ''
     };
   }
   
@@ -117,7 +118,8 @@ function migrateUnit(unit: Unit): Unit {
     rage: unit.rage ?? { current: 0, max: 100 },
     rageConfig: unit.rageConfig ?? { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 },
     rageEffects: unit.rageEffects ?? [],
-    activeRageEffects: unit.activeRageEffects ?? []
+    activeRageEffects: unit.activeRageEffects ?? [],
+    notes: unit.notes ?? ''
   };
 }
 
@@ -180,6 +182,7 @@ interface GameState {
   takeDamage: (unitId: string, amount: number) => Promise<void>;
   setResource: (unitId: string, resourceId: string, current: number) => Promise<void>;
   spendResource: (unitId: string, resourceId: string, amount: number) => Promise<void>;
+  setNotes: (unitId: string, notes: string) => void;
   
   // Rage эффекты
   activateRageEffect: (unitId: string, effect: RageEffect) => Promise<void>;
@@ -255,6 +258,7 @@ function createDefaultUnit(): Unit {
     rageConfig: { onTakeDamage: 5, onArmorBlock: 2, onDealDamage: 4, max: 100 },
     rageEffects: [],
     activeRageEffects: [],
+    notes: '',
     stats: {
       physicalPower: 0, dexterity: 0, vitality: 0,
       intelligence: 0, charisma: 0, initiative: 0
@@ -430,7 +434,7 @@ export const useGameStore = create<GameState>()(
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
-        const updatedUnit = { ...unit, mana: { ...u.mana, current: newMana } };
+        const updatedUnit = { ...unit, mana: { ...unit.mana, current: newMana } };
         await updateTokenBars(updatedUnit, settings);
         
         if (connections.docs && settings.syncMana && unit.googleDocsHeader) {
@@ -524,17 +528,14 @@ export const useGameStore = create<GameState>()(
         const unit = units.find(u => u.id === unitId);
         if (!unit || !unit.hasRage) return;
         
-        // Проверяем хватает ли Rage
         const currentRage = unit.rage?.current ?? 0;
         if (currentRage < effect.cost) {
           get().addNotification(`Недостаточно Rage! Нужно ${effect.cost}`, 'warning');
           return;
         }
         
-        // Тратим Rage
         await get().spendRage(unitId, effect.cost);
         
-        // Добавляем активный эффект
         const activeEffect = { ...effect, currentRounds: effect.durationRounds };
         
         set(state => ({
@@ -581,7 +582,19 @@ export const useGameStore = create<GameState>()(
       },
       
       // ═══════════════════════════════════════════════════════════════
-      // ОСТАЛЬНОЕ (heal, takeDamage, resources, undo, docs...)
+      // ЗАМЕТКИ
+      // ═══════════════════════════════════════════════════════════════
+      
+      setNotes: (unitId, notes) => {
+        set(state => ({
+          units: state.units.map(u => 
+            u.id === unitId ? { ...u, notes } : u
+          )
+        }));
+      },
+      
+      // ═══════════════════════════════════════════════════════════════
+      // ОСТАЛЬНОЕ
       // ═══════════════════════════════════════════════════════════════
       
       heal: async (unitId, amount) => {
