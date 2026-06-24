@@ -100,8 +100,12 @@ OBR.onReady(async () => {
     
     onLocalDiceMessage((msg) => {
       console.log("[Main] 📨 LOCAL message:", msg.title);
-      // Локальные уведомления обрабатываются через in-plugin toasts
-      // Не открываем popover чтобы не блокировать интерфейс
+      // Показываем in-plugin toast
+      const store = useGameStore.getState();
+      store.addNotification(
+        `${msg.icon || '🎲'} ${msg.title}${msg.subtitle ? ' — ' + msg.subtitle : ''}`,
+        msg.isCrit ? 'success' : msg.isCritFail ? 'error' : 'info'
+      );
     });
     
     // ═══════════════════════════════════════════════════════════

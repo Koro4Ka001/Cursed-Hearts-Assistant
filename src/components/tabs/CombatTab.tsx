@@ -79,6 +79,7 @@ export function CombatTab() {
     const log: string[] = [];
     // Берём свежие данные юнита (могли измениться от rage effects)
     const freshUnit = useGameStore.getState().units.find(u => u.id === unit.id) ?? unit;
+    console.log('[Combat] Fresh unit stats:', JSON.stringify(freshUnit.stats), 'proficiencies:', JSON.stringify(freshUnit.proficiencies));
     try {
       for (let t = 0; t < meleeTargetCount; t++) {
         if (meleeTargetCount > 1) log.push(`--- Цель ${t + 1} ---`);
@@ -100,6 +101,7 @@ export function CombatTab() {
         
         const isCrit = hitResult.isCrit;
         const statBonus = getStatDamageBonus(freshUnit, selectedMeleeWeapon.statBonus, selectedMeleeWeapon.proficiencyType);
+        console.log('[Combat] statBonus:', statBonus, 'from stat:', freshUnit.stats[selectedMeleeWeapon.statBonus === 'physicalPower' ? 'physicalPower' : 'dexterity'], 'profType:', selectedMeleeWeapon.proficiencyType, 'profVal:', freshUnit.proficiencies[selectedMeleeWeapon.proficiencyType]);
         const base = selectedMeleeWeapon.damageFormula ?? 'd6';
         const formula = statBonus > 0 ? `${base}+${statBonus}` : base;
         const dmg = await diceService.rollDamage(formula, `Урон ${selectedMeleeWeapon.name}`, freshUnit.shortName ?? freshUnit.name, isCrit);
