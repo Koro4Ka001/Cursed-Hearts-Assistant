@@ -452,8 +452,8 @@ export function MagicTab() {
                   <span className={selectedSpellDisplay.costResource === 'health' ? 'text-blood-bright' : 'text-mana-bright'}>
                     Стоимость: {spellCost} {selectedSpellDisplay.costResource === 'health' ? 'HP' : 'маны'}
                   </span>
-                  {isSpellV2(selectedSpell) && spellCost < selectedSpell.cost && (
-                    <span className="text-green-500 ml-1">(−{selectedSpell.cost - spellCost} от предрасп.)</span>
+                  {isSpellV2(selectedSpell) && spellCost < (typeof selectedSpell.cost === 'number' ? selectedSpell.cost : 0) && (
+                    <span className="text-green-500 ml-1">(−{(typeof selectedSpell.cost === 'number' ? selectedSpell.cost : 0) - spellCost} от предрасп.)</span>
                   )}
                 </div>
                 

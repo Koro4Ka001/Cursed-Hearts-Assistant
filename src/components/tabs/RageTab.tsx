@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { Button, Section, NumberStepper, Input, Modal, SubTabs, EmptyState, ProgressBar } from '../ui';
 import type { RageEffect, RageEffectEntry } from '../../types';
-import { generateId } from '../../utils/dice';
+import { generateId } from '../../utils/shared';
 import { STAT_NAMES, DAMAGE_TYPE_NAMES, ALL_DAMAGE_TYPES } from '../../types';
 
 export function RageTab() {

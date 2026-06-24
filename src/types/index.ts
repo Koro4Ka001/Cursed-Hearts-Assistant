@@ -106,6 +106,13 @@ export function createEmptyElementModifier(element: string): ElementModifier {
 /** @deprecated */
 export type AffinityBonusType = 'castHit' | 'manaCost' | 'damage';
 
+/** @deprecated */
+export interface ElementAffinity {
+  element: string;
+  bonusType: AffinityBonusType;
+  value: number;
+}
+
 /** @deprecated - используйте SpellV2 */
 export interface Spell {
   id: string;
@@ -658,6 +665,15 @@ export const MULTIPLIER_OPTIONS = [
   { value: 2, label: '×2 (Сильная уязв.)' },
   { value: 3, label: '×3 (Крит. уязв.)' }
 ];
+
+export interface RokCardResult {
+  cardIndex: number;
+  hitRoll: number;
+  isHit: boolean;
+  effectRoll: number;
+  effectDescription: string;
+  additionalRolls: DiceRollResult[];
+}
 
 export const SPELL_ACTION_TYPE_META: Record<SpellActionType, {
   name: string;

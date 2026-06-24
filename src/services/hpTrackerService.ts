@@ -57,16 +57,18 @@ export async function updateTokenHp(
     // Определяем maxHP
     const actualMaxHp = maxHp ?? hpData.maxHp;
     
-    // Обновляем метаданные токена
+    // Обновляем метаданные токена — создаём НОВЫЙ объект вместо мутации
     await OBR.scene.items.updateItems([tokenId], (items) => {
       for (const item of items) {
         const itemMetadata = item.metadata as Record<string, unknown>;
-        const itemHpData = itemMetadata[HP_TRACKER_KEY] as HPTrackerData | undefined;
-        if (itemHpData) {
-          itemHpData.hp = newHp;
-          if (maxHp !== undefined) {
-            itemHpData.maxHp = maxHp;
-          }
+        const existingHpData = itemMetadata[HP_TRACKER_KEY] as HPTrackerData | undefined;
+        if (existingHpData) {
+          const newHpData: HPTrackerData = {
+            ...existingHpData,
+            hp: newHp,
+            maxHp: maxHp !== undefined ? maxHp : existingHpData.maxHp,
+          };
+          itemMetadata[HP_TRACKER_KEY] = newHpData;
         }
       }
     });

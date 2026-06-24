@@ -80,7 +80,7 @@ OBR.onReady(async () => {
     }
     
     // Запускаем автосинхронизацию если включена
-    if (settings.autoSyncInterval > 0) {
+    if (settings.autoSyncInterval && settings.autoSyncInterval > 0) {
       console.log("[Main] Starting auto sync with interval:", settings.autoSyncInterval);
       useGameStore.getState().startAutoSync();
     }

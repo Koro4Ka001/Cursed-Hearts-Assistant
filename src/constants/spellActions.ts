@@ -9,14 +9,8 @@ import type {
   DamageTierEntry,
   StepTransition
 } from '../types';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ГЕНЕРАТОР ID
-// ═══════════════════════════════════════════════════════════════════════════
-
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 9);
-}
+import { generateId } from '../utils/shared';
+export { generateId };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ ШАГОВ

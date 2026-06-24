@@ -5,14 +5,7 @@ import { persist } from 'zustand/middleware';
 import type { Unit, AppSettings, RollModifier, ElementModifier, RageEffect } from '../types';
 import { tokenBarService } from '../services/tokenBarService';
 import { docsService } from '../services/docsService';
-
-// ═══════════════════════════════════════════════════════════════
-// ГЕНЕРАТОР ID
-// ═══════════════════════════════════════════════════════════════
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 9);
-}
+import { generateId } from '../utils/shared';
 
 // ═══════════════════════════════════════════════════════════════
 // UNDO СИСТЕМА
@@ -328,7 +321,7 @@ export const useGameStore = create<GameState>()(
         
         const { units, settings } = get();
         const unit = units.find(u => u.id === id);
-        if (unit && (updates.health || updates.mana || updates.rage)) {
+        if (unit && (updates.health !== undefined || updates.mana !== undefined || updates.rage !== undefined)) {
           updateTokenBars(unit, settings);
         }
       },
@@ -687,7 +680,7 @@ export const useGameStore = create<GameState>()(
               ),
               undoHistory: restHistory
             }));
-            await updateTokenBars({ ...unit, mana: { ...u.mana, current: lastEntry.previousValue } }, settings);
+            await updateTokenBars({ ...unit, mana: { ...unit.mana, current: lastEntry.previousValue } }, settings);
             if (get().connections.docs && settings.syncMana && unit.googleDocsHeader) {
               try { await docsService.setMana(unit.googleDocsHeader, lastEntry.previousValue, unit.mana.max); } catch {}
             }

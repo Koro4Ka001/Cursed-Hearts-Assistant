@@ -1,5 +1,8 @@
 // src/utils/dice.ts
 import type { DiceRollResult, RollModifier } from '../types';
+import { generateId } from './shared';
+
+export { generateId } from './shared';
 
 /**
  * Парсит формулу кубиков и возвращает структуру для броска
@@ -275,9 +278,4 @@ export function getMaxMagicBonus(
   return maxBonus;
 }
 
-/**
- * Генерация уникального ID
- */
-export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-}
+

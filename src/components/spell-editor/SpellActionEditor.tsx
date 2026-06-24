@@ -749,7 +749,7 @@ function ModifyResourceFields({ action, update }: { action: SpellAction; update:
       />
       <NumberStepper
         label="Количество"
-        value={action.resourceAmount ?? 0}
+        value={typeof action.resourceAmount === 'number' ? action.resourceAmount : 0}
         onChange={(v) => update({ resourceAmount: v })}
         min={0}
         max={999}

@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-abyss: #030303;
+      --bg-obsidian: #080706;
+      --bg-dark: #0c0a09;
+      --bg-panel: #0f0d0c;
+      --bg-input: #161412;
+      --bg-elevated: #1a1816;
+      
+      --text-bone: #d4c8b8;
+      --text-ancient: #b8a892;
+      --text-faded: #7a6f62;
+      --text-dim: #4a433a;
+      
+      --gold-bright: #ffd700;
+      --gold-primary: #d4a726;
+      --gold-dark: #8b6914;
+      --gold-glow: rgba(212, 167, 38, 0.7);
+      
+      --blood-bright: #ff2a2a;
+      --blood-primary: #8b0000;
+      --blood-dark: #4a0000;
+      --blood-glow: rgba(139, 0, 0, 0.8);
+      
+      --mana-bright: #4a9eff;
+      --mana-primary: #1a4a8b;
+      --mana-dark: #0a2040;
+      --mana-glow: rgba(74, 158, 255, 0.6);
+      
+      --arcane-purple: #6a0dad;
+      --arcane-glow: rgba(138, 43, 226, 0.5);
+      
+      --border-bone: #3a332a;
+      --border-rust: #4a3020;
+      --border-gold: #6a5014;
+    }
+
+    /* === УБИРАЕМ ВСЕ ОБВОДКИ === */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      background: var(--bg-abyss);
+      border: none !important;
+      outline: none !important;
+    }
+
+    body {
+      font-family: 'EB Garamond', Georgia, serif;
+      background: var(--bg-abyss);
+      color: var(--text-bone);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+      border: none !important;
+      outline: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    /* === ФОНОВЫЕ ЭФФЕКТЫ === */
+    .bg-effects {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: 
+        radial-gradient(ellipse at 20% 0%, rgba(139, 0, 0, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 100%, rgba(74, 158, 255, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(106, 13, 173, 0.05) 0%, transparent 70%);
+    }
+
+    .noise-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.06;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      animation: grainShift 8s steps(10) infinite;
+    }
+
+    @keyframes grainShift {
+      0%, 100% { transform: translate(0, 0); }
+      10% { transform: translate(-2%, -2%); }
+      30% { transform: translate(1%, 2%); }
+      50% { transform: translate(-1%, 1%); }
+      70% { transform: translate(2%, -1%); }
+      90% { transform: translate(-2%, 2%); }
+    }
+
+    /* === ЧАСТИЦЫ ПЕПЛА === */
+    .ash-particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 2;
+      overflow: hidden;
+    }
+
+    .ash {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      background: radial-gradient(circle, rgba(255,100,50,0.8) 0%, rgba(100,50,30,0.4) 100%);
+      border-radius: 50%;
+      animation: ashFloat 15s linear infinite;
+      opacity: 0;
+    }
+
+    @keyframes ashFloat {
+      0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 0.8; }
+      90% { opacity: 0.6; }
+      100% { transform: translateY(-20vh) rotate(720deg); opacity: 0; }
+    }
+
+    /* === SCROLLBAR === */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-abyss); }
+    ::-webkit-scrollbar-thumb { 
+      background: linear-gradient(180deg, var(--gold-dark) 0%, #3a2a10 50%, var(--gold-dark) 100%);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, var(--gold-primary) 0%, var(--gold-dark) 100%);
+    }
+
+    /* === ОСНОВНОЙ КОНТЕНТ === */
+    .main-content {
+      position: relative;
+      z-index: 10;
+      padding-bottom: 20px;
+    }
+
+    /* === АНИМАЦИИ === */
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      92% { opacity: 1; }
+      93% { opacity: 0.8; }
+      94% { opacity: 1; }
+      96% { opacity: 0.9; }
+      97% { opacity: 1; }
+    }
+
+    @keyframes bloodPulse {
+      0%, 100% { 
+        box-shadow: inset 0 0 30px var(--blood-glow), 0 0 20px var(--blood-glow);
+      }
+      50% { 
+        box-shadow: inset 0 0 50px var(--blood-glow), 0 0 30px var(--blood-glow);
+      }
+    }
+
+    @keyframes manaPulse {
+      0%, 100% { 
+        box-shadow: inset 0 0 30px var(--mana-glow), 0 0 20px var(--mana-glow);
+      }
+      50% { 
+        box-shadow: inset 0 0 50px var(--mana-glow), 0 0 40px var(--mana-glow);
+      }
+    }
+
+    @keyframes runeGlow {
+      0%, 100% { 
+        text-shadow: 0 0 10px var(--gold-glow), 0 0 20px var(--gold-glow);
+      }
+      50% { 
+        text-shadow: 0 0 15px var(--gold-glow), 0 0 30px var(--gold-glow), 0 0 60px rgba(255, 215, 0, 0.5);
+      }
+    }
+
+    @keyframes runeFloat {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(-3px); }
+    }
+
+    @keyframes fadeSlideIn { 
+      from { opacity: 0; transform: translateY(-15px); } 
+      to { opacity: 1; transform: translateY(0); } 
+    }
+
+    @keyframes damageFlash { 
+      0% { transform: scale(0.5); opacity: 0; } 
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); opacity: 1; } 
+    }
+
+    @keyframes criticalPulse {
+      0%, 100% { 
+        box-shadow: 0 0 50px var(--blood-glow), inset 0 0 80px rgba(139, 0, 0, 0.5);
+        border-color: var(--blood-primary);
+      }
+      50% { 
+        box-shadow: 0 0 80px rgba(255, 42, 42, 0.8), inset 0 0 100px rgba(139, 0, 0, 0.7);
+        border-color: var(--blood-bright);
+      }
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes shimmer {
+      0% { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
+
+    @keyframes skullFloat {
+      0%, 100% { transform: translateX(-50%) translateY(0) rotate(-3deg); }
+      50% { transform: translateX(-50%) translateY(-4px) rotate(3deg); }
+    }
+
+    @keyframes candleFlicker {
+      0%, 100% { opacity: 1; }
+      25% { opacity: 0.9; }
+      50% { opacity: 1; }
+      75% { opacity: 0.95; }
+    }
+
+    @keyframes bloodDrip {
+      0% { transform: translateY(-100%); opacity: 0; }
+      10% { opacity: 0.6; }
+      100% { transform: translateY(500%); opacity: 0; }
+    }
+
+    /* === PROFILE SWITCHER === */
+    .profile-switcher {
+      background: linear-gradient(180deg, rgba(20, 16, 12, 0.98) 0%, rgba(8, 6, 4, 0.98) 100%);
+      border: 1px solid var(--border-rust);
+      border-top: 2px solid var(--gold-dark);
+      margin: 8px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+    }
+
+    .profile-switcher::before {
+      content: '⛧ ВЫБОР ДУШИ ⛧';
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Cinzel', serif;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--gold-primary);
+      background: var(--bg-abyss);
+      padding: 2px 10px;
+      white-space: nowrap;
+    }
+
+    .profile-switcher select {
+      flex: 1;
+      padding: 10px 32px 10px 12px;
+      background: linear-gradient(180deg, #1a1614 0%, #0e0c0a 100%);
+      border: 1px solid var(--border-bone);
+      color: var(--gold-bright);
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23d4a726' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      transition: all 0.3s ease;
+      min-width: 0;
+    }
+
+    .profile-switcher select:focus {
+      outline: none;
+      border-color: var(--gold-primary);
+      box-shadow: 0 0 20px var(--gold-glow);
+    }
+
+    .profile-switcher select option {
+      background: #0f0d0c;
+      color: var(--text-bone);
+      padding: 10px;
+    }
+
+    .sync-btn {
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      background: radial-gradient(circle at 30% 30%, #2a2420 0%, #0a0806 100%);
+      border: 1px solid var(--gold-dark);
+      color: var(--gold-primary);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    .sync-btn:hover {
+      border-color: var(--gold-primary);
+      box-shadow: 0 0 20px var(--gold-glow);
+    }
+
+    .sync-btn.spinning { animation: spin 1s linear infinite; }
+
+    /* === NAMEPLATE === */
+    .nameplate {
+      background: linear-gradient(180deg, rgba(212, 167, 38, 0.08) 0%, transparent 40%), linear-gradient(180deg, #14120f 0%, #080604 100%);
+      border: 1px solid var(--gold-dark);
+      border-top: none;
+      margin: 0 8px 14px 8px;
+      padding: 18px 14px 26px 14px;
+      text-align: center;
+      position: relative;
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(50% + 35px) calc(100% - 18px), 50% 100%, calc(50% - 35px) calc(100% - 18px), 0 calc(100% - 18px));
+    }
+
+    .nameplate::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold-primary), transparent);
+    }
+
+    .nameplate-skull {
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 14px;
+      color: var(--gold-primary);
+      background: var(--bg-abyss);
+      padding: 0 6px;
+      text-shadow: 0 0 15px var(--gold-glow);
+      animation: skullFloat 4s ease-in-out infinite;
+      z-index: 5;
+    }
+
+    .skull-decor {
+      position: absolute;
+      font-size: 11px;
+      color: var(--gold-dark);
+      text-shadow: 0 0 8px var(--gold-glow);
+      opacity: 0.7;
+    }
+
+    .skull-decor.left { top: 8px; left: 8px; }
+    .skull-decor.right { top: 8px; right: 8px; }
+
+    .nameplate-title {
+      font-family: 'Cinzel Decorative', 'Cinzel', serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gold-bright);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      animation: runeGlow 3s ease-in-out infinite;
+    }
+
+    .nameplate-subtitle {
+      font-family: 'MedievalSharp', cursive;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-style: italic;
+      margin-top: 4px;
+      letter-spacing: 3px;
+    }
+
+    /* === ТАБЫ === */
+    .tab-nav {
+      display: flex;
+      gap: 2px;
+      padding: 0 8px;
+      margin-bottom: 12px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 8px 4px 6px 4px;
+      background: linear-gradient(180deg, #18140f 0%, #0a0806 100%);
+      border: 1px solid var(--border-bone);
+      border-bottom: 2px solid var(--border-bone);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: 'Cinzel', serif;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .tab-btn:first-child { border-radius: 4px 0 0 0; }
+    .tab-btn:last-child { border-radius: 0 4px 0 0; }
+
+    .tab-btn:hover { color: var(--text-ancient); }
+
+    .tab-btn.active {
+      color: var(--gold-bright);
+      border-color: var(--gold-dark);
+      border-bottom-color: var(--bg-abyss);
+      background: linear-gradient(180deg, rgba(212, 167, 38, 0.1) 0%, var(--bg-abyss) 100%);
+      box-shadow: inset 0 1px 0 rgba(212, 167, 38, 0.3);
+    }
+
+    .tab-btn .tab-icon {
+      font-size: 14px;
+      margin-bottom: 2px;
+      filter: grayscale(0.8) brightness(0.7);
+      transition: all 0.3s ease;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .tab-btn.active .tab-icon {
+      filter: grayscale(0) brightness(1.2) drop-shadow(0 0 6px var(--gold-glow));
+      animation: candleFlicker 2s infinite;
+    }
+
+    .tab-btn .tab-text {
+      white-space: nowrap;
+    }
+
+    /* === СТАТЫ === */
+    .stats-container {
+      padding: 0 10px;
+      margin-bottom: 10px;
+    }
+
+    .vial-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .vial-row:last-child { margin-bottom: 0; }
+
+    .vial-icon {
+      width: 24px;
+      min-width: 24px;
+      font-size: 14px;
+      margin-right: 6px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .vial-label {
+      font-family: 'Cinzel', serif;
+      font-size: 7px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      width: 36px;
+      min-width: 36px;
+      color: var(--text-faded);
+      flex-shrink: 0;
+    }
+
+    .vial-container {
+      flex: 1;
+      height: 24px;
+      background: linear-gradient(180deg, #040202 0%, #0a0606 50%, #050303 100%);
+      border: 2px solid;
+      border-radius: 3px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 3px 12px rgba(0, 0, 0, 0.9);
+      min-width: 0;
+    }
+
+    .vial-container.health {
+      border-color: var(--blood-dark);
+      animation: bloodPulse 3s ease-in-out infinite;
+    }
+
+    .vial-container.mana {
+      border-color: var(--mana-dark);
+      animation: manaPulse 4s ease-in-out infinite;
+    }
+
+    .vial-container.critical {
+      animation: criticalPulse 0.8s ease-in-out infinite !important;
+    }
+
+    .vial-fill {
+      height: 100%;
+      position: relative;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+    }
+
+    .vial-fill::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      background-size: 200% 100%;
+      animation: shimmer 3s linear infinite;
+    }
+
+    .vial-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 40%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 100%);
+    }
+
+    .vial-fill.health {
+      background: linear-gradient(180deg, #cc2020 0%, var(--blood-primary) 30%, #5a0000 70%, #2a0000 100%);
+      box-shadow: inset 0 0 15px rgba(255, 50, 50, 0.5);
+    }
+
+    .vial-fill.mana {
+      background: linear-gradient(180deg, #4a9eff 0%, var(--mana-primary) 30%, #0a3060 70%, #051530 100%);
+      box-shadow: inset 0 0 15px rgba(74, 158, 255, 0.5);
+    }
+
+    .vial-value {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 0 4px #000, 0 0 8px #000;
+      z-index: 5;
+      white-space: nowrap;
+    }
+
+    /* === КОМПАКТНЫЙ КОШЕЛЁК === */
+    .compact-wallet {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px;
+      margin: 0 10px 10px 10px;
+      background: linear-gradient(180deg, #14120f 0%, #0a0806 100%);
+      border: 1px solid var(--border-bone);
+      border-radius: 3px;
+      flex-wrap: wrap;
+    }
+
+    .compact-wallet::before {
+      content: '☠ КАЗНА ☠';
+      position: absolute;
+      top: -9px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Cinzel', serif;
+      font-size: 6px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      background: var(--bg-dark);
+      padding: 1px 8px;
+      white-space: nowrap;
+    }
+
+    .wallet-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .coin {
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 900;
+      color: rgba(0,0,0,0.7);
+      box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), inset 0 -2px 4px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.8);
+      flex-shrink: 0;
+    }
+
+    .coin.gold {
+      background: linear-gradient(145deg, #ffd700, #cc9900);
+      border: 1px solid #b8860b;
+    }
+
+    .coin.silver {
+      background: linear-gradient(145deg, #f0f0f0, #a8a8a8);
+      border: 1px solid #808080;
+    }
+
+    .coin.copper {
+      background: linear-gradient(145deg, #cd7f32, #8b4513);
+      border: 1px solid #6b3510;
+    }
+
+    .wallet-item .wallet-value { 
+      color: var(--text-bone); 
+      white-space: nowrap;
+    }
+    
+    .wallet-item.resource { color: var(--arcane-purple); }
+    .wallet-item.custom { color: #88ddaa; }
+
+    .wallet-divider { 
+      color: var(--border-bone); 
+      font-size: 12px; 
+      margin: 0 2px;
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+
+    .resource-icon-small { 
+      font-size: 12px; 
+      flex-shrink: 0;
+    }
+
+    /* === LONG REST === */
+    .long-rest-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: calc(100% - 20px);
+      margin: 0 10px 12px 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, #1a1830 0%, #0c0a18 50%, #060410 100%);
+      border: 1px solid #3a3870;
+      color: #b8b0e8;
+      font-family: 'Cinzel', serif;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.4s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .long-rest-btn:hover {
+      border-color: #6a68b5;
+      color: #e0d8ff;
+      box-shadow: 0 0 30px rgba(90, 88, 165, 0.4);
+    }
+
+    .rest-icon { font-size: 16px; flex-shrink: 0; }
+    .rest-text { white-space: nowrap; }
+    .rest-note { font-size: 7px; opacity: 0.5; white-space: nowrap; }
+
+    /* === TABS CONTENT === */
+    .tab-content {
+      display: none;
+      padding: 0 10px 10px 10px;
+      animation: fadeSlideIn 0.3s ease;
+    }
+
+    .tab-content.active { display: block; }
+
+    /* === SECTIONS === */
+    .section {
+      background: linear-gradient(180deg, #12100d 0%, #080604 100%);
+      border: 1px solid var(--border-bone);
+      padding: 14px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .section::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15px;
+      right: 15px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold-dark), transparent);
+    }
+
+    .corner-decor {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    .corner-decor.tl { top: -1px; left: -1px; border-top: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
+    .corner-decor.tr { top: -1px; right: -1px; border-top: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
+    .corner-decor.bl { bottom: -1px; left: -1px; border-bottom: 2px solid var(--gold-primary); border-left: 2px solid var(--gold-primary); }
+    .corner-decor.br { bottom: -1px; right: -1px; border-bottom: 2px solid var(--gold-primary); border-right: 2px solid var(--gold-primary); }
+
+    .section-title {
+      font-family: 'Cinzel', serif;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--gold-primary);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-bone);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border-bone), transparent);
+    }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border-bone), transparent);
+      margin: 14px 0;
+      position: relative;
+    }
+
+    .divider::before {
+      content: '◆';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 6px;
+      color: var(--border-bone);
+      background: var(--bg-dark);
+      padding: 0 6px;
+    }
+
+    /* === FORM ELEMENTS === */
+    .form-row { margin-bottom: 12px; }
+    .form-row:last-child { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-family: 'Cinzel', serif;
+      font-size: 7px;
+      font-weight: 700;
+      color: var(--text-faded);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 5px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, #0a0806 0%, #12100e 100%);
+      border: 1px solid var(--border-bone);
+      color: var(--text-bone);
+      font-family: 'EB Garamond', serif;
+      font-size: 13px;
+      transition: all 0.3s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--gold-primary);
+      box-shadow: 0 0 15px var(--gold-glow);
+    }
+
+    input[type="number"] {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      -moz-appearance: textfield;
+    }
+
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    select {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23d4a726' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+
+    select option {
+      background: #0f0d0c;
+      color: var(--text-bone);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 70px;
+    }
+
+    /* === CHECKBOX === */
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, rgba(139, 0, 0, 0.15) 0%, rgba(139, 0, 0, 0.05) 100%);
+      border: 1px solid rgba(139, 0, 0, 0.4);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .checkbox-row::before {
+      content: '☠';
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--blood-dark);
+      opacity: 0.3;
+    }
+
+    .checkbox-row:hover {
+      background: linear-gradient(180deg, rgba(139, 0, 0, 0.25) 0%, rgba(139, 0, 0, 0.1) 100%);
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--blood-primary);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .checkbox-row label {
+      margin: 0;
+      cursor: pointer;
+      text-transform: none;
+      font-family: 'EB Garamond', serif;
+      font-size: 13px;
+      color: var(--text-bone);
+      letter-spacing: 0;
+    }
+
+    /* === BUTTONS === */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 12px;
+      border: 1px solid var(--border-bone);
+      font-family: 'Cinzel', serif;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn-primary {
+      background: linear-gradient(180deg, #3a1515 0%, #1a0808 50%, #100404 100%);
+      border-color: var(--blood-dark);
+      color: #f0c0c0;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      border-color: var(--blood-primary);
+      box-shadow: 0 0 20px var(--blood-glow);
+    }
+
+    .btn-gold {
+      background: linear-gradient(180deg, #2a2010 0%, #14100a 50%, #0a0805 100%);
+      border-color: var(--gold-dark);
+      color: var(--gold-bright);
+    }
+
+    .btn-gold:hover:not(:disabled) {
+      border-color: var(--gold-primary);
+      box-shadow: 0 0 20px var(--gold-glow);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(180deg, #1a1816 0%, #0a0908 100%);
+      border-color: var(--border-bone);
+      color: var(--text-faded);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--text-dim);
+      color: var(--text-bone);
+    }
+
+    .btn-success {
+      background: linear-gradient(180deg, #1a2a15 0%, #0a150a 100%);
+      border-color: #2e5a1c;
+      color: #a0d090;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      border-color: #4a8a35;
+      box-shadow: 0 0 15px rgba(74, 138, 53, 0.4);
+    }
+
+    .btn-danger {
+      background: linear-gradient(180deg, #2a1515 0%, #150a0a 100%);
+      border-color: #5a1c1c;
+      color: #d09090;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      border-color: #8a3535;
+      box-shadow: 0 0 15px rgba(138, 53, 53, 0.4);
+    }
+
+    .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn-group .btn { flex: 1; min-width: 70px; }
+    .btn-full { width: 100%; }
+    .btn-sm { padding: 7px 10px; font-size: 7px; }
+    .inline-group { display: flex; gap: 8px; align-items: flex-end; }
+    .inline-group .form-row { flex: 1; margin-bottom: 0; min-width: 0; }
+    .armor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .armor-grid .form-row { margin-bottom: 0; }
+
+    /* === DAMAGE RESULT === */
+    .damage-result {
+      background: radial-gradient(ellipse at center, rgba(139, 0, 0, 0.3) 0%, transparent 60%), linear-gradient(180deg, #200a0a 0%, #100404 100%);
+      border: 2px solid var(--blood-primary);
+      padding: 16px;
+      margin-top: 12px;
+      display: none;
+      position: relative;
+    }
+
+    .damage-result.show {
+      display: block;
+      animation: damageFlash 0.5s ease;
+    }
+
+    .damage-result::before {
+      content: '⚔ УРОН ⚔';
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Cinzel', serif;
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--blood-bright);
+      background: var(--bg-dark);
+      padding: 2px 10px;
+      white-space: nowrap;
+    }
+
+    .damage-number {
+      font-family: 'Cinzel Decorative', 'Cinzel', serif;
+      font-size: 48px;
+      font-weight: 900;
+      color: var(--blood-bright);
+      text-align: center;
+      text-shadow: 0 0 20px var(--blood-glow), 0 0 40px var(--blood-glow);
+      animation: runeGlow 2s ease-in-out infinite;
+    }
+
+    .damage-breakdown {
+      font-family: 'EB Garamond', serif;
+      font-size: 12px;
+      color: var(--text-faded);
+      text-align: center;
+      margin-top: 6px;
+      font-style: italic;
+    }
+
+    /* === RESOURCE === */
+    .resource-display {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: linear-gradient(180deg, #1a1028 0%, #0c0818 100%);
+      border: 1px solid #4a2a6a;
+      border-radius: 3px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .resource-display-value {
+      font-family: 'Cinzel Decorative', 'Cinzel', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #c090ff;
+      text-shadow: 0 0 15px var(--arcane-glow);
+    }
+
+    /* === NOTIFICATIONS === */
+    .whisper-container {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 8px;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .whisper {
+      background: linear-gradient(180deg, #1a1a18 0%, #0a0a08 100%);
+      border: 1px solid var(--border-bone);
+      border-left: 4px solid var(--gold-primary);
+      padding: 12px 14px;
+      font-style: italic;
+      font-size: 13px;
+      color: var(--text-bone);
+      box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.9);
+      transform: translateY(120%);
+      opacity: 0;
+      transition: all 0.4s ease;
+      pointer-events: auto;
+    }
+
+    .whisper.show { transform: translateY(0); opacity: 1; }
+    .whisper.success { border-left-color: #4a8a35; }
+    .whisper.error { border-left-color: var(--blood-primary); }
+    .whisper.info { border-left-color: var(--mana-primary); }
+
+    .whisper-prefix {
+      font-family: 'Cinzel', serif;
+      font-size: 7px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      display: block;
+      margin-bottom: 4px;
+      font-style: normal;
+    }
+
+    /* === LOADING === */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3, 3, 3, 0.98);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .loading-overlay.show { display: flex; }
+
+    .loading-rune {
+      width: 50px;
+      height: 50px;
+      border: 3px solid var(--border-bone);
+      border-top-color: var(--gold-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      box-shadow: 0 0 20px var(--gold-glow);
+      position: relative;
+    }
+
+    .loading-rune::before {
+      content: '⛧';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      color: var(--gold-primary);
+      animation: spin 2s linear infinite reverse;
+    }
+
+    .loading-text {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      color: var(--text-faded);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    /* === PROFILE MANAGER === */
+    .profile-manager {
+      background: linear-gradient(180deg, #181510 0%, #0c0a08 100%);
+      border: 1px solid var(--gold-dark);
+      padding: 14px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .profile-manager::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 10%;
+      right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold-primary), transparent);
+    }
+
+    .profile-manager-title {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--gold-primary);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .profile-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .profile-actions .btn { flex: 1; min-width: 60px; }
+    .profile-form { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-bone); }
+    .profile-form.hidden { display: none; }
+
+    .currency-info {
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 8px;
+      padding: 6px;
+      background: rgba(212, 167, 38, 0.05);
+      border: 1px dashed var(--border-bone);
+      font-style: italic;
+    }
+
+    .custom-currencies-list { margin-top: 8px; }
+
+    .custom-currency-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background: linear-gradient(180deg, #1a1816 0%, #0d0c0a 100%);
+      border: 1px solid var(--border-bone);
+      margin-bottom: 6px;
+    }
+
+    .custom-currency-row:last-child { margin-bottom: 0; }
+    .custom-currency-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+    .custom-currency-name { flex: 1; font-family: 'Cinzel', serif; font-size: 11px; color: var(--text-ancient); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .custom-currency-value { font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; color: var(--text-bone); min-width: 40px; text-align: right; flex-shrink: 0; }
+
+    /* === BLOOD DRIPS === */
+    .blood-drip {
+      position: fixed;
+      top: 0;
+      width: 2px;
+      height: 25px;
+      background: linear-gradient(180deg, var(--blood-primary) 0%, transparent 100%);
+      animation: bloodDrip 10s linear infinite;
+      opacity: 0.5;
+      z-index: 3;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- ФОНОВЫЕ ЭФФЕКТЫ -->
+  <div class="bg-effects"></div>
+  <div class="noise-overlay"></div>
+  
+  <!-- ЧАСТИЦЫ -->
+  <div class="ash-particles">
+    <div class="ash" style="left: 10%; animation-delay: 0s;"></div>
+    <div class="ash" style="left: 30%; animation-delay: 3s;"></div>
+    <div class="ash" style="left: 50%; animation-delay: 1s;"></div>
+    <div class="ash" style="left: 70%; animation-delay: 4s;"></div>
+    <div class="ash" style="left: 90%; animation-delay: 2s;"></div>
+  </div>
+
+  <!-- КАПЛИ КРОВИ -->
+  <div class="blood-drip" style="left: 5%; animation-delay: 0s;"></div>
+  <div class="blood-drip" style="left: 95%; animation-delay: 5s;"></div>
+
+  <!-- ЗАГРУЗКА -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-rune"></div>
+    <div class="loading-text">Призываю древние силы...</div>
+  </div>
+
+  <!-- УВЕДОМЛЕНИЯ -->
+  <div class="whisper-container">
+    <div id="whisper" class="whisper">
+      <span class="whisper-prefix">☠ Шёпот из Бездны</span>
+      <span id="whisperText"></span>
+    </div>
+  </div>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ -->
+  <div class="main-content">
+    <!-- ПРОФИЛЬ -->
+    <div class="profile-switcher">
+      <select id="profileSelect" onchange="switchProfile()">
+        <option value="">— Призови душу —</option>
+      </select>
+      <button class="sync-btn" onclick="syncData()" title="Обновить">🔄</button>
+    </div>
+    
+    <!-- ИМЯТАБЛИЧКА -->
+    <div class="nameplate">
+      <span class="skull-decor left">💀</span>
+      <span class="skull-decor right">💀</span>
+      <div class="nameplate-title" id="charName">Пробуждающийся</div>
+      <div class="nameplate-subtitle">• Проклятые Сердца •</div>
+      <span class="nameplate-skull">☠</span>
+    </div>
+    
+    <!-- ТАБЫ -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="combat"><span class="tab-icon">⚔️</span><span class="tab-text">Бой</span></button>
+      <button class="tab-btn" data-tab="magic"><span class="tab-icon">✨</span><span class="tab-text">Магия</span></button>
+      <button class="tab-btn" data-tab="currency"><span class="tab-icon">💰</span><span class="tab-text">Казна</span></button>
+      <button class="tab-btn" data-tab="settings"><span class="tab-icon">⚙️</span><span class="tab-text">Настр.</span></button>
+    </div>
+    
+    <!-- СТАТЫ -->
+    <div class="stats-container">
+      <div class="vial-row">
+        <span class="vial-icon">🩸</span>
+        <span class="vial-label">Жизнь</span>
+        <div class="vial-container health" id="healthContainer">
+          <div class="vial-fill health" id="healthBar" style="width: 0%"></div>
+          <span class="vial-value" id="healthValue">--/--</span>
+        </div>
+      </div>
+      <div class="vial-row">
+        <span class="vial-icon">💠</span>
+        <span class="vial-label">Мана</span>
+        <div class="vial-container mana">
+          <div class="vial-fill mana" id="manaBar" style="width: 0%"></div>
+          <span class="vial-value" id="manaValue">--/--</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- КОШЕЛЁК -->
+    <div class="compact-wallet">
+      <span class="wallet-item"><span class="coin gold">G</span><span class="wallet-value" id="compactGold">0</span></span>
+      <span class="wallet-item"><span class="coin silver">S</span><span class="wallet-value" id="compactSilver">0</span></span>
+      <span class="wallet-item"><span class="coin copper">C</span><span class="wallet-value" id="compactCopper">0</span></span>
+      <span class="wallet-divider">│</span>
+      <span class="wallet-item resource"><span class="resource-icon-small">🔶</span><span class="wallet-value" id="compactResource">0/0</span></span>
+      <span id="customCurrenciesCompact"></span>
+    </div>
+    
+    <!-- ОТДЫХ -->
+    <button class="long-rest-btn" onclick="performLongRestHandler()">
+      <span class="rest-icon">🌙</span>
+      <span class="rest-text">Долгий Отдых</span>
+      <span class="rest-note">(восстановление)</span>
+    </button>
+
+    <!-- TAB: БОЙ -->
+    <div id="tab-combat" class="tab-content active">
+      <div class="section">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">⚔️ Урон</div>
+        <div class="form-row">
+          <label>Входящий урон</label>
+          <input type="number" id="rawDamage" placeholder="0" min="0">
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="isUndead">
+          <label for="isUndead">Атакует нежить</label>
+        </div>
+        <div class="form-row">
+          <label>Категория</label>
+          <select id="damageCategory" onchange="updateSubtypes()">
+            <option value="physical">Физический</option>
+            <option value="magical">Магический</option>
+            <option value="pure">Чистый</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Тип</label>
+          <select id="damageSubtype"></select>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="applyDamage()">⚔️ Нанести</button>
+        <div id="damageResult" class="damage-result">
+          <div class="damage-number" id="finalDamage">0</div>
+          <div class="damage-breakdown" id="damageBreakdown"></div>
+        </div>
+      </div>
+      <div class="section">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">💚 Исцеление</div>
+        <div class="inline-group">
+          <div class="form-row"><label>ОЗ</label><input type="number" id="healAmount" placeholder="0" min="0"></div>
+          <button class="btn btn-success" onclick="healCharacter()">Исцелить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: МАГИЯ -->
+    <div id="tab-magic" class="tab-content">
+      <div class="section">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">📜 Заклинания</div>
+        <div class="form-row">
+          <label>Заклинание</label>
+          <select id="spellSelect"><option value="">— Гримуар пуст —</option></select>
+        </div>
+        <button class="btn btn-gold btn-full" onclick="castSelectedSpell()">✨ Сотворить</button>
+      </div>
+      <div class="divider"></div>
+      <div class="section">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">💠 Мана</div>
+        <div class="form-row">
+          <label>Количество</label>
+          <input type="number" id="manaAmount" placeholder="0" min="0">
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-danger" onclick="spendManaManual()">− Потратить</button>
+          <button class="btn btn-success" onclick="restoreManaManual()">+ Восстановить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: КАЗНА -->
+    <div id="tab-currency" class="tab-content">
+      <div class="section">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">💰 Валюта</div>
+        <div class="form-row">
+          <label>Тип</label>
+          <select id="currencyType">
+            <option value="gold">🟡 Золото</option>
+            <option value="silver">⚪ Серебро</option>
+            <option value="copper">🟤 Медь</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Количество</label>
+          <input type="number" id="currencyAmount" placeholder="0" min="0">
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="addCurrencyHandler()">+ Получить</button>
+          <button class="btn btn-danger" onclick="spendCurrencyHandler()">− Потратить</button>
+        </div>
+        <div class="currency-info">⚖️ 1🟡 = 100⚪ = 10000🟤</div>
+      </div>
+      
+      <div class="section">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">🔶 <span id="resourceNameTitle">Ресурс</span></div>
+        <div class="resource-display">
+          <span class="resource-display-value" id="resourceValueLarge">0/0</span>
+          <button class="btn btn-secondary btn-sm" onclick="resetResourceHandler()">⟳ Сброс</button>
+        </div>
+        <div class="form-row">
+          <label>Количество</label>
+          <input type="number" id="resourceCustomAmount" placeholder="0" min="0">
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="modifyResourcePositive()">+ Добавить</button>
+          <button class="btn btn-danger" onclick="modifyResourceNegative()">− Потратить</button>
+        </div>
+      </div>
+      
+      <div class="section" id="customCurrenciesSection" style="display:none;">
+        <span class="corner-decor tl"></span><span class="corner-decor tr"></span><span class="corner-decor bl"></span><span class="corner-decor br"></span>
+        <div class="section-title">💎 Особые</div>
+        <div id="customCurrenciesList" class="custom-currencies-list"></div>
+        <div class="divider"></div>
+        <div class="form-row">
+          <label>Ценность</label>
+          <select id="customCurrencySelect"></select>
+        </div>
+        <div class="form-row">
+          <label>Количество</label>
+          <input type="number" id="customCurrencyAmount" placeholder="0" min="0">
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="modifyCustomCurrencyHandler(1)">+ Добавить</button>
+          <button class="btn btn-danger" onclick="modifyCustomCurrencyHandler(-1)">− Потратить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: НАСТРОЙКИ -->
+    <div id="tab-settings" class="tab-content">
+      <div class="profile-manager">
+        <div class="profile-manager-title">👥 Души</div>
+        <div class="profile-actions">
+          <button class="btn btn-success btn-sm" onclick="showNewProfileForm()">+ Новая</button>
+          <button class="btn btn-gold btn-sm" onclick="editCurrentProfile()">✏ Изменить</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCurrentProfile()">✕ Удалить</button>
+        </div>
+      </div>
+      <div id="profileForm" class="profile-form hidden">
+        <div class="section">
+          <div class="section-title">👤 Сущность</div>
+          <div class="form-row"><label>Имя профиля</label><input type="text" id="profileName" placeholder="Кассиан"></div>
+          <div class="form-row">
+            <label>Заголовок в документе</label>
+            <div class="inline-group">
+              <input type="text" id="characterHeader" placeholder="Имя в документе">
+              <button class="btn btn-secondary btn-sm" onclick="grabSelectedText()">📋</button>
+            </div>
+          </div>
+          <div class="form-row"><label>Короткое имя</label><input type="text" id="shortName" placeholder="Касс"></div>
+        </div>
+        <div class="section">
+          <div class="section-title">🛡️ Физ. броня</div>
+          <div class="armor-grid">
+            <div class="form-row"><label>Режущий</label><input type="number" id="armorSlashing" placeholder="0"></div>
+            <div class="form-row"><label>Колющий</label><input type="number" id="armorPiercing" placeholder="0"></div>
+            <div class="form-row"><label>Дробящий</label><input type="number" id="armorBludgeoning" placeholder="0"></div>
+            <div class="form-row"><label>Рубящий</label><input type="number" id="armorChopping" placeholder="0"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">✨ Маг. защита</div>
+          <div class="form-row"><label>Базовая</label><input type="number" id="armorMagicBase" placeholder="0"></div>
+          <div class="form-row"><label>Особые</label><input type="text" id="armorMagicOverrides" placeholder="Свет:0, Огонь:15"></div>
+        </div>
+        <div class="section">
+          <div class="section-title">☠️ Проклятия</div>
+          <div class="form-row"><label>Защита от нежити</label><input type="number" id="armorUndead" placeholder="0"></div>
+          <div class="form-row"><label>Множители</label><input type="text" id="multipliers" placeholder="Колющий:0.5, Свет:2"></div>
+        </div>
+        <div class="section">
+          <div class="section-title">📜 Гримуар</div>
+          <div class="form-row"><label>Заклинания</label><textarea id="spellList" placeholder="Молния:24, Щит:10"></textarea></div>
+        </div>
+        <div class="section">
+          <div class="section-title">🔶 Ресурс</div>
+          <div class="armor-grid">
+            <div class="form-row"><label>Название</label><input type="text" id="resourceName" placeholder="Карты"></div>
+            <div class="form-row"><label>Максимум</label><input type="number" id="resourceMax" placeholder="36"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">💎 Валюты</div>
+          <div class="form-row"><label>Формат</label><textarea id="customCurrencies" placeholder="Души:souls:💀"></textarea></div>
+        </div>
+        <div class="btn-group" style="margin-top: 12px;">
+          <button class="btn btn-gold" onclick="saveCurrentProfile()">💾 Сохранить</button>
+          <button class="btn btn-secondary" onclick="cancelProfileEdit()">✕ Отмена</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentEditProfileId = null;
+    let isCreatingNew = false;
+    let cachedCustomCurrencies = [];
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+      });
+    });
+
+    function showLoading(show) { document.getElementById('loadingOverlay').classList.toggle('show', show); }
+    function showNotification(message, type) {
+      const w = document.getElementById('whisper');
+      document.getElementById('whisperText').textContent = message;
+      w.className = 'whisper show ' + type;
+      setTimeout(() => w.classList.remove('show'), 4000);
+    }
+
+    function updateHealthBar(c, m) {
+      const p = m > 0 ? (c / m) * 100 : 0;
+      document.getElementById('healthBar').style.width = p + '%';
+      document.getElementById('healthValue').textContent = c + '/' + m;
+      document.getElementById('healthContainer').classList.toggle('critical', p <= 25 && p > 0);
+    }
+
+    function updateManaBar(c, m) {
+      const p = m > 0 ? (c / m) * 100 : 0;
+      document.getElementById('manaBar').style.width = p + '%';
+      document.getElementById('manaValue').textContent = c + '/' + m;
+    }
+
+    function updateCompactWallet(d) {
+      if (!d) return;
+      if (d.currencies) {
+        document.getElementById('compactGold').textContent = d.currencies.gold || 0;
+        document.getElementById('compactSilver').textContent = d.currencies.silver || 0;
+        document.getElementById('compactCopper').textContent = d.currencies.copper || 0;
+      }
+      if (d.resource) {
+        document.getElementById('compactResource').textContent = d.resource.current + '/' + d.resource.max;
+        document.getElementById('resourceValueLarge').textContent = d.resource.current + '/' + d.resource.max;
+      }
+      if (d.resourceName) document.getElementById('resourceNameTitle').textContent = d.resourceName;
+      if (d.customCurrencies && d.customCurrencies.length > 0) {
+        cachedCustomCurrencies = d.customCurrencies;
+        let h = '<span class="wallet-divider">│</span>';
+        d.customCurrencies.forEach(cc => { h += '<span class="wallet-item custom"><span style="font-size:12px;">' + cc.icon + '</span><span class="wallet-value">' + cc.value + '</span></span>'; });
+        document.getElementById('customCurrenciesCompact').innerHTML = h;
+        document.getElementById('customCurrenciesSection').style.display = 'block';
+        document.getElementById('customCurrenciesList').innerHTML = d.customCurrencies.map(cc => '<div class="custom-currency-row"><span class="custom-currency-icon">' + cc.icon + '</span><span class="custom-currency-name">' + cc.displayName + '</span><span class="custom-currency-value">' + cc.value + '</span></div>').join('');
+        document.getElementById('customCurrencySelect').innerHTML = d.customCurrencies.map(cc => '<option value="' + cc.displayName + '">' + cc.icon + ' ' + cc.displayName + '</option>').join('');
+      } else {
+        document.getElementById('customCurrenciesCompact').innerHTML = '';
+        document.getElementById('customCurrenciesSection').style.display = 'none';
+      }
+    }
+
+    function updateInventory(d) {
+      if (!d) return;
+      updateCompactWallet(d);
+      if (d.health) updateHealthBar(d.health.current, d.health.max);
+      if (d.mana) updateManaBar(d.mana.current, d.mana.max);
+      if (d.characterName) document.getElementById('charName').textContent = d.characterName;
+    }
+
+    function syncData() {
+      const b = document.querySelector('.sync-btn');
+      b.classList.add('spinning');
+      google.script.run.withSuccessHandler(r => { b.classList.remove('spinning'); if (r.success) { updateInventory(r); showNotification('Синхронизировано', 'success'); } else showNotification(r.error || 'Ошибка', 'error'); }).withFailureHandler(e => { b.classList.remove('spinning'); showNotification(e.message || 'Ошибка!', 'error'); }).getSidebarStats();
+    }
+
+    function refreshAllStats() { google.script.run.withSuccessHandler(r => { if (r.success) updateInventory(r); }).withFailureHandler(() => {}).getSidebarStats(); }
+
+    function loadProfiles() {
+      google.script.run.withSuccessHandler(list => {
+        const s = document.getElementById('profileSelect');
+        s.innerHTML = '<option value="">— Призови душу —</option>';
+        let aid = null;
+        list.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; if (p.isActive) { o.selected = true; aid = p.id; } s.appendChild(o); });
+        if (aid) loadActiveProfileData();
+      }).withFailureHandler(() => showNotification('Ошибка!', 'error')).getProfileList();
+    }
+
+    function loadActiveProfileData() {
+      google.script.run.withSuccessHandler(p => {
+        if (p && p.profileName) {
+          document.getElementById('charName').textContent = p.shortName || p.profileName;
+          document.getElementById('resourceNameTitle').textContent = p.resourceName || 'Ресурс';
+          loadSpellList(p.spellList);
+          refreshAllStats();
+        }
+      }).withFailureHandler(() => {}).getActiveProfile();
+    }
+
+    function switchProfile() {
+      const id = document.getElementById('profileSelect').value;
+      if (!id) return;
+      showLoading(true);
+      google.script.run.withSuccessHandler(r => { showLoading(false); if (r.success) { showNotification('Душа призвана', 'success'); loadActiveProfileData(); hideProfileForm(); } else showNotification(r.message, 'error'); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).setActiveProfile(id);
+    }
+
+    function showNewProfileForm() { isCreatingNew = true; currentEditProfileId = null; clearProfileForm(); document.getElementById('profileForm').classList.remove('hidden'); }
+    function editCurrentProfile() {
+      const id = document.getElementById('profileSelect').value;
+      if (!id) { showNotification('Выбери душу!', 'error'); return; }
+      isCreatingNew = false; currentEditProfileId = id;
+      showLoading(true);
+      google.script.run.withSuccessHandler(p => { showLoading(false); if (p) { fillProfileForm(p); document.getElementById('profileForm').classList.remove('hidden'); } else showNotification('Не найдено!', 'error'); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).getProfileById(id);
+    }
+    function deleteCurrentProfile() {
+      const id = document.getElementById('profileSelect').value;
+      if (!id) { showNotification('Выбери душу!', 'error'); return; }
+      if (!confirm('Развеять душу?')) return;
+      showLoading(true);
+      google.script.run.withSuccessHandler(r => { showLoading(false); if (r.success) { showNotification(r.message, 'success'); loadProfiles(); hideProfileForm(); document.getElementById('charName').textContent = 'Пробуждающийся'; } else showNotification(r.message, 'error'); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).deleteProfile(id);
+    }
+    function saveCurrentProfile() {
+      const p = { profileName: document.getElementById('profileName').value, characterHeader: document.getElementById('characterHeader').value, shortName: document.getElementById('shortName').value, armorSlashing: parseInt(document.getElementById('armorSlashing').value) || 0, armorPiercing: parseInt(document.getElementById('armorPiercing').value) || 0, armorBludgeoning: parseInt(document.getElementById('armorBludgeoning').value) || 0, armorChopping: parseInt(document.getElementById('armorChopping').value) || 0, armorMagicBase: parseInt(document.getElementById('armorMagicBase').value) || 0, armorMagicOverrides: document.getElementById('armorMagicOverrides').value, armorUndead: parseInt(document.getElementById('armorUndead').value) || 0, multipliers: document.getElementById('multipliers').value, spellList: document.getElementById('spellList').value, resourceName: document.getElementById('resourceName').value, resourceMax: parseInt(document.getElementById('resourceMax').value) || 10, customCurrencies: document.getElementById('customCurrencies').value };
+      showLoading(true);
+      google.script.run.withSuccessHandler(r => { showLoading(false); if (r.success) { showNotification('Сохранено', 'success'); loadProfiles(); hideProfileForm(); if (isCreatingNew && r.profileId) setTimeout(() => { document.getElementById('profileSelect').value = r.profileId; switchProfile(); }, 300); else loadActiveProfileData(); } else showNotification(r.message, 'error'); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).saveProfile(p, isCreatingNew ? null : currentEditProfileId);
+    }
+    function cancelProfileEdit() { hideProfileForm(); }
+    function hideProfileForm() { document.getElementById('profileForm').classList.add('hidden'); currentEditProfileId = null; isCreatingNew = false; }
+    function clearProfileForm() { ['profileName','characterHeader','shortName','armorSlashing','armorPiercing','armorBludgeoning','armorChopping','armorMagicBase','armorMagicOverrides','armorUndead','multipliers','spellList','resourceName','resourceMax','customCurrencies'].forEach(id => document.getElementById(id).value = ''); }
+    function fillProfileForm(p) { document.getElementById('profileName').value = p.profileName || ''; document.getElementById('characterHeader').value = p.characterHeader || ''; document.getElementById('shortName').value = p.shortName || ''; document.getElementById('armorSlashing').value = p.armorSlashing || ''; document.getElementById('armorPiercing').value = p.armorPiercing || ''; document.getElementById('armorBludgeoning').value = p.armorBludgeoning || ''; document.getElementById('armorChopping').value = p.armorChopping || ''; document.getElementById('armorMagicBase').value = p.armorMagicBase || ''; document.getElementById('armorMagicOverrides').value = p.armorMagicOverrides || ''; document.getElementById('armorUndead').value = p.armorUndead || ''; document.getElementById('multipliers').value = p.multipliers || ''; document.getElementById('spellList').value = p.spellList || ''; document.getElementById('resourceName').value = p.resourceName || ''; document.getElementById('resourceMax').value = p.resourceMax || ''; document.getElementById('customCurrencies').value = p.customCurrencies || ''; }
+    function grabSelectedText() { showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); if (r.success) { document.getElementById('characterHeader').value = r.text; showNotification('Захвачено!', 'success'); } else showNotification(r.message, 'error'); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).getSelectedText(); }
+    function performLongRestHandler() { showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); if (r.success) { updateHealthBar(r.health.current, r.health.max); updateManaBar(r.mana.current, r.mana.max); showNotification('Отдых завершён', 'success'); refreshAllStats(); } }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).performLongRest(); }
+    function modifyResourceHandler(a) { showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); showNotification((a > 0 ? '+' : '') + a + ' → ' + r.current + '/' + r.max, a > 0 ? 'success' : 'info'); refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).modifyResource(a); }
+    function modifyResourcePositive() { const a = parseInt(document.getElementById('resourceCustomAmount').value) || 0; if (a <= 0) { showNotification('Укажи количество!', 'error'); return; } document.getElementById('resourceCustomAmount').value = ''; modifyResourceHandler(a); }
+    function modifyResourceNegative() { const a = parseInt(document.getElementById('resourceCustomAmount').value) || 0; if (a <= 0) { showNotification('Укажи количество!', 'error'); return; } document.getElementById('resourceCustomAmount').value = ''; modifyResourceHandler(-a); }
+    function resetResourceHandler() { showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); showNotification('Восстановлено', 'success'); refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).resetResource(); }
+    function updateSubtypes() { const c = document.getElementById('damageCategory').value; const s = document.getElementById('damageSubtype'); s.innerHTML = ''; const t = c === 'physical' ? [['slashing','Режущий'],['piercing','Колющий'],['bludgeoning','Дробящий'],['chopping','Рубящий']] : c === 'magical' ? [['fire','Огонь'],['water','Вода'],['earth','Земля'],['air','Воздух'],['light','Свет'],['space','Пространство'],['astral','Астрал'],['corruption','Скверна'],['electricity','Электричество'],['darkness','Тьма'],['void','Пустота'],['life','Жизнь'],['blood','Кровь'],['frost','Мороз'],['death','Смерть'],['nature','Природа'],['transcendence','Запредельность']] : [['pure','Чистый']]; t.forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; s.appendChild(o); }); }
+    function applyDamage() { const d = parseInt(document.getElementById('rawDamage').value) || 0; if (d <= 0) { showNotification('Укажи урон!', 'error'); return; } showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); document.getElementById('finalDamage').textContent = r.finalDamage; document.getElementById('damageBreakdown').textContent = r.isPure ? 'Чистый' : '(' + r.rawDamage + '×' + r.multiplier + ')−' + r.armorValue + (r.undeadBonus > 0 ? '−' + r.undeadBonus : ''); document.getElementById('damageResult').classList.add('show'); updateHealthBar(r.newHealth, r.maxHealth); showNotification('−' + r.finalDamage + ' ОЗ', 'error'); refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).takeDamage(d, document.getElementById('damageCategory').value, document.getElementById('damageSubtype').value, document.getElementById('isUndead').checked); }
+    function healCharacter() { const a = parseInt(document.getElementById('healAmount').value) || 0; if (a <= 0) { showNotification('Укажи ОЗ!', 'error'); return; } showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); updateHealthBar(r.current, r.max); showNotification('+' + a + ' ОЗ', 'success'); document.getElementById('healAmount').value = ''; refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).healHealth(a); }
+    function loadSpellList(str) { const s = document.getElementById('spellSelect'); s.innerHTML = '<option value="">— Гримуар пуст —</option>'; if (!str) return; str.split(',').forEach(p => { const [n, c] = p.trim().split(':').map(x => x.trim()); if (n && !isNaN(parseInt(c))) { const o = document.createElement('option'); o.value = JSON.stringify({ name: n, cost: parseInt(c) }); o.textContent = n + ' (' + c + ')'; s.appendChild(o); } }); }
+    function castSelectedSpell() { const v = document.getElementById('spellSelect').value; if (!v) { showNotification('Выбери заклинание!', 'error'); return; } const sp = JSON.parse(v); showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); updateManaBar(r.current, r.max); showNotification('«' + r.spellName + '»', 'success'); refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).castSpell(sp.name, sp.cost); }
+    function spendManaManual() { const a = parseInt(document.getElementById('manaAmount').value) || 0; if (a <= 0) { showNotification('Укажи ману!', 'error'); return; } showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); updateManaBar(r.current, r.max); showNotification('−' + a + ' маны', 'info'); document.getElementById('manaAmount').value = ''; refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).spendMana(a); }
+    function restoreManaManual() { const a = parseInt(document.getElementById('manaAmount').value) || 0; if (a <= 0) { showNotification('Укажи ману!', 'error'); return; } showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); updateManaBar(r.current, r.max); showNotification('+' + a + ' маны', 'success'); document.getElementById('manaAmount').value = ''; refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).restoreMana(a); }
+    function addCurrencyHandler() { const t = document.getElementById('currencyType').value; const a = parseInt(document.getElementById('currencyAmount').value) || 0; if (a <= 0) { showNotification('Укажи количество!', 'error'); return; } showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); document.getElementById('compactGold').textContent = r.gold; document.getElementById('compactSilver').textContent = r.silver; document.getElementById('compactCopper').textContent = r.copper; showNotification(r.message, 'success'); document.getElementById('currencyAmount').value = ''; }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).addCurrency(t, a); }
+    function spendCurrencyHandler() { const t = document.getElementById('currencyType').value; const a = parseInt(document.getElementById('currencyAmount').value) || 0; if (a <= 0) { showNotification('Укажи количество!', 'error'); return; } showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); document.getElementById('compactGold').textContent = r.gold; document.getElementById('compactSilver').textContent = r.silver; document.getElementById('compactCopper').textContent = r.copper; showNotification(r.message, 'info'); document.getElementById('currencyAmount').value = ''; }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).spendCurrency(t, a); }
+    function modifyCustomCurrencyHandler(sign) { const dn = document.getElementById('customCurrencySelect').value; if (!dn) { showNotification('Выбери ценность!', 'error'); return; } const a = parseInt(document.getElementById('customCurrencyAmount').value) || 0; if (a <= 0) { showNotification('Укажи количество!', 'error'); return; } const d = a * sign; showLoading(true); google.script.run.withSuccessHandler(r => { showLoading(false); showNotification(r.displayName + ': ' + (d > 0 ? '+' : '') + d + ' → ' + r.value, d > 0 ? 'success' : 'info'); document.getElementById('customCurrencyAmount').value = ''; refreshAllStats(); }).withFailureHandler(e => { showLoading(false); showNotification(e.message || 'Ошибка!', 'error'); }).modifyCustomCurrency(dn, d); }
+    document.addEventListener('DOMContentLoaded', function() { updateSubtypes(); loadProfiles(); });
+  </script>
+</body>
+</html>

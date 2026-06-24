@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Modal, Button, Input, Select, NumberStepper, Checkbox, SubTabs, Section } from '../ui';
 import { SpellChainEditor } from './SpellChainEditor';
 import { cn } from '../../utils/cn';
-import type { SpellV2, Spell, Resource } from '../../types';
+import type { SpellV2, Spell, Resource, DamageType } from '../../types';
 import { isSpellV2, ALL_DAMAGE_TYPES, DAMAGE_TYPE_NAMES } from '../../types';
 import { 
   createEmptySpellV2, 
@@ -36,7 +36,7 @@ function migrateSpellToV2(spell: Spell): SpellV2 {
     version: 2,
     cost: spell.manaCost,
     costResource: spell.costType === 'health' ? 'health' : 'mana',
-    spellType: spell.type,
+    spellType: (spell.type as SpellV2['spellType']) || 'targeted',
     projectiles: spell.projectiles ?? '1',
     elements: spell.elements ?? [],
     description: spell.description,
@@ -44,93 +44,34 @@ function migrateSpellToV2(spell: Spell): SpellV2 {
     modifiers: [],
   };
   
-  // Если было isMultiStep — конвертируем в цепочку
-  if (spell.isMultiStep) {
-    // Шаг 1: Каст
+  // Простое заклинание — каст + урон
+  v2.actions.push({
+    id: generateId(),
+    type: 'roll_check',
+    label: 'Каст',
+    order: 0,
+    diceFormula: 'd20',
+    bonuses: [
+      ...(spell.equipmentBonus ? [{ type: 'flat' as const, flatValue: spell.equipmentBonus }] : []),
+      { type: 'from_elements' as const, elementBonusType: 'cast' as const },
+    ],
+    transitions: [
+      { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
+      { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
+    ],
+  });
+  
+  if (spell.damageFormula) {
     v2.actions.push({
       id: generateId(),
-      type: 'roll_check',
-      label: 'Каст',
-      order: 0,
-      diceFormula: 'd20',
-      bonuses: spell.equipmentBonus ? [{ type: 'flat', flatValue: spell.equipmentBonus }] : [],
-      transitions: [
-        { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
-        { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
-      ],
+      type: 'roll_damage',
+      label: 'Урон',
+      order: 1,
+      damageFormula: spell.damageFormula,
+      damageType: spell.damageType as DamageType | undefined,
+      critMultiplier: 2,
+      addDamageBonus: true,
     });
-    
-    // Шаг 2: Таблица элементов (если есть)
-    if (spell.elementTable) {
-      const table = Object.entries(spell.elementTable).map(([num, element]) => ({
-        id: generateId(),
-        min: parseInt(num),
-        max: parseInt(num),
-        resultValue: element,
-        resultLabel: DAMAGE_TYPE_NAMES[element] ?? element,
-        resultIcon: ELEMENT_ICONS[element] ?? '✨',
-      }));
-      
-      v2.actions.push({
-        id: generateId(),
-        type: 'roll_table',
-        label: 'Элемент',
-        order: 1,
-        diceFormula: 'd12',
-        resultTable: table,
-        saveResultAs: 'element',
-      });
-    }
-    
-    // Шаг 3: Damage tiers (если есть)
-    if (spell.damageTiers) {
-      v2.actions.push({
-        id: generateId(),
-        type: 'damage_tiers',
-        label: 'Сила',
-        order: 2,
-        diceFormula: 'd20',
-        damageTiers: spell.damageTiers.map(t => ({
-          id: generateId(),
-          minRoll: t.minRoll,
-          maxRoll: t.maxRoll,
-          formula: t.formula,
-          label: t.label,
-        })),
-        damageType: 'from_context',
-        damageTypeContextKey: 'element',
-      });
-    }
-  } else {
-    // Простое заклинание — каст + урон
-    v2.actions.push({
-      id: generateId(),
-      type: 'roll_check',
-      label: 'Каст',
-      order: 0,
-      diceFormula: 'd20',
-      bonuses: [
-        ...(spell.equipmentBonus ? [{ type: 'flat' as const, flatValue: spell.equipmentBonus }] : []),
-        { type: 'from_elements' as const, elementBonusType: 'cast' as const },
-      ],
-      transitions: [
-        { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },
-        { id: generateId(), condition: 'always', targetStepId: 'next', priority: 99 },
-      ],
-    });
-    
-    if (spell.damageFormula) {
-      v2.actions.push({
-        id: generateId(),
-        type: 'roll_damage',
-        label: 'Урон',
-        order: 1,
-        damageFormula: spell.damageFormula,
-        damageType: spell.damageType ?? 'fire',
-        critMultiplier: 2,
-        addDamageBonus: true,
-      });
-    }
   }
   
   return v2;
@@ -254,7 +195,7 @@ export function SpellEditorModal({
               <div className="grid grid-cols-3 gap-3">
                 <NumberStepper
                   label="Стоимость"
-                  value={localSpell.cost}
+                  value={typeof localSpell.cost === 'number' ? localSpell.cost : 0}
                   onChange={(v) => update({ cost: v })}
                   min={0}
                   max={999}

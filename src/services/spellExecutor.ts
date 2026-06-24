@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { ELEMENT_ICONS } from '../constants/elements';
 import { DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../types';
+import { parseFormula, rollDice as sharedRollDice, doubleDiceFormula } from '../utils/shared';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
@@ -32,54 +33,11 @@ export interface ExecuteSpellResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ЛОКАЛЬНЫЙ ПАРСЕР КУБИКОВ
+// ЛОКАЛЬНЫЙ ПАРСЕР КУБИКОВ — uses shared/utils
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface DiceGroup {
-  count: number;
-  sides: number;
-}
-
-interface ParsedFormula {
-  dice: DiceGroup[];
-  bonus: number;
-}
-
-function parseFormula(formula: string): ParsedFormula {
-  const dice: DiceGroup[] = [];
-  let bonus = 0;
-  
-  const tokens = formula.toLowerCase().replace(/\s/g, '').match(/[+-]?(\d*d\d+|\d+)/g) || [];
-  
-  for (const token of tokens) {
-    const diceMatch = token.match(/([+-]?)(\d*)d(\d+)/);
-    if (diceMatch) {
-      const sign = diceMatch[1] === '-' ? -1 : 1;
-      const count = parseInt(diceMatch[2] || '1', 10) * sign;
-      const sides = parseInt(diceMatch[3]!, 10);
-      dice.push({ count: Math.abs(count), sides });
-    } else {
-      const num = parseInt(token, 10);
-      if (!isNaN(num)) bonus += num;
-    }
-  }
-  
-  return { dice, bonus };
-}
-
 function rollDice(formula: string): { formula: string; rolls: number[]; bonus: number; total: number } {
-  const { dice, bonus } = parseFormula(formula);
-  const rolls: number[] = [];
-  
-  for (const { count, sides } of dice) {
-    for (let i = 0; i < count; i++) {
-      rolls.push(Math.floor(Math.random() * sides) + 1);
-    }
-  }
-  
-  const total = rolls.reduce((sum, r) => sum + r, 0) + bonus;
-  
-  return { formula, rolls, bonus, total };
+  return sharedRollDice(formula);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -87,10 +45,7 @@ function rollDice(formula: string): { formula: string; rolls: number[]; bonus: n
 // ═══════════════════════════════════════════════════════════════════════════
 
 function doubleDiceInFormula(formula: string): string {
-  return formula.replace(/(\d*)d(\d+)/gi, (_, count, sides) => {
-    const c = parseInt(count || '1', 10);
-    return `${c * 2}d${sides}`;
-  });
+  return doubleDiceFormula(formula);
 }
 
 function rollWithModifier(formula: string, modifier: RollModifier = 'normal'): {
@@ -556,11 +511,17 @@ function checkTransitionCondition(transition: { condition: string; conditionKey?
   }
 }
 
-function checkStepCondition(condition: any, context: CastContext): boolean {
-    // Упрощенная проверка для условий шагов
+function checkStepCondition(condition: { type: string; key?: string; value?: number | string }, context: CastContext): boolean {
     if (condition.type === 'always') return true;
-    // Можно расширить логику при необходимости
-    return true;
+    if (!condition.key) return true;
+    const actualValue = context.values[condition.key];
+    switch (condition.type) {
+        case 'value_exists': return actualValue !== undefined;
+        case 'value_equals': return actualValue == condition.value;
+        case 'value_gte': return typeof actualValue === 'number' && actualValue >= (condition.value as number);
+        case 'value_lte': return typeof actualValue === 'number' && actualValue <= (condition.value as number);
+        default: return true;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -606,43 +567,56 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
     }
   }
   
-  let currentIndex = 0;
-  let iterations = 0;
+  let totalIterations = 0;
   const MAX_ITERATIONS = 100;
   
-  while (currentIndex < sortedActions.length && !context.stopped && iterations < MAX_ITERATIONS) {
-    iterations++;
-    const action = sortedActions[currentIndex];
-    if (!action) break;
-    context.currentStepIndex = currentIndex;
-    context.currentStepId = action.id;
-    
-    if (action.condition && action.condition.type !== 'always') {
-      const condMet = checkStepCondition(action.condition, context);
-      if (!condMet) { currentIndex++; continue; }
+  for (let proj = 0; proj < projectileCount; proj++) {
+    if (proj > 0) {
+      context.log.push(`\n--- Снаряд ${proj + 1} ---`);
     }
     
-    const executor = stepExecutors[action.type];
-    let nextStepId: string | null = null;
-    if (executor) {
-      const useModifier = iterations === 1 ? rollModifier : 'normal';
-      nextStepId = executor(action, context, spell, caster, useModifier);
-    } else {
-      context.log.push(`⚠️ Неизвестный тип шага: ${action.type}`);
+    let currentIndex = 0;
+    context.stopped = false;
+    context.currentStepIndex = 0;
+    
+    while (currentIndex < sortedActions.length && !context.stopped && totalIterations < MAX_ITERATIONS) {
+      totalIterations++;
+      const action = sortedActions[currentIndex];
+      if (!action) break;
+      context.currentStepIndex = currentIndex;
+      context.currentStepId = action.id;
+      
+      if (action.condition && action.condition.type !== 'always') {
+        const condMet = checkStepCondition(action.condition, context);
+        if (!condMet) { currentIndex++; continue; }
+      }
+      
+      const executor = stepExecutors[action.type];
+      let nextStepId: string | null = null;
+      if (executor) {
+        const useModifier = (proj === 0 && totalIterations === 1) ? rollModifier : 'normal';
+        nextStepId = executor(action, context, spell, caster, useModifier);
+      } else {
+        context.log.push(`⚠️ Неизвестный тип шага: ${action.type}`);
+      }
+      
+      if (onStepComplete) onStepComplete(action.id, context);
+      
+      if (nextStepId === 'stop' || context.stopped) break;
+      else if (nextStepId === 'next' || nextStepId === null) currentIndex++;
+      else {
+        const targetIndex = actionMap.get(nextStepId);
+        if (targetIndex !== undefined) currentIndex = targetIndex;
+        else { context.log.push(`⚠️ Шаг не найден: ${nextStepId}`); currentIndex++; }
+      }
     }
     
-    if (onStepComplete) onStepComplete(action.id, context);
-    
-    if (nextStepId === 'stop' || context.stopped) break;
-    else if (nextStepId === 'next' || nextStepId === null) currentIndex++;
-    else {
-      const targetIndex = actionMap.get(nextStepId);
-      if (targetIndex !== undefined) currentIndex = targetIndex;
-      else { context.log.push(`⚠️ Шаг не найден: ${nextStepId}`); currentIndex++; }
+    if (context.stopped && proj < projectileCount - 1) {
+      break;
     }
   }
   
-  if (iterations >= MAX_ITERATIONS) {
+  if (totalIterations >= MAX_ITERATIONS) {
     context.log.push(`⚠️ Превышен лимит итераций!`);
     context.error = 'Max iterations exceeded';
   }

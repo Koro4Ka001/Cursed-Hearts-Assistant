@@ -1,7 +1,10 @@
 // src/services/diceService.ts
 
 import OBR from "@owlbear-rodeo/sdk";
-import type { DiceRollResult, RollModifier, BroadcastMessage } from "../types";
+import type { DiceRollResult, RollModifier, BroadcastMessage as BroadcastMessageType } from "../types";
+import { parseFormula as sharedParseFormula, rollDice as sharedRollDice, doubleDiceFormula } from "../utils/shared";
+
+export type { BroadcastMessage } from "../types";
 
 export type DiceStatus = "local";
 export const DICE_BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
@@ -11,7 +14,7 @@ export const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
 // LOCAL EVENT EMITTER
 // ═══════════════════════════════════════════════════════════════
 
-type LocalMessageListener = (msg: BroadcastMessage) => void;
+type LocalMessageListener = (msg: BroadcastMessageType) => void;
 const localListeners = new Set<LocalMessageListener>();
 
 export function onLocalDiceMessage(callback: LocalMessageListener): () => void {
@@ -19,7 +22,7 @@ export function onLocalDiceMessage(callback: LocalMessageListener): () => void {
   return () => { localListeners.delete(callback); };
 }
 
-function emitLocal(msg: BroadcastMessage) {
+function emitLocal(msg: BroadcastMessageType) {
   localListeners.forEach(fn => {
     try { fn(msg); } catch (e) { console.error('[DiceService] Local listener error:', e); }
   });
@@ -29,10 +32,10 @@ function emitLocal(msg: BroadcastMessage) {
 // NOTIFICATION QUEUE
 // ═══════════════════════════════════════════════════════════════
 
-function addToQueue(msg: BroadcastMessage) {
+function addToQueue(msg: BroadcastMessageType) {
   try {
     const existing = localStorage.getItem(LOCAL_STORAGE_KEY);
-    let queue: BroadcastMessage[] = [];
+    let queue: BroadcastMessageType[] = [];
     
     if (existing) {
       try {
@@ -58,7 +61,7 @@ function addToQueue(msg: BroadcastMessage) {
 
 interface DG { count: number; sides: number; }
 
-function parseFormula(f: string): { groups: DG[]; bonus: number } {
+function parseFormulaLocal(f: string): { groups: DG[]; bonus: number } {
   const groups: DG[] = [];
   let bonus = 0;
   const tokens = f.toLowerCase().replace(/\s/g, "").match(/[+-]?(\d*d\d+|\d+)/g) || [];
@@ -110,7 +113,7 @@ function localRoll(
   modifier: RollModifier = 'normal',
   checkForCrits: boolean = true
 ): DiceRollResult {
-  const { groups, bonus } = parseFormula(formula);
+  const { groups, bonus } = parseFormulaLocal(formula);
   const rolls: number[] = [];
   let rawD20: number | undefined;
   let allD20Rolls: number[] | undefined;
@@ -166,7 +169,7 @@ function msgId(): string {
 // BROADCAST
 // ═══════════════════════════════════════════════════════════════
 
-async function broadcast(msg: BroadcastMessage): Promise<void> {
+async function broadcast(msg: BroadcastMessageType): Promise<void> {
   console.log('[DiceService] 📤 Broadcasting:', msg.title);
   
   addToQueue(msg);
@@ -448,7 +451,7 @@ class DiceService {
       details.push(`   └─ ${result}`);
     }
     
-    let color: BroadcastMessage['color'] = 'purple';
+    let color: BroadcastMessageType['color'] = 'purple';
     if (isCritHit) color = 'gold';
     else if (isCritMiss) color = 'blood';
     else if (!isHit) color = 'white';

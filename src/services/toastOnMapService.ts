@@ -1,6 +1,6 @@
 // src/services/toastOnMapService.ts
 import OBR, { buildShape, buildText, Item } from "@owlbear-rodeo/sdk";
-import type { BroadcastMessage } from "./diceService";
+import type { BroadcastMessage } from "../types";
 
 interface ToastItem {
   id: string;
@@ -29,18 +29,19 @@ class ToastOnMapService {
       }
 
       // Получаем позицию камеры
-      const bounds = await OBR.viewport.getViewportBounds();
+      const position = await OBR.viewport.getPosition();
       const scale = await OBR.viewport.getScale();
+      const viewWidth = await OBR.viewport.getWidth();
+      const viewHeight = await OBR.viewport.getHeight();
       
-      // Позиция в правом нижнем углу
       const padding = 20 / scale;
       const width = 300 / scale;
       const height = 80 / scale;
       const index = this.toasts.size;
       const spacing = 10 / scale;
       
-      const x = bounds.max.x - width - padding;
-      const y = bounds.max.y - height - padding - (height + spacing) * index;
+      const x = position.x + viewWidth / scale - width - padding;
+      const y = position.y + viewHeight / scale - height - padding - (height + spacing) * index;
       
       const items: Item[] = [];
       

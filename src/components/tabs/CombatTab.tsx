@@ -256,19 +256,27 @@ export function CombatTab() {
   const damagePreview = unit && incomingDamage > 0 ? calculateDamage(incomingDamage, damageType, unit, isUndeadAttacker) : null;
   
   const handleTakeDamage = async () => {
-    if (!damagePreview || damagePreview.finalDamage === 0) return;
+    if (!damagePreview) return;
     
-    const armorBlocked = incomingDamage > 0 && damagePreview.finalDamage === 0;
+    const armorBlocked = damagePreview.armorApplied > 0;
     
-    await takeDamage(unit.id, damagePreview.finalDamage);
-    await handleAddRageOnDamage(incomingDamage, armorBlocked);
+    if (damagePreview.finalDamage > 0) {
+      await takeDamage(unit.id, damagePreview.finalDamage);
+    }
+    await handleAddRageOnDamage(incomingDamage, armorBlocked && damagePreview.finalDamage === 0);
     
-    triggerEffect('shake');
-    addCombatLog(unit.shortName ?? unit.name, 'Получил урон', `${damagePreview.finalDamage} ${DAMAGE_TYPE_NAMES[damageType] ?? damageType}`);
-    if (unit.useManaAsHp) {
-      await diceService.announceTakeDamage(unit.shortName ?? unit.name, damagePreview.finalDamage, unit.mana.current - damagePreview.finalDamage, unit.mana.max);
+    if (damagePreview.finalDamage > 0) {
+      triggerEffect('shake');
+      addCombatLog(unit.shortName ?? unit.name, 'Получил урон', `${damagePreview.finalDamage} ${DAMAGE_TYPE_NAMES[damageType] ?? damageType}`);
+      if (unit.useManaAsHp) {
+        const newMana = Math.max(0, unit.mana.current - damagePreview.finalDamage);
+        await diceService.announceTakeDamage(unit.shortName ?? unit.name, damagePreview.finalDamage, newMana, unit.mana.max);
+      } else {
+        const newHP = Math.max(0, unit.health.current - damagePreview.finalDamage);
+        await diceService.announceTakeDamage(unit.shortName ?? unit.name, damagePreview.finalDamage, newHP, unit.health.max);
+      }
     } else {
-      await diceService.announceTakeDamage(unit.shortName ?? unit.name, damagePreview.finalDamage, unit.health.current - damagePreview.finalDamage, unit.health.max);
+      addCombatLog(unit.shortName ?? unit.name, 'Блок щитом', `${DAMAGE_TYPE_NAMES[damageType] ?? damageType} заблокирован`);
     }
     setIncomingDamage(0);
   };
