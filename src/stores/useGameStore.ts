@@ -518,43 +518,55 @@ export const useGameStore = create<GameState>()(
           return;
         }
         
-        await get().spendRage(unitId, effect.cost);
-        
-        const freshUnit = get().units.find(u => u.id === unitId) ?? unit;
-        const activeEffect = { ...effect, currentRounds: effect.durationRounds };
-        const newActiveEffects = [...(freshUnit.activeRageEffects ?? []), activeEffect];
-        
+        // Сначала применяем стат-бонусы
         const statsUpdate: Partial<Unit['stats']> = {};
         for (const entry of effect.effects) {
           if (entry.type === 'modify_stat' && entry.statKey) {
             const sv = Number(entry.statValue) || 0;
             if (sv !== 0) {
-              const currentVal = freshUnit.stats[entry.statKey] ?? 0;
+              const currentVal = unit.stats[entry.statKey] ?? 0;
               statsUpdate[entry.statKey] = currentVal + sv;
             }
           }
         }
         
-        console.log('[Store] 🔥 Activating rage effect:', effect.name, 'entries:', effect.effects, 'statsUpdate:', statsUpdate);
+        // Затем тратим rage и применяем всё разом
+        const activeEffect = { ...effect, currentRounds: effect.durationRounds };
         
-        set(state => ({
-          units: state.units.map(u => 
-            u.id === unitId 
-              ? { 
-                  ...u, 
-                  activeRageEffects: newActiveEffects,
-                  stats: { ...u.stats, ...statsUpdate }
-                } 
-              : u
-          )
-        }));
+        set(state => {
+          const u = state.units.find(u => u.id === unitId);
+          if (!u) return state;
+          return {
+            units: state.units.map(u => 
+              u.id === unitId 
+                ? { 
+                    ...u, 
+                    rage: { ...(u.rage ?? { current: 0, max: 100 }), current: Math.max(0, currentRage - effect.cost) },
+                    activeRageEffects: [...(u.activeRageEffects ?? []), activeEffect],
+                    stats: { ...u.stats, ...statsUpdate }
+                  } 
+                : u
+            ),
+            connections: { ...state.connections, lastSyncTime: Date.now() }
+          };
+        });
+        
+        // Синхронизируем rage с Google Docs
+        if (get().connections.docs && get().settings.syncRage && unit.googleDocsHeader) {
+          const newRage = Math.max(0, currentRage - effect.cost);
+          const max = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
+          try {
+            await docsService.setRage(unit.googleDocsHeader, newRage, max);
+          } catch (e) {
+            console.warn('[Store] 🔥 Docs sync Rage exception:', e);
+          }
+        }
         
         get().addNotification(`🔥 Активировано: ${effect.name}`, 'success');
       },
       
       decrementRageEffects: async (unitId) => {
-        const { units } = get();
-        const unit = units.find(u => u.id === unitId);
+        const unit = get().units.find(u => u.id === unitId);
         if (!unit) return;
         
         const activeEffects = unit.activeRageEffects ?? [];
@@ -562,18 +574,16 @@ export const useGameStore = create<GameState>()(
           .map(e => ({ ...e, currentRounds: e.currentRounds - 1 }))
           .filter(e => e.currentRounds > 0);
         
-        const expiredEffects = activeEffects.filter(e => {
-          const decremented = e.currentRounds - 1;
-          return decremented <= 0;
-        });
+        const expiredEffects = activeEffects.filter(e => (e.currentRounds - 1) <= 0);
         
-        // Откатываем бонусы характеристик от истёкших эффектов
         const statsUpdate: Partial<Unit['stats']> = {};
         for (const expired of expiredEffects) {
           for (const entry of expired.effects) {
-            if (entry.type === 'modify_stat' && entry.statKey && entry.statValue) {
-              const currentVal = unit.stats[entry.statKey] ?? 0;
-              statsUpdate[entry.statKey] = currentVal - entry.statValue;
+            if (entry.type === 'modify_stat' && entry.statKey) {
+              const sv = Number(entry.statValue) || 0;
+              if (sv !== 0) {
+                statsUpdate[entry.statKey] = (unit.stats[entry.statKey] ?? 0) - sv;
+              }
             }
           }
         }
@@ -592,19 +602,19 @@ export const useGameStore = create<GameState>()(
       },
       
       removeActiveRageEffect: async (unitId, effectId) => {
-        const { units } = get();
-        const unit = units.find(u => u.id === unitId);
+        const unit = get().units.find(u => u.id === unitId);
         if (!unit) return;
         
         const removedEffect = (unit.activeRageEffects ?? []).find(e => e.id === effectId);
         
-        // Откатываем бонусы характеристик
         const statsUpdate: Partial<Unit['stats']> = {};
         if (removedEffect) {
           for (const entry of removedEffect.effects) {
-            if (entry.type === 'modify_stat' && entry.statKey && entry.statValue) {
-              const currentVal = unit.stats[entry.statKey] ?? 0;
-              statsUpdate[entry.statKey] = currentVal - entry.statValue;
+            if (entry.type === 'modify_stat' && entry.statKey) {
+              const sv = Number(entry.statValue) || 0;
+              if (sv !== 0) {
+                statsUpdate[entry.statKey] = (unit.stats[entry.statKey] ?? 0) - sv;
+              }
             }
           }
         }

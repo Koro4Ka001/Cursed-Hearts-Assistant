@@ -77,23 +77,7 @@ function parseFormula(f: string): { groups: DG[]; bonus: number } {
 }
 
 function doubleDice(f: string): string {
-  // Удваиваем кубики И плоский бонус
-  const tokens = f.match(/[+-]?(\d*d\d+|\d+)/gi) || [];
-  const parts: string[] = [];
-  for (const token of tokens) {
-    const diceMatch = token.match(/([+-]?)(\d*)d(\d+)/i);
-    if (diceMatch) {
-      const sign = diceMatch[1] === '-' ? '-' : '';
-      const count = (parseInt(diceMatch[2] || '1', 10)) * 2;
-      parts.push(`${sign}${count}d${diceMatch[3]}`);
-    } else {
-      const num = parseInt(token, 10);
-      if (!isNaN(num)) {
-        parts.push(num >= 0 ? `+${num * 2}` : `${num * 2}`);
-      }
-    }
-  }
-  return parts.join('');
+  return f.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || "1", 10) * 2}d${s}`);
 }
 
 // ═══════════════════════════════════════════════════════════════
