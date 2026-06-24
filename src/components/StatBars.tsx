@@ -23,8 +23,13 @@ export function StatBars() {
   const maxMana = unit.mana.max || 1;
   const manaPct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
 
+  const hasRage = unit.hasRage ?? false;
+  const rage = unit.rage?.current ?? 0;
+  const maxRage = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
+  const ragePct = Math.max(0, Math.min(100, (rage / maxRage) * 100));
+
   return (
-    <div className="px-3 py-2.5 bg-dark border-b border-edge-bone space-y-2 relative overflow-hidden">
+    <div className="px-3 py-3 bg-dark border-b border-edge-bone space-y-2.5 relative overflow-hidden">
       {/* Фоновые руны */}
       <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
         <span className="absolute top-0 left-2 text-[16px] opacity-[0.025] text-gold">ᚱ</span>
@@ -101,6 +106,35 @@ export function StatBars() {
           </div>
         </div>
       </div>
+
+      {/* ═══ RAGE BAR ═══ */}
+      {hasRage && (
+        <div className="relative">
+          <div className="mana-crystal" style={{ borderColor: '#4a2a2a' }}>
+            <div className="mana-crystal-bg" style={{ background: 'linear-gradient(180deg, #1a0a0a 0%, #2d1f1f 50%, #1a0a0a 100%)' }} />
+
+            <div
+              className="mana-crystal-fill"
+              style={{
+                width: `${ragePct}%`,
+                background: 'linear-gradient(180deg, #dc143c 0%, #8b0000 30%, #660000 60%, #440000 100%)'
+              }}
+            >
+              <span className="mana-spark mana-spark-1" style={{ background: '#ff4500', boxShadow: '0 0 4px 1px rgba(255,69,0,0.6)' }} />
+              <span className="mana-spark mana-spark-2" style={{ background: '#ff6600', boxShadow: '0 0 4px 1px rgba(255,102,0,0.6)' }} />
+              <span className="mana-spark mana-spark-3" style={{ background: '#ff4500', boxShadow: '0 0 4px 1px rgba(255,69,0,0.6)' }} />
+              <span className="mana-crystal-shimmer" />
+            </div>
+
+            <div className="mana-crystal-label" style={{ color: '#ffcccc' }}>
+              <span className="mana-crystal-icon" style={{ filter: 'drop-shadow(0 0 4px rgba(255,50,50,0.6))' }}>🔥</span>
+              <span>{rage}</span>
+              <span className="mana-crystal-separator">/</span>
+              <span>{maxRage}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

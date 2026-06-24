@@ -363,7 +363,7 @@ export function CombatTab() {
               </div>
             )}
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
-            <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full">⚔️ АТАКОВАТЬ</Button>
+            <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full text-sm py-3">⚔️ АТАКОВАТЬ</Button>
             
             {meleeLog.length > 0 && (
               <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
@@ -384,7 +384,7 @@ export function CombatTab() {
             <Select label="Боеприпасы" value={selectedAmmo?.id ?? ''} onChange={e => setSelectedAmmoId(e.target.value)} options={ammoResources.map(r => ({ value: r.id, label: `${r.icon ?? '🏹'} ${r.name} (${r.current ?? 0}/${r.max ?? 0}) — ${r.damageFormula ?? 'нет урона'}${(r.onHitActions?.length ?? 0) > 0 ? ' ⚡' : ''}` }))} />
             {selectedRangedWeapon && selectedAmmo && <div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone"><div>🏹 {selectedRangedWeapon.name}: +{(selectedRangedWeapon.hitBonus ?? 0) + (proficiencies.bows ?? 0)} к попаданию</div>{(selectedRangedWeapon.multishot ?? 1) > 1 && <div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел</div>}<div className="mt-1">🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType && (DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? selectedAmmo.damageType)}</div>{((selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)) > 0 && <div className="text-purple-400 mt-1">⚡ Эффекты: {(selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)} шагов</div>}</div>}
             <NumberStepper label="Количество выстрелов" value={rangedShotCount} onChange={setRangedShotCount} min={1} max={10} />
-            <Button variant="danger" onClick={handleRangedAttack} loading={isRangedAttacking} disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)} className="w-full">🏹 ВЫСТРЕЛИТЬ</Button>
+            <Button variant="danger" onClick={handleRangedAttack} loading={isRangedAttacking} disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)} className="w-full text-sm py-3">🏹 ВЫСТРЕЛИТЬ</Button>
             {rangedLog.length > 0 && <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">{rangedLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}</div>}
             {rangedDamageResults.length > 0 && <div className="space-y-2"><div className="text-xs text-faded uppercase">Урон:</div><DiceResultDisplay results={rangedDamageResults} /></div>}
           </div>
@@ -397,7 +397,7 @@ export function CombatTab() {
           <Checkbox checked={isUndeadAttacker} onChange={setIsUndeadAttacker} label="☠️ Атакует нежить" />
           <Select label="Категория" value={damageCategory} onChange={e => { const c = e.target.value as DamageCategory; setDamageCategory(c); if (c === 'physical') setDamageType('slashing'); else if (c === 'magical') setDamageType('огонь'); else setDamageType('pure'); }} options={[{ value: 'physical', label: 'Физический' }, { value: 'magical', label: 'Магический' }, { value: 'pure', label: 'Чистый' }]} />
           {damageCategory !== 'pure' && <Select label="Тип урона" value={damageType} onChange={e => setDamageType(e.target.value as DamageType)} options={getDamageTypeOptions()} />}
-          {damagePreview && <div className="p-2 bg-obsidian rounded border border-edge-bone"><div className="text-xs text-faded uppercase mb-1">Расчёт:</div><div className="text-bone font-garamond">{damagePreview.breakdown}</div><div className="text-blood-bright font-bold mt-1">Итого: {damagePreview.finalDamage} урона</div></div>}
+          {damagePreview && <div className="p-3 bg-obsidian rounded-lg border border-edge-bone"><div className="text-xs text-faded uppercase mb-1.5">Расчёт:</div><div className="text-bone font-garamond text-[13px]">{damagePreview.breakdown}</div><div className="text-blood-bright font-bold mt-1.5 text-[14px]">Итого: {damagePreview.finalDamage} урона</div></div>}
           <Button variant="danger" onClick={handleTakeDamage} disabled={!damagePreview || damagePreview.finalDamage === 0} className="w-full">💀 Получить урон</Button>
         </div>
       </Section>
@@ -405,7 +405,7 @@ export function CombatTab() {
       <Section title="Исцеление" icon="💚" collapsible defaultOpen={true}>
         <div className="space-y-3">
           <NumberStepper label="Количество HP" value={healAmount} onChange={setHealAmount} min={0} max={9999} />
-          <Button variant="success" onClick={handleHeal} disabled={healAmount <= 0} className="w-full">💚 Исцелить</Button>
+          <Button variant="success" onClick={handleHeal} disabled={healAmount <= 0} className="w-full text-sm py-3">💚 Исцелить</Button>
         </div>
       </Section>
     </div>

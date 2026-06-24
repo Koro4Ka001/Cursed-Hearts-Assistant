@@ -79,9 +79,9 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  sm: 'px-2 py-1 text-[10px]',
-  md: 'px-3 py-1.5 text-xs',
-  lg: 'px-4 py-2 text-sm',
+  sm: 'px-2.5 py-1.5 text-[10px]',
+  md: 'px-3.5 py-2 text-xs',
+  lg: 'px-5 py-2.5 text-sm',
 };
 
 export function Button({
@@ -138,11 +138,11 @@ export function Input({ label, error, className, ...props }: InputProps) {
       )}
       <input
         className={cn(
-          'bg-obsidian border border-edge-bone text-bone rounded px-2.5 py-1.5',
-          'font-garamond text-sm placeholder:text-dim',
-          'focus:outline-none focus:border-gold focus:shadow-[0_0_8px_rgba(212,167,38,0.15)]',
+          'bg-obsidian border border-edge-bone text-bone rounded-lg px-3 py-2',
+          'font-garamond text-[14px] placeholder:text-dim',
+          'focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/15',
           'transition-all duration-200',
-          error && 'border-blood focus:border-blood',
+          error && 'border-blood focus:border-blood focus:ring-blood/15',
           className
         )}
         {...props}
@@ -311,9 +311,9 @@ export function Textarea({ label, className, ...props }: TextareaProps) {
       )}
       <textarea
         className={cn(
-          'flex-1 bg-obsidian border border-edge-bone text-bone rounded px-2.5 py-2',
-          'font-garamond text-sm placeholder:text-dim resize-none',
-          'focus:outline-none focus:border-gold focus:shadow-[0_0_8px_rgba(212,167,38,0.15)]',
+          'flex-1 bg-obsidian border border-edge-bone text-bone rounded-lg px-3 py-2.5',
+          'font-garamond text-[14px] placeholder:text-dim resize-none',
+          'focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/15',
           'transition-all duration-200',
           className
         )}
@@ -351,9 +351,9 @@ export function Select({ label, options, className, ...props }: SelectProps) {
       )}
       <select
         className={cn(
-          'bg-obsidian border border-edge-bone text-bone rounded px-2.5 py-1.5 pr-8',
-          'font-garamond text-sm cursor-pointer appearance-none',
-          'focus:outline-none focus:border-gold focus:shadow-[0_0_8px_rgba(212,167,38,0.15)]',
+          'bg-obsidian border border-edge-bone text-bone rounded-lg px-3 py-2 pr-8',
+          'font-garamond text-[14px] cursor-pointer appearance-none',
+          'focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/15',
           'transition-all duration-200',
           'bg-[url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%237a6f62\'%3E%3Cpath d=\'M6 8L1 3h10z\'/%3E%3C/svg%3E")]',
           'bg-no-repeat bg-[right_0.5rem_center]',
@@ -406,7 +406,7 @@ export function ProgressBar({
     );
   }
 
-  if (type === 'rage') { // 🔥 RAGE BAR
+  if (type === 'rage') {
     return (
       <div className={cn('rage-bar-wrap', className)}>
         <div className="rage-bar-fill" style={{ width: `${pct}%` }} />
@@ -477,7 +477,7 @@ export function Section({
         )}
       </div>
 
-      <div className="h-[1px] bg-gradient-to-r from-transparent via-gold-dark/30 to-transparent" />
+          <div className="h-[1px] bg-gradient-to-r from-transparent via-gold-dark/20 to-transparent" />
 
       <div
         className={cn(
@@ -527,7 +527,7 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
             ×
           </button>
         </div>
-        <div className="p-4 overflow-y-auto flex-1">{children}</div>
+        <div className="p-5 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );
@@ -573,12 +573,12 @@ export function NumberStepper({
           <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-edge-bone/30 to-transparent -mt-0.5 mb-0.5" />
         </>
       )}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
           onClick={() => onChange(clamp(v - step))}
           disabled={v <= min}
-          className="btn btn-secondary px-2 py-1 text-xs active:scale-95 transition-transform"
+          className="btn btn-secondary px-2.5 py-1.5 text-xs active:scale-95 transition-transform min-w-[32px]"
         >
           −
         </button>
@@ -590,16 +590,16 @@ export function NumberStepper({
             if (!isNaN(n)) onChange(clamp(n));
           }}
           className={cn(
-            'w-14 text-center bg-obsidian border border-edge-bone text-bone rounded py-1',
+            'w-16 text-center bg-obsidian border border-edge-bone text-bone rounded-md py-1.5',
             'font-cinzel text-sm',
-            'focus:outline-none focus:border-gold transition-colors'
+            'focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/15 transition-all'
           )}
         />
         <button
           type="button"
           onClick={() => onChange(clamp(v + step))}
           disabled={v >= max}
-          className="btn btn-secondary px-2 py-1 text-xs active:scale-95 transition-transform"
+          className="btn btn-secondary px-2.5 py-1.5 text-xs active:scale-95 transition-transform min-w-[32px]"
         >
           +
         </button>
@@ -624,7 +624,7 @@ export function Checkbox({ checked, onChange, label, className }: CheckboxProps)
     <label className={cn('flex items-center gap-2.5 cursor-pointer group', className)}>
       <div
         className={cn(
-          'w-4 h-4 rounded-sm border-2 flex items-center justify-center shrink-0',
+          'w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center shrink-0',
           'transition-all duration-200',
           checked
             ? 'bg-gold border-gold text-abyss'
@@ -632,9 +632,9 @@ export function Checkbox({ checked, onChange, label, className }: CheckboxProps)
         )}
         onClick={() => onChange(!checked)}
       >
-        {checked && <span className="text-[9px] font-bold leading-none">✓</span>}
+        {checked && <span className="text-[10px] font-bold leading-none">✓</span>}
       </div>
-      <span className="text-bone font-garamond text-sm select-none">{label}</span>
+      <span className="text-bone font-garamond text-[13px] select-none">{label}</span>
     </label>
   );
 }
@@ -696,12 +696,12 @@ const TOAST_ICONS: Record<string, string> = {
 export function NotificationToast({ message, type, onClose }: NotificationToastProps) {
   return (
     <div className={cn('toast', `toast-${type}`)}>
-      <div className="flex items-start gap-2">
-        <span className="shrink-0 text-sm">{TOAST_ICONS[type]}</span>
-        <span className="flex-1 font-garamond text-sm break-words">{message}</span>
+      <div className="flex items-start gap-2.5">
+        <span className="shrink-0 text-base">{TOAST_ICONS[type]}</span>
+        <span className="flex-1 font-garamond text-[13px] break-words leading-relaxed">{message}</span>
         <button
           onClick={onClose}
-          className="shrink-0 ml-1 text-lg leading-none opacity-60 hover:opacity-100 transition-opacity"
+          className="shrink-0 ml-1 text-lg leading-none opacity-50 hover:opacity-100 transition-opacity"
           aria-label="Закрыть"
         >
           ×
@@ -747,7 +747,7 @@ export function DiceResultDisplay({ results, className }: DiceResultDisplayProps
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-1 mb-2">
+            <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
               {rolls.map((roll, ri) => {
                 const isFirstD20 = ri === 0 && hasD20;
                 const isCritFace = isFirstD20 && roll === 20;
@@ -768,7 +768,7 @@ export function DiceResultDisplay({ results, className }: DiceResultDisplayProps
               })}
 
               {(result.bonus ?? 0) !== 0 && (
-                <span className="text-faded text-sm font-garamond ml-1">
+                <span className="text-faded text-[13px] font-garamond ml-1">
                   {result.bonus > 0 ? '+' : ''}{result.bonus}
                 </span>
               )}

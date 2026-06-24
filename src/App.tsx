@@ -128,12 +128,12 @@ function CompactView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) 
   return (
     <div className={cn('compact-frame', hpLow && 'compact-frame-danger')}>
       <div className="compact-header">
-        <div className="flex items-center gap-1 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           {units.length > 1 && <button onClick={prevUnit} className="compact-nav-btn" disabled={unitIdx === 0}>◂</button>}
-          <span className="text-gold font-cinzel text-[10px] tracking-wider truncate flex-1 text-center">{unit.shortName || unit.name}</span>
+          <span className="text-gold font-cinzel text-[11px] tracking-wider truncate flex-1 text-center">{unit.shortName || unit.name}</span>
           {units.length > 1 && <button onClick={nextUnit} className="compact-nav-btn" disabled={unitIdx === units.length - 1}>▸</button>}
         </div>
-        <div className="flex gap-1 ml-2">
+        <div className="flex gap-1.5 ml-2">
           {undoHistory.length > 0 && (
             <button onClick={() => undo()} className="compact-mode-btn text-gold" title={`Отменить: ${undoHistory[0]?.description}`}>↩</button>
           )}
@@ -192,7 +192,7 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         </div>
         <div className="flex gap-2 items-center">
           <UndoButton onClick={() => undo()} description={undoHistory[0]?.description} count={undoHistory.length} disabled={undoHistory.length === 0} />
-          <div className="flex gap-1">
+          <div className="flex gap-1.5">
             <button onClick={() => onChangeMode('compact')} className="compact-mode-btn" title="Мини">⤡</button>
             <button onClick={() => onChangeMode('medium')} className="compact-mode-btn" title="Средний">▣</button>
           </div>
@@ -214,7 +214,7 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
                 combatLog.slice(-15).map((entry, i) => (
                   <div key={i} className="large-log-entry">
                     <span className="text-gold-dark font-cinzel text-[9px]">{entry.unitName}</span>
-                    <span className="text-faded text-[10px] ml-1">{entry.action}: {entry.details}</span>
+                    <span className="text-faded text-[11px] ml-1">{entry.action}: {entry.details}</span>
                   </div>
                 ))
               )}
@@ -226,7 +226,7 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
           <div className="large-tabs">
             {TABS.map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={cn('large-tab', activeTab === tab.id ? 'large-tab-active' : 'large-tab-inactive')}>
-                <span className="text-base">{tab.icon}</span>
+                <span className="text-lg">{tab.icon}</span>
                 <span className="text-[10px] font-cinzel uppercase tracking-wider">{tab.label}</span>
               </button>
             ))}
@@ -299,12 +299,13 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'flex-1 py-2.5 text-lg transition-all min-w-0 flex items-center justify-center tab-rune relative',
+                'flex-1 py-2.5 transition-all min-w-0 flex flex-col items-center justify-center gap-0.5 tab-rune relative',
                 activeTab === tab.id ? 'tab-active' : 'tab-inactive'
               )}
               title={tab.label}
             >
-              {tab.icon}
+              <span className="text-lg leading-none">{tab.icon}</span>
+              <span className="text-[8px] font-cinzel uppercase tracking-wider leading-none">{tab.label}</span>
             </button>
           ))}
         </div>
@@ -417,7 +418,7 @@ export function App() {
         </div>
         <LoadingSpinner className="mb-6" size="lg" />
         <div className="text-gold font-cinzel-decorative tracking-[6px] uppercase text-sm text-glow-gold">Загрузка</div>
-        <div className="text-dim font-garamond text-xs mt-3 tracking-[3px] italic">Гримуар пробуждается...</div>
+        <div className="text-dim font-garamond text-[13px] mt-3 tracking-[3px] italic">Гримуар пробуждается...</div>
         <div className="mt-6 w-32 h-[1px] bg-gradient-to-r from-transparent via-gold-dark to-transparent" />
       </div>
     );

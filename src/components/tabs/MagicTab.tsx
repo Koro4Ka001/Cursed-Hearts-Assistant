@@ -465,7 +465,7 @@ export function MagicTab() {
                             <button
                               key={spell.id}
                               onClick={() => setSelectedSpellId(spell.id)}
-                              className={`w-full text-left px-2 py-1.5 rounded transition-all ${
+                              className={`w-full text-left px-3 py-2 rounded-lg transition-all ${
                                 isSelected 
                                   ? 'bg-gold/20 border border-gold/50' 
                                   : 'bg-obsidian border border-transparent hover:border-edge-bone'
@@ -496,7 +496,7 @@ export function MagicTab() {
             
             {/* Детали выбранного заклинания */}
             {selectedSpell && selectedSpellDisplay && (
-              <div className="p-3 bg-obsidian rounded border border-gold/30 space-y-2">
+              <div className="p-4 bg-obsidian rounded-lg border border-gold/30 space-y-2.5">
                 <div className="font-cinzel text-gold text-sm">{selectedSpell.name}</div>
                 
                 {selectedSpellDisplay.elements.length > 0 && (
@@ -554,14 +554,14 @@ export function MagicTab() {
               onClick={handleCast}
               loading={isCasting}
               disabled={!selectedSpell}
-              className="w-full"
+              className="w-full text-sm py-3"
             >
               ✨ СОТВОРИТЬ
             </Button>
             
             {/* Лог каста */}
             {castLog.length > 0 && (
-              <div className="p-3 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
+              <div className="p-3 bg-obsidian rounded-lg border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
                 {castLog.map((line, idx) => {
                   const parts = line.split(/(\*\*.*?\*\*)/g);
                   return (
@@ -603,8 +603,8 @@ export function MagicTab() {
             
             {/* Итоговый урон */}
             {lastContext && lastContext.totalDamage > 0 && (
-              <div className="p-3 bg-blood/20 rounded border border-blood/50 text-center">
-                <div className="text-xs text-faded uppercase mb-1">Итоговый урон</div>
+              <div className="p-4 bg-blood/20 rounded-lg border border-blood/50 text-center">
+                <div className="text-xs text-faded uppercase mb-1.5">Итоговый урон</div>
                 <div className="text-2xl font-cinzel text-blood-bright">
                   💥 {lastContext.totalDamage}
                   {lastContext.damageType && (
@@ -618,7 +618,7 @@ export function MagicTab() {
             
             {/* Элементные эффекты */}
             {lastElementEffects && lastElementEffects.effects.filter(e => e.triggered).length > 0 && (
-              <div className="p-3 bg-gold/5 rounded border border-gold/30 space-y-2">
+              <div className="p-4 bg-gold/5 rounded-lg border border-gold/30 space-y-2.5">
                 <div className="text-xs text-gold uppercase font-cinzel tracking-wider">⚡ Элементные эффекты</div>
                 {lastElementEffects.effects.filter(e => e.triggered).map((effect, idx) => (
                   <div key={idx} className="flex items-start gap-2 text-sm">

@@ -158,13 +158,13 @@ export function SettingsTab() {
         <div className="space-y-3">
           <Section title="Персонажи" icon="👤">
             {units.length === 0 ? (
-              <p className="text-faded text-sm mb-2">Нет персонажей</p>
+              <p className="text-faded text-[13px] mb-2">Нет персонажей</p>
             ) : (
               <div className="space-y-2 mb-3">
                 {units.map(u => (
                   <div 
                     key={u.id}
-                    className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-all ${
+                    className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
                       u.id === selectedUnitId 
                         ? 'border-gold bg-gold-dark/20' 
                         : 'border-edge-bone bg-obsidian hover:border-ancient'
@@ -172,10 +172,10 @@ export function SettingsTab() {
                     onClick={() => selectUnit(u.id)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-bone font-garamond truncate">{u.name}</div>
-                      <div className="text-xs text-faded">{u.shortName}</div>
+                      <div className="text-bone font-garamond text-[14px] truncate">{u.name}</div>
+                      <div className="text-[11px] text-faded">{u.shortName}</div>
                     </div>
-                    <div className="flex gap-1 ml-2">
+                    <div className="flex gap-1.5 ml-2">
                       <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); handleExportUnit(u); }}>📤</Button>
                       <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); setEditingUnitId(u.id); }}>✏️</Button>
                       <Button variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); deleteUnit(u.id); }}>🗑️</Button>
@@ -200,16 +200,16 @@ export function SettingsTab() {
         <div className="space-y-3">
           <Section title="Боевой журнал" icon="📜">
             {combatLog.length === 0 ? (
-              <p className="text-faded text-sm text-center py-4">Журнал пуст.</p>
+              <p className="text-faded text-[13px] text-center py-4">Журнал пуст.</p>
             ) : (
-              <div className="space-y-1 max-h-96 overflow-y-auto">
+              <div className="space-y-1.5 max-h-96 overflow-y-auto">
                 {combatLog.slice().reverse().map(entry => (
-                  <div key={entry.id} className="p-2 bg-obsidian rounded border border-edge-bone text-sm">
+                  <div key={entry.id} className="p-2.5 bg-obsidian rounded-lg border border-edge-bone">
                     <div className="flex items-center justify-between">
-                      <span className="text-gold font-cinzel text-xs">{entry.unitName}</span>
-                      <span className="text-xs text-dim">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                      <span className="text-gold font-cinzel text-[11px]">{entry.unitName}</span>
+                      <span className="text-[10px] text-dim">{new Date(entry.timestamp).toLocaleTimeString()}</span>
                     </div>
-                    <div className="text-bone font-garamond">
+                    <div className="text-bone font-garamond text-[13px]">
                       {entry.action}: <span className="text-ancient">{entry.details}</span>
                     </div>
                   </div>
@@ -233,7 +233,7 @@ export function SettingsTab() {
             <div className="space-y-3">
               <Input label="URL Google Apps Script" value={settings.googleDocsUrl ?? ''} onChange={(e) => updateSettings({ googleDocsUrl: e.target.value })} />
               <Button variant="gold" onClick={handleTestDocs} loading={isTesting} className="w-full">🔌 Тест подключения</Button>
-              <div className="space-y-2 pt-2 border-t border-edge-bone">
+              <div className="space-y-2.5 pt-2 border-t border-edge-bone">
                 <Checkbox checked={settings.syncHP ?? true} onChange={(v) => updateSettings({ syncHP: v })} label="Синхронизировать HP" />
                 <Checkbox checked={settings.syncMana ?? true} onChange={(v) => updateSettings({ syncMana: v })} label="Синхронизировать ману" />
                 <Checkbox checked={settings.syncRage ?? true} onChange={(v) => updateSettings({ syncRage: v })} label="🔥 Синхронизировать Rage" />
