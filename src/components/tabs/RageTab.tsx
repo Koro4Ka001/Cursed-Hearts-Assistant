@@ -54,6 +54,7 @@ export function RageTab() {
   const maxRage = unit.rage?.max ?? rageConfig.max ?? 100;
   
   const handleSaveEffect = (effect: RageEffect) => {
+    console.log('[RageTab] Saving effect:', JSON.stringify(effect));
     if (isCreating) {
       updateUnit(unit.id, { rageEffects: [...rageEffects, { ...effect, id: generateId() }] });
     } else {

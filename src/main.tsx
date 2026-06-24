@@ -100,12 +100,8 @@ OBR.onReady(async () => {
     
     onLocalDiceMessage((msg) => {
       console.log("[Main] 📨 LOCAL message:", msg.title);
-      // Показываем in-plugin toast
-      const store = useGameStore.getState();
-      store.addNotification(
-        `${msg.icon || '🎲'} ${msg.title}${msg.subtitle ? ' — ' + msg.subtitle : ''}`,
-        msg.isCrit ? 'success' : msg.isCritFail ? 'error' : 'info'
-      );
+      addToLocalQueue(msg);
+      openNotificationPopover();
     });
     
     // ═══════════════════════════════════════════════════════════
@@ -118,12 +114,8 @@ OBR.onReady(async () => {
       const msg = event.data as BroadcastMessage;
       console.log("[Main] 📨 BROADCAST from other player:", msg.title);
       
-      // Добавляем в store как уведомление (in-plugin toast)
-      const store = useGameStore.getState();
-      store.addNotification(
-        `${msg.icon || '🎲'} [${msg.unitName}] ${msg.title}${msg.subtitle ? ' — ' + msg.subtitle : ''}`,
-        msg.isCrit ? 'success' : msg.isCritFail ? 'error' : 'info'
-      );
+      addToLocalQueue(msg);
+      openNotificationPopover();
     });
     
     console.log("[Main] ✓ Initialization complete!");

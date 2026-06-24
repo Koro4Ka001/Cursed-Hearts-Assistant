@@ -520,19 +520,22 @@ export const useGameStore = create<GameState>()(
         
         await get().spendRage(unitId, effect.cost);
         
+        const freshUnit = get().units.find(u => u.id === unitId) ?? unit;
         const activeEffect = { ...effect, currentRounds: effect.durationRounds };
-        const newActiveEffects = [...(unit.activeRageEffects ?? []), activeEffect];
+        const newActiveEffects = [...(freshUnit.activeRageEffects ?? []), activeEffect];
         
-        // Применяем бонусы характеристик от эффекта
         const statsUpdate: Partial<Unit['stats']> = {};
         for (const entry of effect.effects) {
-          if (entry.type === 'modify_stat' && entry.statKey && entry.statValue) {
-            const currentVal = unit.stats[entry.statKey] ?? 0;
-            statsUpdate[entry.statKey] = currentVal + entry.statValue;
+          if (entry.type === 'modify_stat' && entry.statKey) {
+            const sv = Number(entry.statValue) || 0;
+            if (sv !== 0) {
+              const currentVal = freshUnit.stats[entry.statKey] ?? 0;
+              statsUpdate[entry.statKey] = currentVal + sv;
+            }
           }
         }
         
-        console.log('[Store] 🔥 Activating rage effect:', effect.name, 'stat bonuses:', statsUpdate);
+        console.log('[Store] 🔥 Activating rage effect:', effect.name, 'entries:', effect.effects, 'statsUpdate:', statsUpdate);
         
         set(state => ({
           units: state.units.map(u => 
