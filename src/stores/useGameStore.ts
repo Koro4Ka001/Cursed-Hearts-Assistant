@@ -164,13 +164,11 @@ interface GameState {
   undoHistory: UndoEntry[];
   connections: Connections;
   
-  // Юниты
   addUnit: () => void;
   updateUnit: (id: string, updates: Partial<Unit>) => void;
   deleteUnit: (id: string) => void;
   selectUnit: (id: string | null) => void;
   
-  // HP / Мана / Rage / Ресурсы
   setHP: (unitId: string, value: number) => Promise<void>;
   setMana: (unitId: string, value: number) => Promise<void>;
   setRage: (unitId: string, value: number) => Promise<void>;
@@ -184,23 +182,18 @@ interface GameState {
   spendResource: (unitId: string, resourceId: string, amount: number) => Promise<void>;
   setNotes: (unitId: string, notes: string) => void;
   
-  // Rage эффекты
   activateRageEffect: (unitId: string, effect: RageEffect) => Promise<void>;
   decrementRageEffects: (unitId: string) => Promise<void>;
   removeActiveRageEffect: (unitId: string, effectId: string) => Promise<void>;
   
-  // Undo
   undo: () => Promise<void>;
   clearUndoHistory: () => void;
   
-  // Google Docs — pull (docs → local)
   pullStatsFromDocs: (unitId: string) => Promise<void>;
   pullAllFromDocs: () => Promise<void>;
   
-  // Google Docs — push (local → docs)
   syncUnitToDocs: (unit: Unit) => Promise<void>;
   
-  // Остальное
   updateSettings: (updates: Partial<AppSettings>) => void;
   addNotification: (message: string, type?: Notification['type']) => void;
   clearNotification: (id: string) => void;
@@ -319,10 +312,6 @@ export const useGameStore = create<GameState>()(
       
       setActiveTab: (tab) => set({ activeTab: tab }),
       
-      // ═══════════════════════════════════════════════════════════════
-      // ЮНИТЫ
-      // ═══════════════════════════════════════════════════════════════
-      
       addUnit: () => {
         const newUnit = createDefaultUnit();
         set(state => ({
@@ -332,6 +321,7 @@ export const useGameStore = create<GameState>()(
       },
       
       updateUnit: (id, updates) => {
+        console.log('[Store] updateUnit:', id, updates);
         set(state => ({
           units: state.units.map(u => u.id === id ? { ...u, ...updates } : u)
         }));
@@ -355,10 +345,6 @@ export const useGameStore = create<GameState>()(
       },
       
       selectUnit: (id) => set({ selectedUnitId: id }),
-      
-      // ═══════════════════════════════════════════════════════════════
-      // HP
-      // ═══════════════════════════════════════════════════════════════
       
       setHP: async (unitId, value) => {
         const { units, settings, connections } = get();
@@ -402,10 +388,6 @@ export const useGameStore = create<GameState>()(
           }
         }
       },
-      
-      // ═══════════════════════════════════════════════════════════════
-      // MANA
-      // ═══════════════════════════════════════════════════════════════
       
       setMana: async (unitId, value) => {
         const { units, settings, connections } = get();
@@ -456,10 +438,6 @@ export const useGameStore = create<GameState>()(
         await get().setMana(unitId, unit.mana.current - amount);
       },
       
-      // ═══════════════════════════════════════════════════════════════
-      // 🔥 RAGE
-      // ═══════════════════════════════════════════════════════════════
-      
       setRage: async (unitId, value) => {
         const { units, settings, connections } = get();
         const unit = units.find(u => u.id === unitId);
@@ -468,6 +446,8 @@ export const useGameStore = create<GameState>()(
         const previousValue = unit.rage?.current ?? 0;
         const max = unit.rage?.max ?? unit.rageConfig?.max ?? 100;
         const newRage = Math.max(0, Math.min(value, max));
+        
+        console.log(`[Store] 🔥 setRage: ${unit.shortName} ${previousValue} → ${newRage}`);
         
         const undoEntry: UndoEntry = {
           id: generateId(),
@@ -491,16 +471,17 @@ export const useGameStore = create<GameState>()(
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
-        // Google Docs sync
         if (connections.docs && settings.syncRage && unit.googleDocsHeader) {
           if (!ensureDocsUrl(settings)) return;
           try {
             const result = await docsService.setRage(unit.googleDocsHeader, newRage, max);
             if (result.success) {
               console.log(`[Store] 🔥 Synced Rage to Docs: ${unit.shortName} = ${newRage}`);
+            } else {
+              console.warn(`[Store] 🔥 Docs sync Rage failed: ${result.error}`);
             }
           } catch (e) {
-            console.warn('[Store] Docs sync Rage exception:', e);
+            console.error('[Store] 🔥 Docs sync Rage exception:', e);
           }
         }
       },
@@ -537,6 +518,8 @@ export const useGameStore = create<GameState>()(
         await get().spendRage(unitId, effect.cost);
         
         const activeEffect = { ...effect, currentRounds: effect.durationRounds };
+        
+        console.log('[Store] 🔥 Activating rage effect:', effect.name);
         
         set(state => ({
           units: state.units.map(u => 
@@ -581,10 +564,6 @@ export const useGameStore = create<GameState>()(
         }));
       },
       
-      // ═══════════════════════════════════════════════════════════════
-      // ЗАМЕТКИ
-      // ═══════════════════════════════════════════════════════════════
-      
       setNotes: (unitId, notes) => {
         set(state => ({
           units: state.units.map(u => 
@@ -592,10 +571,6 @@ export const useGameStore = create<GameState>()(
           )
         }));
       },
-      
-      // ═══════════════════════════════════════════════════════════════
-      // ОСТАЛЬНОЕ
-      // ═══════════════════════════════════════════════════════════════
       
       heal: async (unitId, amount) => {
         const unit = get().units.find(u => u.id === unitId);
@@ -762,12 +737,22 @@ export const useGameStore = create<GameState>()(
       pullStatsFromDocs: async (unitId: string) => {
         const { units, settings, connections } = get();
         const unit = units.find(u => u.id === unitId);
-        if (!unit || !unit.googleDocsHeader || !connections.docs) return;
+        if (!unit || !unit.googleDocsHeader || !connections.docs) {
+          console.log('[Store] 📥 pullStatsFromDocs skipped:', { 
+            hasUnit: !!unit, 
+            hasHeader: !!unit?.googleDocsHeader, 
+            hasDocs: connections.docs 
+          });
+          return;
+        }
         
         if (!ensureDocsUrl(settings)) return;
         
         try {
+          console.log('[Store] 📥 Pulling stats from Docs for:', unit.shortName);
           const stats = await docsService.getStats(unit.googleDocsHeader);
+          
+          console.log('[Store] 📥 Docs response:', stats);
           
           if (!stats.success) {
             console.warn(`[Store] 📥 Pull failed for ${unit.shortName}: ${stats.error}`);
@@ -781,6 +766,7 @@ export const useGameStore = create<GameState>()(
             if (stats.health.current !== unit.health.current || stats.health.max !== unit.health.max) {
               updates.health = { current: stats.health.current, max: stats.health.max };
               changed = true;
+              console.log('[Store] 📥 HP changed:', unit.health.current, '→', stats.health.current);
             }
           }
           
@@ -788,13 +774,16 @@ export const useGameStore = create<GameState>()(
             if (stats.mana.current !== unit.mana.current || stats.mana.max !== unit.mana.max) {
               updates.mana = { current: stats.mana.current, max: stats.mana.max };
               changed = true;
+              console.log('[Store] 📥 Mana changed:', unit.mana.current, '→', stats.mana.current);
             }
           }
           
           if (stats.rage && settings.syncRage && unit.hasRage) {
+            console.log('[Store] 📥 Rage from docs:', stats.rage);
             if (stats.rage.current !== (unit.rage?.current ?? 0) || stats.rage.max !== (unit.rage?.max ?? 100)) {
               updates.rage = { current: stats.rage.current, max: stats.rage.max };
               changed = true;
+              console.log('[Store] 📥 Rage changed:', unit.rage?.current, '→', stats.rage.current);
             }
           }
           
@@ -813,6 +802,7 @@ export const useGameStore = create<GameState>()(
           }
           
           if (changed) {
+            console.log('[Store] 📥 Applying updates:', updates);
             set(state => ({
               units: state.units.map(u => u.id === unitId ? { ...u, ...updates } : u),
               connections: { ...state.connections, lastSyncTime: Date.now() }
@@ -827,9 +817,11 @@ export const useGameStore = create<GameState>()(
               `Mana=${stats.mana?.current}/${stats.mana?.max}`,
               `Rage=${stats.rage?.current}/${stats.rage?.max}`
             );
+          } else {
+            console.log('[Store] 📥 No changes needed for:', unit.shortName);
           }
         } catch (e) {
-          console.warn(`[Store] 📥 Pull failed for ${unit.shortName}:`, e);
+          console.error(`[Store] 📥 Pull failed for ${unit.shortName}:`, e);
         }
       },
       
@@ -1008,7 +1000,9 @@ export const useGameStore = create<GameState>()(
       },
       
       onRehydrateStorage: () => (state) => {
+        console.log('[STORE] Rehydrating state:', state ? 'OK' : 'NULL');
         if (state) {
+          console.log('[STORE] Units count:', state.units?.length ?? 0);
           state.units = state.units.map(migrateUnit);
           state.undoHistory = state.undoHistory ?? [];
           
