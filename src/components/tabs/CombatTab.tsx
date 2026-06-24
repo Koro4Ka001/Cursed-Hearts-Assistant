@@ -278,7 +278,7 @@ export function CombatTab() {
     await takeDamage(unit.id, damagePreview.finalDamage);
     await handleAddRageOnDamage(incomingDamage, false);
     
-    triggerEffect('shake');
+    triggerEffect('damage');
     addCombatLog(unit.shortName ?? unit.name, 'Получил урон', `${damagePreview.finalDamage} ${DAMAGE_TYPE_NAMES[damageType] ?? damageType}`);
     
     // Берём свежие данные после применения урона

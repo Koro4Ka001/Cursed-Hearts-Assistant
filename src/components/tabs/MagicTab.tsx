@@ -194,6 +194,7 @@ export function MagicTab() {
       
       // Если V2 — spellExecutor
       if (isSpellV2(selectedSpell)) {
+        triggerEffect('cast');
         const result = await spellExecutor.execute({
           spell: selectedSpell,
           caster: unit,
@@ -314,6 +315,7 @@ export function MagicTab() {
   const handleLegacyCast = async (spell: Spell) => {
     const log: string[] = [];
     log.push(`═══ ${spell.name} ═══`);
+    triggerEffect('cast');
     
     let castBonus = spell.equipmentBonus ?? 0;
     for (const element of (spell.elements ?? [])) {

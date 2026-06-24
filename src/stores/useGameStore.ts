@@ -1013,7 +1013,17 @@ export const useGameStore = create<GameState>()(
       
       triggerEffect: (effect) => {
         set({ activeEffect: effect });
-        setTimeout(() => { set({ activeEffect: null }); }, 500);
+        const DURATIONS: Record<string, number> = {
+          shake: 500,
+          heal: 800,
+          'crit-gold': 1000,
+          'crit-fail': 600,
+          'cast': 900,
+          'rage': 700,
+          'damage': 600,
+          'death': 1500,
+        };
+        setTimeout(() => { set({ activeEffect: null }); }, DURATIONS[effect] ?? 700);
       },
       
       setNextRollModifier: (mod) => set({ nextRollModifier: mod }),

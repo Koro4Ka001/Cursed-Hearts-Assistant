@@ -256,7 +256,16 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
   const undoHistory = useGameStore(s => s.undoHistory);
 
   const effectClass = activeEffect
-    ? ({ shake: 'screen-shake', heal: 'screen-heal-glow', 'crit-gold': 'screen-flash-gold', 'crit-fail': 'screen-flash-blood' } as Record<string, string>)[activeEffect] ?? ''
+    ? ({
+        shake: 'screen-shake',
+        heal: 'screen-heal-glow',
+        'crit-gold': 'screen-crit-explosion',
+        'crit-fail': 'screen-flash-blood',
+        'cast': 'screen-cast-flash',
+        'rage': 'screen-rage-flash',
+        'damage': 'screen-flash-blood',
+        'death': 'screen-death-pulse',
+      } as Record<string, string>)[activeEffect] ?? ''
     : '';
 
   const formatLastSync = () => {

@@ -12,7 +12,7 @@ export function RageTab() {
     units, selectedUnitId, updateUnit, 
     addRage, spendRage, resetRage,
     activateRageEffect, decrementRageEffects, removeActiveRageEffect,
-    addNotification
+    addNotification, triggerEffect
   } = useGameStore();
   
   const unit = units.find(u => u.id === selectedUnitId);
@@ -72,6 +72,7 @@ export function RageTab() {
   };
   
   const handleActivateEffect = async (effect: RageEffect) => {
+    triggerEffect('rage');
     await activateRageEffect(unit.id, effect);
   };
   
