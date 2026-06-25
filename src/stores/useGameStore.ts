@@ -1078,20 +1078,18 @@ export const useGameStore = create<GameState>()(
             }
           };
         }
-        return state;
+        return {
+          ...state,
+          units: (state.units ?? []).map(migrateUnit),
+          undoHistory: state.undoHistory ?? [],
+        };
       },
       
       onRehydrateStorage: () => (state) => {
         console.log('[STORE] Rehydrating state:', state ? 'OK' : 'NULL');
-        if (state) {
-          console.log('[STORE] Units count:', state.units?.length ?? 0);
-          state.units = (state.units ?? []).map(migrateUnit);
-          state.undoHistory = state.undoHistory ?? [];
-          
-          if (state.settings?.googleDocsUrl) {
-            docsService.setUrl(state.settings.googleDocsUrl);
-            console.log('[Store] 📄 Restored Docs URL from persisted settings');
-          }
+        if (state?.settings?.googleDocsUrl) {
+          docsService.setUrl(state.settings.googleDocsUrl);
+          console.log('[Store] Restored Docs URL from persisted settings');
         }
       }
     }
