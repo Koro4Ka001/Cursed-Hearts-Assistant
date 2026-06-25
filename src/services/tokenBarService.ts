@@ -25,10 +25,8 @@ const CFG = {
   HP_CRIT: "#550000",
   MANA: "#2244aa",
   DEAD: "#333333",
-  ANIM_MS: 600,
-  POS_THRESHOLD: 1,
-  SCALE_THRESHOLD: 0.05,
-  DEBOUNCE_MS: 40,
+  POS_THRESHOLD: 0.5,
+  DEBOUNCE_MS: 30,
 } as const;
 
 interface Layout {
@@ -83,7 +81,6 @@ class TokenBarService {
   private unsubScene: (() => void) | null = null;
   private debounceTimers = new Map<string, number>();
   private lastColor = new Map<string, string>();
-  private busy = new Set<string>();
 
   async initialize(): Promise<void> {
     if (this.ready) return;
@@ -119,7 +116,6 @@ class TokenBarService {
     this.debounceTimers.clear();
     this.states.clear();
     this.lastColor.clear();
-    this.busy.clear();
     this.ready = false;
   }
 
@@ -127,24 +123,14 @@ class TokenBarService {
     if (this.unsubItems) return;
     this.unsubItems = OBR.scene.items.onChange((items) => {
       for (const [tokenId, st] of this.states) {
-        if (this.busy.has(tokenId)) continue;
-
         const tok = items.find((i) => i.id === tokenId);
         if (!tok || !isImage(tok)) continue;
 
-        const sx = Math.abs(Number(tok.scale?.x) || 1);
-        const sy = Math.abs(Number(tok.scale?.y) || 1);
-        const scaleDelta =
-          Math.abs(sx - st.sx) > CFG.SCALE_THRESHOLD ||
-          Math.abs(sy - st.sy) > CFG.SCALE_THRESHOLD;
         const posDelta =
           Math.abs(tok.position.x - st.tx) > CFG.POS_THRESHOLD ||
           Math.abs(tok.position.y - st.ty) > CFG.POS_THRESHOLD;
 
-        if (scaleDelta) {
-          this.cancelDebounce(tokenId);
-          this.rebuild(tokenId);
-        } else if (posDelta) {
+        if (posDelta) {
           this.debouncedMove(tokenId, tok as Image);
         }
       }
@@ -169,7 +155,6 @@ class TokenBarService {
   }
 
   private async moveBars(id: string, tok: Image): Promise<void> {
-    if (this.busy.has(id)) return;
     const st = this.states.get(id);
     if (!st) return;
 
@@ -181,34 +166,24 @@ class TokenBarService {
     if (dx === 0 && dyHp === 0 && dyMana === 0) return;
 
     const allIds = [
-      st.ids.hpBg,
-      st.ids.hpFill,
-      st.ids.crack1,
-      st.ids.crack2,
-      st.ids.manaBg,
-      st.ids.manaFill,
+      st.ids.hpBg, st.ids.hpFill,
+      st.ids.crack1, st.ids.crack2,
+      st.ids.manaBg, st.ids.manaFill,
     ].filter(Boolean) as string[];
 
     if (allIds.length === 0) return;
 
-    this.busy.add(id);
     try {
       await OBR.scene.items.updateItems(allIds, (sceneItems) => {
         for (const item of sceneItems) {
           if (!isShape(item)) continue;
           const meta = item.metadata?.[META] as Record<string, unknown> | undefined;
           const role = meta?.role as string | undefined;
-          if (role === "manaBg" || role === "manaFill") {
-            item.position = {
-              x: item.position.x + dx,
-              y: item.position.y + dyMana,
-            };
-          } else {
-            item.position = {
-              x: item.position.x + dx,
-              y: item.position.y + dyHp,
-            };
-          }
+          const isMana = role === "manaBg" || role === "manaFill";
+          item.position = {
+            x: item.position.x + dx,
+            y: item.position.y + (isMana ? dyMana : dyHp),
+          };
         }
       });
 
@@ -220,10 +195,7 @@ class TokenBarService {
       st.sx = lay.sx;
       st.sy = lay.sy;
     } catch (e) {
-      console.warn("[Bars] moveBars failed, rebuilding:", e);
-      await this.rebuild(id);
-    } finally {
-      this.busy.delete(id);
+      console.warn("[Bars] moveBars failed:", e);
     }
   }
 
@@ -255,25 +227,13 @@ class TokenBarService {
     return { barW: bw, barH: bh, barX: bx, hpY: hy, manaY: my, gap, sx, sy };
   }
 
-  private async rebuild(id: string): Promise<void> {
-    if (this.busy.has(id)) return;
-    const st = this.states.get(id);
-    if (!st) return;
-    await this.createBars(
-      id, st.hp, st.maxHp, st.mana, st.maxMana, st.useManaAsHp
-    );
-  }
-
   async createBars(
     tokenId: string,
-    hpIn: number,
-    maxHpIn: number,
-    manaIn: number,
-    maxManaIn: number,
+    hpIn: number, maxHpIn: number,
+    manaIn: number, maxManaIn: number,
     useManaAsHp = false
   ): Promise<void> {
-    if (!tokenId || this.busy.has(tokenId)) return;
-    this.busy.add(tokenId);
+    if (!tokenId) return;
 
     try {
       if (!(await OBR.scene.isReady())) return;
@@ -359,17 +319,13 @@ class TokenBarService {
       }
     } catch (e) {
       console.error("[Bars] createBars failed:", e);
-    } finally {
-      this.busy.delete(tokenId);
     }
   }
 
   async updateBars(
     tokenId: string,
-    hpIn: number,
-    maxHpIn: number,
-    manaIn: number,
-    maxManaIn: number,
+    hpIn: number, maxHpIn: number,
+    manaIn: number, maxManaIn: number,
     useManaAsHp = false
   ): Promise<void> {
     const st = this.states.get(tokenId);
