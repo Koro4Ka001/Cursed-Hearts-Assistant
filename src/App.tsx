@@ -436,28 +436,17 @@ export function App() {
     );
   }
 
-  // GM sees the grimoire dashboard
-  if (isGM) {
-    return (
-      <div className="h-screen bg-abyss text-bone overflow-hidden relative">
-        <GMDashboard />
-        <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
-          {notifications.map(n => (
-            <div key={n.id} className="pointer-events-auto">
-              <NotificationToast message={n.message} type={n.type} onClose={() => clearNotification(n.id)} />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // Player sees the character sheet
   return (
     <div className="h-screen bg-abyss text-bone overflow-hidden relative">
-      {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
-      {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
-      {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
+      {isGM ? (
+        <GMDashboard />
+      ) : (
+        <>
+          {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
+          {viewMode === 'medium' && <MediumView onChangeMode={changeMode} />}
+          {viewMode === 'large' && <LargeView onChangeMode={changeMode} />}
+        </>
+      )}
 
       <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
         {notifications.map(n => (
