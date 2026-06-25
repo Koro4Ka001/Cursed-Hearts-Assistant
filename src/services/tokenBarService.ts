@@ -25,8 +25,6 @@ const CFG = {
   HP_CRIT: "#550000",
   MANA: "#2244aa",
   DEAD: "#333333",
-  POS_THRESHOLD: 0.5,
-  DEBOUNCE_MS: 30,
 } as const;
 
 interface Layout {
@@ -35,9 +33,6 @@ interface Layout {
   barX: number;
   hpY: number;
   manaY: number;
-  gap: number;
-  sx: number;
-  sy: number;
 }
 
 interface Ids {
@@ -58,15 +53,10 @@ interface State {
   useManaAsHp: boolean;
   tx: number;
   ty: number;
-  bx: number;
-  hy: number;
-  my: number;
   bw: number;
   bh: number;
   dead: boolean;
   ids: Ids;
-  sx: number;
-  sy: number;
 }
 
 export type BarMode = "quality" | "performance";
@@ -79,8 +69,6 @@ class TokenBarService {
   private mode: BarMode = "quality";
   private unsubItems: (() => void) | null = null;
   private unsubScene: (() => void) | null = null;
-  private debounceTimers = new Map<string, number>();
-  private moving = new Set<string>();
   private lastColor = new Map<string, string>();
 
   async initialize(): Promise<void> {
@@ -113,9 +101,6 @@ class TokenBarService {
     this.unsubItems = null;
     this.unsubScene?.();
     this.unsubScene = null;
-    this.debounceTimers.forEach((t) => clearTimeout(t));
-    this.debounceTimers.clear();
-    this.moving.clear();
     this.states.clear();
     this.lastColor.clear();
     this.ready = false;
@@ -127,82 +112,10 @@ class TokenBarService {
       for (const [tokenId, st] of this.states) {
         const tok = items.find((i) => i.id === tokenId);
         if (!tok || !isImage(tok)) continue;
-
-        const posDelta =
-          Math.abs(tok.position.x - st.tx) > CFG.POS_THRESHOLD ||
-          Math.abs(tok.position.y - st.ty) > CFG.POS_THRESHOLD;
-
-        if (posDelta) {
-          this.debouncedMove(tokenId, tok as Image);
-        }
+        st.tx = tok.position.x;
+        st.ty = tok.position.y;
       }
     });
-  }
-
-  private cancelDebounce(id: string): void {
-    const t = this.debounceTimers.get(id);
-    if (t !== undefined) {
-      clearTimeout(t);
-      this.debounceTimers.delete(id);
-    }
-  }
-
-  private debouncedMove(id: string, tok: Image): void {
-    this.cancelDebounce(id);
-    const timer = window.setTimeout(() => {
-      this.debounceTimers.delete(id);
-      this.moveBars(id, tok);
-    }, CFG.DEBOUNCE_MS);
-    this.debounceTimers.set(id, timer);
-  }
-
-  private async moveBars(id: string, tok: Image): Promise<void> {
-    if (this.moving.has(id)) return;
-    const st = this.states.get(id);
-    if (!st) return;
-
-    const lay = this.calcLayout(tok, st.useManaAsHp);
-    const dx = lay.barX - st.bx;
-    const dyHp = lay.hpY - st.hy;
-    const dyMana = lay.manaY - st.my;
-
-    if (dx === 0 && dyHp === 0 && dyMana === 0) return;
-
-    const allIds = [
-      st.ids.hpBg, st.ids.hpFill,
-      st.ids.crack1, st.ids.crack2,
-      st.ids.manaBg, st.ids.manaFill,
-    ].filter(Boolean) as string[];
-
-    if (allIds.length === 0) return;
-
-    this.moving.add(id);
-    try {
-      await OBR.scene.items.updateItems(allIds, (sceneItems) => {
-        for (const item of sceneItems) {
-          if (!isShape(item)) continue;
-          const meta = item.metadata?.[META] as Record<string, unknown> | undefined;
-          const role = meta?.role as string | undefined;
-          const isMana = role === "manaBg" || role === "manaFill";
-          item.position = {
-            x: item.position.x + dx,
-            y: item.position.y + (isMana ? dyMana : dyHp),
-          };
-        }
-      });
-
-      st.tx = tok.position.x;
-      st.ty = tok.position.y;
-      st.bx = lay.barX;
-      st.hy = lay.hpY;
-      st.my = lay.manaY;
-      st.sx = lay.sx;
-      st.sy = lay.sy;
-    } catch (e) {
-      console.warn("[Bars] moveBars failed:", e);
-    } finally {
-      this.moving.delete(id);
-    }
   }
 
   private calcLayout(tok: Image, useManaAsHp: boolean): Layout {
@@ -226,11 +139,11 @@ class TokenBarService {
     const gap = Math.round(CFG.BAR_GAP * Math.max(1, avg * 0.5));
     const offY = Math.round(CFG.BAR_OFFSET_Y * Math.max(1, avg * 0.5));
 
-    const bx = Math.round(tok.position.x - bw / 2);
-    const hy = Math.round(tok.position.y + wH / 2 + offY);
-    const my = useManaAsHp ? hy : hy + bh + gap;
+    const barX = Math.round(tok.position.x - bw / 2);
+    const hpY = Math.round(tok.position.y + wH / 2 + offY);
+    const manaY = useManaAsHp ? hpY : hpY + bh + gap;
 
-    return { barW: bw, barH: bh, barX: bx, hpY: hy, manaY: my, gap, sx, sy };
+    return { barW: bw, barH: bh, barX, hpY, manaY };
   }
 
   async createBars(
@@ -240,7 +153,6 @@ class TokenBarService {
     useManaAsHp = false
   ): Promise<void> {
     if (!tokenId) return;
-
     try {
       if (!(await OBR.scene.isReady())) return;
 
@@ -315,9 +227,8 @@ class TokenBarService {
         id: tokenId,
         hp, maxHp, mana, maxMana, useManaAsHp,
         tx: tok.position.x, ty: tok.position.y,
-        bx: lay.barX, hy: lay.hpY, my: lay.manaY,
         bw: lay.barW, bh: lay.barH,
-        dead, ids, sx: lay.sx, sy: lay.sy,
+        dead, ids,
       });
 
       if (showHp && dead && this.mode === "quality") {
@@ -399,12 +310,9 @@ class TokenBarService {
   async removeBars(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
-      const toDel = items.filter((i) => {
-        if (i.attachedTo !== tokenId) return false;
-        if (i.layer !== "ATTACHMENT") return false;
-        if (i.type !== "SHAPE") return false;
-        return true;
-      });
+      const toDel = items.filter(
+        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT" && i.type === "SHAPE"
+      );
       if (toDel.length > 0) {
         await OBR.scene.items.deleteItems(toDel.map((i) => i.id));
       }
