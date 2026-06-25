@@ -399,9 +399,12 @@ class TokenBarService {
   async removeBars(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
-      const toDel = items.filter(
-        (i) => i.attachedTo === tokenId && i.metadata?.[META]
-      );
+      const toDel = items.filter((i) => {
+        if (i.attachedTo !== tokenId) return false;
+        if (i.layer !== "ATTACHMENT") return false;
+        if (i.type !== "SHAPE") return false;
+        return true;
+      });
       if (toDel.length > 0) {
         await OBR.scene.items.deleteItems(toDel.map((i) => i.id));
       }
