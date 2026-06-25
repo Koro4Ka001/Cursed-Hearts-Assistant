@@ -26,9 +26,9 @@ const CFG = {
   MANA: "#2244aa",
   DEAD: "#333333",
   ANIM_MS: 600,
-  POS_THRESHOLD: 0.5,
-  SCALE_THRESHOLD: 0.01,
-  DEBOUNCE_MS: 30,
+  POS_THRESHOLD: 1,
+  SCALE_THRESHOLD: 0.05,
+  DEBOUNCE_MS: 40,
 } as const;
 
 interface Layout {
@@ -83,8 +83,7 @@ class TokenBarService {
   private unsubScene: (() => void) | null = null;
   private debounceTimers = new Map<string, number>();
   private lastColor = new Map<string, string>();
-
-  // ── Init ──────────────────────────────────────────────────────
+  private busy = new Set<string>();
 
   async initialize(): Promise<void> {
     if (this.ready) return;
@@ -120,15 +119,16 @@ class TokenBarService {
     this.debounceTimers.clear();
     this.states.clear();
     this.lastColor.clear();
+    this.busy.clear();
     this.ready = false;
   }
-
-  // ── Watch item changes ────────────────────────────────────────
 
   private watchItems(): void {
     if (this.unsubItems) return;
     this.unsubItems = OBR.scene.items.onChange((items) => {
       for (const [tokenId, st] of this.states) {
+        if (this.busy.has(tokenId)) continue;
+
         const tok = items.find((i) => i.id === tokenId);
         if (!tok || !isImage(tok)) continue;
 
@@ -151,8 +151,6 @@ class TokenBarService {
     });
   }
 
-  // ── Debounced position update ─────────────────────────────────
-
   private cancelDebounce(id: string): void {
     const t = this.debounceTimers.get(id);
     if (t !== undefined) {
@@ -171,8 +169,10 @@ class TokenBarService {
   }
 
   private async moveBars(id: string, tok: Image): Promise<void> {
+    if (this.busy.has(id)) return;
     const st = this.states.get(id);
     if (!st) return;
+
     const lay = this.calcLayout(tok, st.useManaAsHp);
     const dx = lay.barX - st.bx;
     const dyHp = lay.hpY - st.hy;
@@ -180,7 +180,7 @@ class TokenBarService {
 
     if (dx === 0 && dyHp === 0 && dyMana === 0) return;
 
-    const ids = [
+    const allIds = [
       st.ids.hpBg,
       st.ids.hpFill,
       st.ids.crack1,
@@ -189,14 +189,15 @@ class TokenBarService {
       st.ids.manaFill,
     ].filter(Boolean) as string[];
 
-    if (ids.length === 0) return;
+    if (allIds.length === 0) return;
 
+    this.busy.add(id);
     try {
-      await OBR.scene.items.updateItems(ids, (sceneItems) => {
+      await OBR.scene.items.updateItems(allIds, (sceneItems) => {
         for (const item of sceneItems) {
           if (!isShape(item)) continue;
-          const role = (item.metadata?.[META] as Record<string, unknown>)
-            ?.role as string;
+          const meta = item.metadata?.[META] as Record<string, unknown> | undefined;
+          const role = meta?.role as string | undefined;
           if (role === "manaBg" || role === "manaFill") {
             item.position = {
               x: item.position.x + dx,
@@ -210,21 +211,21 @@ class TokenBarService {
           }
         }
       });
-    } catch {
-      this.rebuild(id);
-      return;
+
+      st.tx = tok.position.x;
+      st.ty = tok.position.y;
+      st.bx = lay.barX;
+      st.hy = lay.hpY;
+      st.my = lay.manaY;
+      st.sx = lay.sx;
+      st.sy = lay.sy;
+    } catch (e) {
+      console.warn("[Bars] moveBars failed, rebuilding:", e);
+      await this.rebuild(id);
+    } finally {
+      this.busy.delete(id);
     }
-
-    st.tx = tok.position.x;
-    st.ty = tok.position.y;
-    st.bx = lay.barX;
-    st.hy = lay.hpY;
-    st.my = lay.manaY;
-    st.sx = lay.sx;
-    st.sy = lay.sy;
   }
-
-  // ── Layout calculation ────────────────────────────────────────
 
   private calcLayout(tok: Image, useManaAsHp: boolean): Layout {
     const sx = Math.abs(Number(tok.scale?.x) || 1);
@@ -254,22 +255,14 @@ class TokenBarService {
     return { barW: bw, barH: bh, barX: bx, hpY: hy, manaY: my, gap, sx, sy };
   }
 
-  // ── Rebuild bars from scratch ─────────────────────────────────
-
-  private async rebuild(tokenId: string): Promise<void> {
-    const st = this.states.get(tokenId);
+  private async rebuild(id: string): Promise<void> {
+    if (this.busy.has(id)) return;
+    const st = this.states.get(id);
     if (!st) return;
     await this.createBars(
-      tokenId,
-      st.hp,
-      st.maxHp,
-      st.mana,
-      st.maxMana,
-      st.useManaAsHp
+      id, st.hp, st.maxHp, st.mana, st.maxMana, st.useManaAsHp
     );
   }
-
-  // ── Create bars ───────────────────────────────────────────────
 
   async createBars(
     tokenId: string,
@@ -279,7 +272,9 @@ class TokenBarService {
     maxManaIn: number,
     useManaAsHp = false
   ): Promise<void> {
-    if (!tokenId) return;
+    if (!tokenId || this.busy.has(tokenId)) return;
+    this.busy.add(tokenId);
+
     try {
       if (!(await OBR.scene.isReady())) return;
 
@@ -306,26 +301,19 @@ class TokenBarService {
 
       const rect = (
         role: keyof Ids,
-        x: number,
-        y: number,
-        w: number,
-        h: number,
-        color: string,
-        z: number,
-        vis: boolean,
+        x: number, y: number, w: number, h: number,
+        color: string, z: number, vis: boolean,
         noStroke = false
       ): void => {
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)) return;
         if (w <= 0 || h <= 0) return;
         const s = buildShape()
           .shapeType("RECTANGLE")
-          .width(w)
-          .height(h)
+          .width(w).height(h)
           .position({ x, y })
           .attachedTo(tokenId)
           .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
+          .locked(true).disableHit(true)
           .visible(vis)
           .fillColor(color)
           .strokeColor(CFG.STROKE)
@@ -340,16 +328,18 @@ class TokenBarService {
       if (showHp && !dead) {
         rect("hpBg", lay.barX, lay.hpY, lay.barW, lay.barH, CFG.BG, 10, true);
         if (hpPct > 0) {
-          const w = Math.round(Math.max(1, lay.barW * hpPct));
-          rect("hpFill", lay.barX, lay.hpY, w, lay.barH, this.hpColor(hp, maxHp), 11, true, true);
+          rect("hpFill", lay.barX, lay.hpY,
+            Math.round(Math.max(1, lay.barW * hpPct)), lay.barH,
+            this.hpColor(hp, maxHp), 11, true, true);
         }
       }
 
       if (!dead) {
         rect("manaBg", lay.barX, lay.manaY, lay.barW, lay.barH, CFG.BG, 10, true);
         if (manaPct > 0) {
-          const w = Math.round(Math.max(1, lay.barW * manaPct));
-          rect("manaFill", lay.barX, lay.manaY, w, lay.barH, CFG.MANA, 11, true, true);
+          rect("manaFill", lay.barX, lay.manaY,
+            Math.round(Math.max(1, lay.barW * manaPct)), lay.barH,
+            CFG.MANA, 11, true, true);
         }
       }
 
@@ -357,22 +347,11 @@ class TokenBarService {
 
       this.states.set(tokenId, {
         id: tokenId,
-        hp,
-        maxHp,
-        mana,
-        maxMana,
-        useManaAsHp,
-        tx: tok.position.x,
-        ty: tok.position.y,
-        bx: lay.barX,
-        hy: lay.hpY,
-        my: lay.manaY,
-        bw: lay.barW,
-        bh: lay.barH,
-        dead,
-        ids,
-        sx: lay.sx,
-        sy: lay.sy,
+        hp, maxHp, mana, maxMana, useManaAsHp,
+        tx: tok.position.x, ty: tok.position.y,
+        bx: lay.barX, hy: lay.hpY, my: lay.manaY,
+        bw: lay.barW, bh: lay.barH,
+        dead, ids, sx: lay.sx, sy: lay.sy,
       });
 
       if (showHp && dead && this.mode === "quality") {
@@ -380,10 +359,10 @@ class TokenBarService {
       }
     } catch (e) {
       console.error("[Bars] createBars failed:", e);
+    } finally {
+      this.busy.delete(tokenId);
     }
   }
-
-  // ── Update bars (HP/Mana change) ──────────────────────────────
 
   async updateBars(
     tokenId: string,
@@ -422,25 +401,9 @@ class TokenBarService {
       return;
     }
 
-    st.hp = hp;
-    st.maxHp = maxHp;
-    st.mana = mana;
-    st.maxMana = maxMana;
-    st.dead = dead;
-    st.useManaAsHp = useManaAsHp;
-
-    const check = ids.hpBg ?? ids.manaBg ?? ids.hpFill ?? ids.manaFill;
-    if (!check) return;
-
-    try {
-      const exists = await OBR.scene.items.getItems([check]);
-      if (exists.length === 0) {
-        await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
-        return;
-      }
-    } catch {
-      return;
-    }
+    st.hp = hp; st.maxHp = maxHp;
+    st.mana = mana; st.maxMana = maxMana;
+    st.dead = dead; st.useManaAsHp = useManaAsHp;
 
     const toUpdate = [ids.hpFill, ids.hpBg, ids.manaFill, ids.manaBg].filter(
       Boolean
@@ -471,8 +434,6 @@ class TokenBarService {
     }
   }
 
-  // ── Remove bars ───────────────────────────────────────────────
-
   async removeBars(tokenId: string): Promise<void> {
     try {
       const items = await OBR.scene.items.getItems();
@@ -482,8 +443,8 @@ class TokenBarService {
       if (toDel.length > 0) {
         await OBR.scene.items.deleteItems(toDel.map((i) => i.id));
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn("[Bars] removeBars failed:", e);
     }
     this.states.delete(tokenId);
     this.lastColor.delete(tokenId);
@@ -495,8 +456,6 @@ class TokenBarService {
     }
   }
 
-  // ── Sync all ──────────────────────────────────────────────────
-
   async syncAllBars(units: Unit[]): Promise<void> {
     const valid = new Set<string>();
     for (const u of units) {
@@ -506,9 +465,7 @@ class TokenBarService {
         u.owlbearTokenId,
         u.useManaAsHp ? u.mana.current : u.health.current,
         u.useManaAsHp ? u.mana.max : u.health.max,
-        u.mana.current,
-        u.mana.max,
-        u.useManaAsHp
+        u.mana.current, u.mana.max, u.useManaAsHp
       );
     }
     for (const id of this.states.keys()) {
@@ -526,8 +483,6 @@ class TokenBarService {
     }
   }
 
-  // ── Animation (low-HP pulse) ──────────────────────────────────
-
   private startAnim(): void {
     if (this.animId !== null) return;
     const tick = () => {
@@ -539,7 +494,7 @@ class TokenBarService {
   }
 
   private tickPulse(): void {
-    if (this.frame % 3 !== 0) return; // ~20fps at 60fps RAF
+    if (this.frame % 3 !== 0) return;
     for (const [, st] of this.states) {
       if (!st.ids.hpFill || st.dead) continue;
       const pct = st.maxHp > 0 ? st.hp / st.maxHp : 0;
@@ -561,8 +516,6 @@ class TokenBarService {
     }
   }
 
-  // ── Death cross effect ────────────────────────────────────────
-
   private async addDeathX(id: string, lay: Layout): Promise<void> {
     const st = this.states.get(id);
     if (!st || st.ids.crack1) return;
@@ -574,17 +527,12 @@ class TokenBarService {
       const mk = (role: "crack1" | "crack2", rot: number) =>
         buildShape()
           .shapeType("RECTANGLE")
-          .width(sz)
-          .height(ch)
+          .width(sz).height(ch)
           .position({ x: cx - sz / 2, y: cy - ch / 2 })
           .rotation(rot)
-          .fillColor("#000000")
-          .strokeColor("#ff0000")
-          .strokeWidth(2)
-          .attachedTo(id)
-          .layer("ATTACHMENT")
-          .locked(true)
-          .disableHit(true)
+          .fillColor("#000000").strokeColor("#ff0000").strokeWidth(2)
+          .attachedTo(id).layer("ATTACHMENT")
+          .locked(true).disableHit(true)
           .metadata({ [META]: { type: "crack", role, tokenId: id } })
           .build();
       const c1 = mk("crack1", 45);
@@ -596,8 +544,6 @@ class TokenBarService {
       console.error("[Bars] Death FX error:", e);
     }
   }
-
-  // ── Helpers ───────────────────────────────────────────────────
 
   private hpColor(cur: number, max: number): string {
     const p = (Number(cur) || 0) / (Number(max) || 1);
@@ -611,9 +557,9 @@ class TokenBarService {
     if (!a.startsWith("#") || !b.startsWith("#")) return a;
     const ca = parseInt(a.slice(1), 16);
     const cb = parseInt(b.slice(1), 16);
-    const r = Math.round((((ca >> 16) & 255) * (1 - t) + ((cb >> 16) & 255) * t));
-    const g = Math.round((((ca >> 8) & 255) * (1 - t) + ((cb >> 8) & 255) * t));
-    const bl = Math.round(((ca & 255) * (1 - t) + (cb & 255) * t));
+    const r = Math.round(((ca >> 16) & 255) * (1 - t) + ((cb >> 16) & 255) * t);
+    const g = Math.round(((ca >> 8) & 255) * (1 - t) + ((cb >> 8) & 255) * t);
+    const bl = Math.round((ca & 255) * (1 - t) + (cb & 255) * t);
     return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
   }
 }
