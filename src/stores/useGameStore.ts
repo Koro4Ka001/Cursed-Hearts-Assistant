@@ -1078,18 +1078,13 @@ export const useGameStore = create<GameState>()(
             }
           };
         }
-        return {
-          ...state,
-          units: (state.units ?? []).map(migrateUnit),
-          undoHistory: state.undoHistory ?? [],
-        };
+        return state;
       },
-      
+
       onRehydrateStorage: () => (state) => {
         console.log('[STORE] Rehydrating state:', state ? 'OK' : 'NULL');
         if (state?.settings?.googleDocsUrl) {
           docsService.setUrl(state.settings.googleDocsUrl);
-          console.log('[Store] Restored Docs URL from persisted settings');
         }
       }
     }
