@@ -9,6 +9,7 @@ interface MonsterCardProps {
   onToggleSelect: (tokenId: string) => void;
   onUpdateHp: (tokenId: string, hp: number) => void;
   onSetMaxHp: (tokenId: string, maxHp: number) => void;
+  onRemove: (tokenId: string) => void;
 }
 
 const DAMAGE_TYPES: { key: DamageType; name: string; icon: string }[] = [
@@ -32,14 +33,13 @@ const MULT_LABELS: Record<number, string> = {
   1: 'Норма', 1.5: 'Слабость', 2: 'Уязвимость', 3: 'Крит. уязв.',
 };
 
-export function MonsterCard({ monster, isSelected, onToggleSelect, onUpdateHp, onSetMaxHp }: MonsterCardProps) {
+export function MonsterCard({ monster, isSelected, onToggleSelect, onUpdateHp, onSetMaxHp, onRemove }: MonsterCardProps) {
   const [showDefense, setShowDefense] = useState(false);
   const { setFlatArmor, setArmorByType, removeArmorByType, setMultiplier, removeMultiplier } = useDefenseStore();
 
   const pct = monster.maxHp > 0 ? (monster.hp / monster.maxHp) * 100 : 0;
   const isDead = monster.hp <= 0;
   const isLow = pct <= 25 && !isDead;
-  const multCount = Object.keys(monster.multipliers).filter((k) => monster.multipliers[k as DamageType] !== 1).length;
 
   const hpColor = isDead ? '#333' : pct < 25 ? '#ff0000' : pct < 50 ? '#aa4400' : '#cc2222';
 
@@ -104,14 +104,17 @@ export function MonsterCard({ monster, isSelected, onToggleSelect, onUpdateHp, o
                 +1
               </button>
               <div className="flex-1" />
-              {multCount > 0 && (
-                <span className="text-[9px] text-purple-400">📊 {multCount}</span>
-              )}
               <button
                 onClick={(e) => { e.stopPropagation(); setShowDefense(true); }}
                 className="px-1.5 py-0.5 text-[9px] bg-[#1a1a2a] text-faded rounded hover:bg-[#222233] transition-colors"
               >
                 🛡️
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onRemove(monster.tokenId); }}
+                className="px-1.5 py-0.5 text-[9px] bg-blood-dark/30 text-blood-bright rounded hover:bg-blood-dark/60 transition-colors"
+              >
+                ✕
               </button>
             </div>
           </div>
@@ -145,9 +148,14 @@ function DefenseModal({
   setMultiplier: (id: string, t: DamageType, v: number) => void;
   removeMultiplier: (id: string, t: DamageType) => void;
 }) {
+  const defense = useDefenseStore((s) => s.units[monster.tokenId]);
   const [newArmorType, setNewArmorType] = useState<DamageType | ''>('');
   const [newArmorVal, setNewArmorVal] = useState(5);
   const [newMultType, setNewMultType] = useState<DamageType | ''>('');
+
+  const flatArmor = defense?.flatArmor ?? 0;
+  const armorByType = defense?.armorByType ?? {};
+  const multipliers = defense?.multipliers ?? {};
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -161,7 +169,7 @@ function DefenseModal({
             <label className="text-[10px] text-faded uppercase tracking-wider">Общая броня</label>
             <input
               type="number"
-              value={monster.flatArmor}
+              value={flatArmor}
               onChange={(e) => setFlatArmor(monster.tokenId, parseInt(e.target.value) || 0)}
               className="w-full mt-1 bg-[#0a0a0f] border border-[#222233] rounded-lg px-3 py-2 text-bone font-mono text-center focus:border-gold outline-none"
             />
@@ -181,7 +189,7 @@ function DefenseModal({
                 className="px-3 py-1.5 bg-gold-dark/30 text-gold rounded text-xs hover:bg-gold-dark/50 disabled:opacity-40"
               >+</button>
             </div>
-            {Object.entries(monster.armorByType).map(([type, val]) => (
+            {Object.entries(armorByType).map(([type, val]) => (
               <div key={type} className="flex items-center gap-2 mt-1 px-2 py-1 bg-[#0a0a0f] rounded text-xs">
                 <span className="text-bone flex-1">{type}</span>
                 <span className="text-faded font-mono">{val}</span>
@@ -206,7 +214,7 @@ function DefenseModal({
                 ))}
               </div>
             )}
-            {Object.entries(monster.multipliers).filter(([_, v]) => v !== 1).map(([type, val]) => (
+            {Object.entries(multipliers).filter(([_, v]) => v !== 1).map(([type, val]) => (
               <div key={type} className="flex items-center gap-2 mt-1 px-2 py-1 bg-[#0a0a0f] rounded text-xs">
                 <span className="text-bone flex-1">{type}</span>
                 <span className="font-mono" style={{ color: val === 0 ? '#44ff44' : val < 1 ? '#88ff88' : val > 1 ? '#ff4444' : '#888' }}>×{val}</span>

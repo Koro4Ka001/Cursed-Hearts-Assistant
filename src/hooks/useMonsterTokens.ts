@@ -1,140 +1,76 @@
 import { useEffect, useState, useCallback } from 'react';
 import OBR, { isImage } from '@owlbear-rodeo/sdk';
-import { useDefenseStore } from '../stores/defenseStore';
-import type { DamageType } from '../types';
-
-const HP_TRACKER_KEY = 'com.bitperfect-software.hp-tracker/data';
-const CUSTOM_HP_KEY = 'cursed-hearts-assistant';
+import { useMonsterStore } from '../stores/monsterStore';
+import { tokenBarService } from '../services/tokenBarService';
 
 export interface MonsterToken {
   tokenId: string;
   name: string;
   hp: number;
   maxHp: number;
-  tempHp: number;
-  armor: number;
-  flatArmor: number;
-  armorByType: Partial<Record<DamageType, number>>;
-  multipliers: Partial<Record<DamageType, number>>;
-  hasData: boolean;
-}
-
-function readHpFromMetadata(metadata: Record<string, unknown>): { hp: number; maxHp: number; name: string } | null {
-  const hpTracker = metadata[HP_TRACKER_KEY];
-  if (hpTracker && typeof hpTracker === 'object') {
-    const obj = hpTracker as Record<string, unknown>;
-    if (obj.hp !== undefined) {
-      return {
-        hp: Number(obj.hp),
-        maxHp: Number(obj.maxHp ?? obj.hp),
-        name: String(obj.name ?? ''),
-      };
-    }
-  }
-  return null;
 }
 
 export function useMonsterTokens() {
-  const [monsters, setMonsters] = useState<MonsterToken[]>([]);
   const [isReady, setIsReady] = useState(false);
-  const defenseUnits = useDefenseStore((s) => s.units);
-
-  const loadMonsters = useCallback(async () => {
-    try {
-      if (!(await OBR.scene.isReady())) return;
-      const items = await OBR.scene.items.getItems();
-      const imageItems = items.filter((i) => isImage(i));
-
-      const result: MonsterToken[] = [];
-      for (const item of imageItems) {
-        const meta = item.metadata as Record<string, unknown>;
-        const hpData = readHpFromMetadata(meta);
-        if (!hpData) continue;
-
-        const defense = defenseUnits[item.id];
-        result.push({
-          tokenId: item.id,
-          name: hpData.name || item.name || 'Monster',
-          hp: hpData.hp,
-          maxHp: hpData.maxHp,
-          tempHp: 0,
-          armor: 0,
-          flatArmor: defense?.flatArmor ?? 0,
-          armorByType: defense?.armorByType ?? {},
-          multipliers: defense?.multipliers ?? {},
-          hasData: true,
-        });
-      }
-
-      setMonsters(result);
-    } catch (e) {
-      console.error('[useMonsterTokens] Error:', e);
-    }
-  }, [defenseUnits]);
+  const monsters = useMonsterStore((s) => s.monsters);
+  const addMonster = useMonsterStore((s) => s.addMonster);
+  const removeMonster = useMonsterStore((s) => s.removeMonster);
+  const setHp = useMonsterStore((s) => s.setHp);
+  const setMaxHp = useMonsterStore((s) => s.setMaxHp);
 
   useEffect(() => {
-    let mounted = true;
-    OBR.onReady(async () => {
-      if (!mounted) return;
-      setIsReady(true);
-      await loadMonsters();
-
-      const unsubPlayer = OBR.player.onChange(() => loadMonsters());
-      const unsubItems = OBR.scene.items.onChange(() => loadMonsters());
-
-      return () => {
-        unsubPlayer();
-        unsubItems();
-      };
-    });
-    return () => { mounted = false; };
-  }, [loadMonsters]);
-
-  const updateHp = useCallback(async (tokenId: string, newHp: number) => {
-    try {
-      const items = await OBR.scene.items.getItems([tokenId]);
-      if (!items.length) return;
-      const token = items[0];
-      const meta = token.metadata as Record<string, unknown>;
-      const hpData = meta[HP_TRACKER_KEY] as Record<string, unknown> | undefined;
-      if (!hpData) return;
-
-      const maxHp = Number(hpData.maxHp ?? hpData.hp ?? 100);
-      const safe = Math.max(0, Math.min(newHp, maxHp));
-
-      await OBR.scene.items.updateItems([tokenId], (sceneItems) => {
-        for (const item of sceneItems) {
-          const m = item.metadata as Record<string, unknown>;
-          const data = m[HP_TRACKER_KEY] as Record<string, unknown> | undefined;
-          if (data) data.hp = safe;
-        }
-      });
-
-      setMonsters((prev) =>
-        prev.map((m) => (m.tokenId === tokenId ? { ...m, hp: safe } : m))
-      );
-    } catch (e) {
-      console.error('[useMonsterTokens] updateHp failed:', e);
-    }
+    OBR.onReady(() => setIsReady(true));
   }, []);
 
-  const setMaxHp = useCallback(async (tokenId: string, newMaxHp: number) => {
+  const registerFromSelection = useCallback(async () => {
     try {
-      const safe = Math.max(1, newMaxHp);
-      await OBR.scene.items.updateItems([tokenId], (sceneItems) => {
-        for (const item of sceneItems) {
-          const m = item.metadata as Record<string, unknown>;
-          const data = m[HP_TRACKER_KEY] as Record<string, unknown> | undefined;
-          if (data) data.maxHp = safe;
-        }
-      });
-      setMonsters((prev) =>
-        prev.map((m) => (m.tokenId === tokenId ? { ...m, maxHp: safe } : m))
-      );
-    } catch (e) {
-      console.error('[useMonsterTokens] setMaxHp failed:', e);
-    }
-  }, []);
+      if (!(await OBR.scene.isReady())) return;
+      const selection = await OBR.player.getSelection();
+      if (!selection || selection.length === 0) return;
 
-  return { monsters, isReady, loadMonsters, updateHp, setMaxHp };
+      const items = await OBR.scene.items.getItems(selection);
+      for (const item of items) {
+        if (!isImage(item)) continue;
+        if (useMonsterStore.getState().monsters[item.id]) continue;
+
+        const name = item.name || 'Monster';
+        const maxHp = 50;
+        addMonster(item.id, name, maxHp);
+        await tokenBarService.createBars(item.id, maxHp, maxHp, 0, 0, true);
+      }
+    } catch (e) {
+      console.error('[useMonsterTokens] registerFromSelection failed:', e);
+    }
+  }, [addMonster]);
+
+  const updateHp = useCallback(async (tokenId: string, hp: number) => {
+    const m = useMonsterStore.getState().monsters[tokenId];
+    if (!m) return;
+    const safe = Math.max(0, Math.min(hp, m.maxHp));
+    setHp(tokenId, safe);
+    await tokenBarService.updateBars(tokenId, safe, m.maxHp, 0, 0, true);
+  }, [setHp]);
+
+  const updateMaxHp = useCallback(async (tokenId: string, maxHp: number) => {
+    const m = useMonsterStore.getState().monsters[tokenId];
+    if (!m) return;
+    setMaxHp(tokenId, maxHp);
+    await tokenBarService.updateBars(tokenId, m.hp, maxHp, 0, 0, true);
+  }, [setMaxHp]);
+
+  const unregister = useCallback(async (tokenId: string) => {
+    removeMonster(tokenId);
+    await tokenBarService.removeBars(tokenId);
+  }, [removeMonster]);
+
+  const monsterList: MonsterToken[] = Object.values(monsters);
+
+  return {
+    monsters: monsterList,
+    isReady,
+    registerFromSelection,
+    updateHp,
+    updateMaxHp,
+    unregister,
+  };
 }

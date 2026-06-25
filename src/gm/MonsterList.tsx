@@ -9,21 +9,12 @@ interface MonsterListProps {
   onDeselectAll: () => void;
   onUpdateHp: (tokenId: string, hp: number) => void;
   onSetMaxHp: (tokenId: string, maxHp: number) => void;
+  onRemove: (tokenId: string) => void;
 }
 
 export function MonsterList({
-  monsters, selectedIds, onToggleSelect, onSelectAll, onDeselectAll, onUpdateHp, onSetMaxHp,
+  monsters, selectedIds, onToggleSelect, onSelectAll, onDeselectAll, onUpdateHp, onSetMaxHp, onRemove,
 }: MonsterListProps) {
-  if (monsters.length === 0) {
-    return (
-      <div className="text-center py-8 text-faded text-sm">
-        <div className="text-3xl mb-2 opacity-40">🎯</div>
-        <p>Нет монстров на сцене</p>
-        <p className="text-[11px] text-dim mt-1">Добавьте токены с HP metadata</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
@@ -45,6 +36,7 @@ export function MonsterList({
             onToggleSelect={onToggleSelect}
             onUpdateHp={onUpdateHp}
             onSetMaxHp={onSetMaxHp}
+            onRemove={onRemove}
           />
         ))}
       </div>
