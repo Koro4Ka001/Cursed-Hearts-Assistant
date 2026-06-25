@@ -80,6 +80,7 @@ class TokenBarService {
   private unsubItems: (() => void) | null = null;
   private unsubScene: (() => void) | null = null;
   private debounceTimers = new Map<string, number>();
+  private moving = new Set<string>();
   private lastColor = new Map<string, string>();
 
   async initialize(): Promise<void> {
@@ -114,6 +115,7 @@ class TokenBarService {
     this.unsubScene = null;
     this.debounceTimers.forEach((t) => clearTimeout(t));
     this.debounceTimers.clear();
+    this.moving.clear();
     this.states.clear();
     this.lastColor.clear();
     this.ready = false;
@@ -155,6 +157,7 @@ class TokenBarService {
   }
 
   private async moveBars(id: string, tok: Image): Promise<void> {
+    if (this.moving.has(id)) return;
     const st = this.states.get(id);
     if (!st) return;
 
@@ -173,6 +176,7 @@ class TokenBarService {
 
     if (allIds.length === 0) return;
 
+    this.moving.add(id);
     try {
       await OBR.scene.items.updateItems(allIds, (sceneItems) => {
         for (const item of sceneItems) {
@@ -196,6 +200,8 @@ class TokenBarService {
       st.sy = lay.sy;
     } catch (e) {
       console.warn("[Bars] moveBars failed:", e);
+    } finally {
+      this.moving.delete(id);
     }
   }
 
