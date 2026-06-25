@@ -7,6 +7,8 @@ import { initOBR } from './services/obrService';
 import { docsService } from './services/docsService';
 import { diceService } from './services/diceService';
 import { tokenBarService } from './services/tokenBarService';
+import { useIsGM } from './hooks/useIsGM';
+import { GMDashboard } from './gm/GMDashboard';
 import { UnitSelector } from './components/UnitSelector';
 import { StatBars } from './components/StatBars';
 import { CombatTab } from './components/tabs/CombatTab';
@@ -346,6 +348,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('medium');
   const initRef = useRef(false);
+  const isGM = useIsGM();
 
   const notifications = useGameStore(s => s.notifications);
   const clearNotification = useGameStore(s => s.clearNotification);
@@ -414,7 +417,7 @@ export function App() {
     init();
   }, []);
 
-  if (isLoading) {
+  if (isLoading || isGM === null) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-abyss relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -433,6 +436,23 @@ export function App() {
     );
   }
 
+  // GM sees the grimoire dashboard
+  if (isGM) {
+    return (
+      <div className="h-screen bg-abyss text-bone overflow-hidden relative">
+        <GMDashboard />
+        <div className="fixed top-2 right-2 z-[200] space-y-2 max-w-xs pointer-events-none">
+          {notifications.map(n => (
+            <div key={n.id} className="pointer-events-auto">
+              <NotificationToast message={n.message} type={n.type} onClose={() => clearNotification(n.id)} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Player sees the character sheet
   return (
     <div className="h-screen bg-abyss text-bone overflow-hidden relative">
       {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}
