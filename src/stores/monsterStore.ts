@@ -10,11 +10,11 @@ export interface Monster {
 
 interface MonsterStore {
   monsters: Record<string, Monster>;
-  addMonster: (tokenId: string, name: string, maxHp: number) => void;
-  removeMonster: (tokenId: string) => void;
+  add: (tokenId: string, name: string, maxHp: number) => void;
+  remove: (tokenId: string) => void;
   setHp: (tokenId: string, hp: number) => void;
   setMaxHp: (tokenId: string, maxHp: number) => void;
-  getMonster: (tokenId: string) => Monster | null;
+  get: (tokenId: string) => Monster | undefined;
 }
 
 export const useMonsterStore = create<MonsterStore>()(
@@ -22,42 +22,30 @@ export const useMonsterStore = create<MonsterStore>()(
     (set, get) => ({
       monsters: {},
 
-      addMonster: (tokenId, name, maxHp) => set((state) => ({
-        monsters: {
-          ...state.monsters,
-          [tokenId]: { tokenId, name, hp: maxHp, maxHp },
-        },
+      add: (tokenId, name, maxHp) => set((s) => ({
+        monsters: { ...s.monsters, [tokenId]: { tokenId, name, hp: maxHp, maxHp } },
       })),
 
-      removeMonster: (tokenId) => set((state) => {
-        const { [tokenId]: _, ...rest } = state.monsters;
+      remove: (tokenId) => set((s) => {
+        const { [tokenId]: _, ...rest } = s.monsters;
         return { monsters: rest };
       }),
 
-      setHp: (tokenId, hp) => set((state) => {
-        const m = state.monsters[tokenId];
-        if (!m) return state;
-        return {
-          monsters: {
-            ...state.monsters,
-            [tokenId]: { ...m, hp: Math.max(0, Math.min(hp, m.maxHp)) },
-          },
-        };
+      setHp: (tokenId, hp) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return { monsters: { ...s.monsters, [tokenId]: { ...m, hp: Math.max(0, Math.min(hp, m.maxHp)) } } };
       }),
 
-      setMaxHp: (tokenId, maxHp) => set((state) => {
-        const m = state.monsters[tokenId];
-        if (!m) return state;
-        return {
-          monsters: {
-            ...state.monsters,
-            [tokenId]: { ...m, maxHp: Math.max(1, maxHp), hp: Math.min(m.hp, maxHp) },
-          },
-        };
+      setMaxHp: (tokenId, maxHp) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        const safe = Math.max(1, maxHp);
+        return { monsters: { ...s.monsters, [tokenId]: { ...m, maxHp: safe, hp: Math.min(m.hp, safe) } } };
       }),
 
-      getMonster: (tokenId) => get().monsters[tokenId] || null,
+      get: (tokenId) => get().monsters[tokenId],
     }),
-    { name: 'cursed-hearts-monsters' }
+    { name: 'ch-monsters' }
   )
 );
