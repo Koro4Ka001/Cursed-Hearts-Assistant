@@ -9,7 +9,10 @@ export function useIsGM() {
 
     async function checkRole() {
       try {
-        const ready = await OBR.isReady;
+        const ready = await Promise.race([
+          OBR.isReady,
+          new Promise<boolean>((r) => setTimeout(() => r(false), 5000))
+        ]);
         if (!ready) {
           if (mounted) setIsGM(false);
           return;

@@ -1085,7 +1085,7 @@ export const useGameStore = create<GameState>()(
         console.log('[STORE] Rehydrating state:', state ? 'OK' : 'NULL');
         if (state) {
           console.log('[STORE] Units count:', state.units?.length ?? 0);
-          state.units = state.units.map(migrateUnit);
+          state.units = (state.units ?? []).map(migrateUnit);
           state.undoHistory = state.undoHistory ?? [];
           
           if (state.settings?.googleDocsUrl) {

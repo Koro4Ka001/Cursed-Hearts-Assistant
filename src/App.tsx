@@ -439,7 +439,7 @@ export function App() {
   return (
     <div className="h-screen bg-abyss text-bone overflow-hidden relative">
       {isGM ? (
-        <GMDashboard />
+        <ErrorBoundary tabName="GM Dashboard"><GMDashboard /></ErrorBoundary>
       ) : (
         <>
           {viewMode === 'compact' && <CompactView onChangeMode={changeMode} />}

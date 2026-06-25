@@ -8,6 +8,7 @@ import { docsService } from "./services/docsService";
 import { diceService, DICE_BROADCAST_CHANNEL, onLocalDiceMessage, LOCAL_STORAGE_KEY } from "./services/diceService";
 import { tokenBarService } from "./services/tokenBarService";
 import { useGameStore } from "./stores/useGameStore";
+import { ErrorBoundary } from "./components/ui";
 import type { BroadcastMessage } from "./services/diceService";
 
 const NOTIFICATION_POPOVER_ID = "cursed-hearts-notification";
@@ -131,6 +132,8 @@ if (!rootElement) throw new Error("Root element not found");
 const root = createRoot(rootElement);
 root.render(
   <StrictMode>
-    <App />
+    <ErrorBoundary tabName="App">
+      <App />
+    </ErrorBoundary>
   </StrictMode>
 );
