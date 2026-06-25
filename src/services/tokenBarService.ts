@@ -124,7 +124,7 @@ class TokenBarService {
     const imgW = Number(tok.image?.width) || 150;
     const imgH = Number(tok.image?.height) || 150;
     const dpi = Number(tok.grid?.dpi) || 150;
-    const grid = Number(tok.grid?.size) || 150;
+    const grid = 150;
 
     const wW = (imgW / dpi) * grid * sx;
     const wH = (imgH / dpi) * grid * sy;
