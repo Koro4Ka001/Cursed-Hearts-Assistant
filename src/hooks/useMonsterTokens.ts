@@ -1,11 +1,12 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import OBR, { isImage } from '@owlbear-rodeo/sdk';
 import { useMonsterStore, type Monster } from '../stores/monsterStore';
 import { tokenBarService } from '../services/tokenBarService';
+import { useShallow } from 'zustand/shallow';
 
 export function useMonsterTokens() {
   const [ready, setReady] = useState(false);
-  const monsters = useMonsterStore((s) => Object.values(s.monsters));
+  const monsters = useMonsterStore(useShallow((s) => Object.values(s.monsters)));
 
   useEffect(() => { OBR.onReady(() => setReady(true)); }, []);
 
