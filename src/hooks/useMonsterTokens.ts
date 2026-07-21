@@ -37,7 +37,7 @@ export function useMonsterTokens() {
       if (useMonsterStore.getState().get(item.id)) continue;
       const tokenName = name || item.name || 'Monster';
       useMonsterStore.getState().add(item.id, tokenName, maxHp, group);
-      await tokenBarService.createBars(item.id, maxHp, maxHp, 0, 0, false);
+      await tokenBarService.createBars(item.id, maxHp, maxHp, 0, 0, false, tokenName);
     }
   }, []);
 
@@ -60,7 +60,14 @@ export function useMonsterTokens() {
   const updateMonster = useCallback(async (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => {
     useMonsterStore.getState().updateFields(tokenId, fields);
     const fresh = useMonsterStore.getState().get(tokenId);
-    if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);
+    if (fresh) {
+      // Rebuild bars if name changed (to update label on token)
+      if (fields.name !== undefined) {
+        await tokenBarService.createBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false, fresh.name);
+      } else {
+        await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);
+      }
+    }
   }, []);
 
   const unregister = useCallback(async (tokenId: string) => {

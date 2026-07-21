@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { useMonsterStore } from '../stores/monsterStore';
 import { getGroupColor } from './RegistrationModal';
+import { ELEMENT_NAMES_MAP } from '../constants/elements';
 import type { DamageType } from '../types';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   onUpdate: (id: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => void;
   onRemove: (id: string) => void;
   onAttack?: (monster: Monster, weapon: MonsterWeapon) => void;
+  onDuplicate?: (tokenId: string) => void;
 }
 
 function InlineInput({ value, onChange, className = '' }: {
@@ -92,12 +94,14 @@ const STAT_ICONS: Record<string, string> = {
   initiative: '⚡',
 };
 
-const DAMAGE_TYPES: DamageType[] = [
+const ALL_DAMAGE_TYPES: DamageType[] = [
   'slashing', 'piercing', 'bludgeoning', 'chopping',
   'огонь', 'вода', 'земля', 'воздух', 'свет', 'тьма',
+  'пространство', 'астрал', 'скверна', 'электричество', 'пустота', 'жизнь',
+  'смерть', 'pure',
 ];
 
-export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, onAttack }: Props) {
+export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, onAttack, onDuplicate }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'armor' | 'stats' | 'weapons'>('armor');
   const { tokenId, name, hp, maxHp, group, armor, stats, weapons } = monster;
@@ -123,12 +127,13 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
           className="w-3.5 h-3.5 accent-[#c9a84c] shrink-0 cursor-pointer" />
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
+          {/* Name + badges */}
+          <div className="flex items-center gap-1.5 min-w-0">
             <InlineInput value={name}
               onChange={(v) => onUpdate(tokenId, { name: v })}
-              className="text-xs font-cinzel truncate" />
+              className="text-xs font-cinzel truncate min-w-0" />
             {group && (
-              <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-cinzel shrink-0 ${getGroupColor(group)}`}>
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-cinzel shrink-0 max-w-[80px] truncate ${getGroupColor(group)}`}>
                 {group}
               </span>
             )}
@@ -139,28 +144,36 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
             )}
           </div>
 
+          {/* HP bar */}
           <div className="flex items-center gap-2 mt-1.5">
-            <span className="text-[10px] text-faded font-mono w-12 text-right">{hp}/{maxHp}</span>
-            <div className="flex-1 h-[4px] bg-[#0a0505] rounded-full overflow-hidden">
+            <NumericInput value={hp} min={0}
+              onChange={(v) => onUpdate(tokenId, { hp: v })}
+              className="w-10 text-center shrink-0" />
+            <div className="flex-1 h-[4px] bg-[#0a0505] rounded-full overflow-hidden min-w-0">
               <div className="h-full rounded-full transition-all duration-300"
                 style={{ width: `${pct}%`, background: hpColor }} />
             </div>
-            {isDead && <span className="text-[10px]">💀</span>}
+            <span className="text-[9px] text-faded font-mono shrink-0">/{maxHp}</span>
+            {isDead && <span className="text-[10px] shrink-0">💀</span>}
           </div>
         </div>
 
+        {/* Action buttons */}
         <div className="flex items-center gap-0.5 shrink-0">
-          <button onClick={() => { const n = hp - 1; if (n >= 0) onUpdate(tokenId, { hp: n }); }}
-            className="w-6 h-6 flex items-center justify-center text-[11px] text-faded hover:text-blood-bright hover:bg-blood-dark/30 rounded transition-colors">
-            −
-          </button>
-          <NumericInput value={hp} min={0}
-            onChange={(v) => onUpdate(tokenId, { hp: v })}
-            className="w-10 text-center" />
-          <button onClick={() => { const n = hp + 1; if (n <= maxHp) onUpdate(tokenId, { hp: n }); }}
-            className="w-6 h-6 flex items-center justify-center text-[11px] text-faded hover:text-green-400 hover:bg-green-900/30 rounded transition-colors">
-            +
-          </button>
+          {onDuplicate && (
+            <button onClick={() => onDuplicate(tokenId)}
+              className="w-6 h-6 flex items-center justify-center text-[11px] text-faded hover:text-gold hover:bg-gold-dark/20 rounded transition-colors"
+              title="Копировать">
+              📋
+            </button>
+          )}
+          {weapons.length > 0 && onAttack && (
+            <button onClick={() => onAttack(monster, weapons[0])}
+              className="w-6 h-6 flex items-center justify-center text-[11px] text-faded hover:text-blood-bright hover:bg-blood-dark/30 rounded transition-colors"
+              title="Атака оружием">
+              ⚔
+            </button>
+          )}
           <button onClick={() => setShowSettings(!showSettings)}
             className={`w-6 h-6 flex items-center justify-center text-[11px] rounded transition-colors ${showSettings ? 'text-gold bg-gold-dark/20' : 'text-faded hover:text-bone hover:bg-[#1a1a2a]'}`}>
             ⚙
@@ -215,9 +228,9 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
           {/* Armor tab */}
           {settingsTab === 'armor' && (
             <div className="space-y-1">
-              {DAMAGE_TYPES.map(dt => (
+              {ALL_DAMAGE_TYPES.map(dt => (
                 <div key={dt} className="flex items-center gap-2">
-                  <span className="text-[9px] text-faded w-20 truncate">{dt}</span>
+                  <span className="text-[9px] text-faded w-24 truncate">{ELEMENT_NAMES_MAP[dt] ?? dt}</span>
                   <NumericInput
                     value={monster.armorByType?.[dt] ?? 0}
                     min={0}
@@ -269,7 +282,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
                     <select value={w.damageType}
                       onChange={(e) => useMonsterStore.getState().updateWeapon(tokenId, w.id, { damageType: e.target.value as DamageType })}
                       className="bg-[#1a1a2a] border border-[#2a2a3a] rounded px-1 py-0.5 text-bone text-[9px] focus:border-gold-dark focus:outline-none">
-                      {DAMAGE_TYPES.map(dt => <option key={dt} value={dt}>{dt}</option>)}
+                      {ALL_DAMAGE_TYPES.map(dt => <option key={dt} value={dt}>{ELEMENT_NAMES_MAP[dt] ?? dt}</option>)}
                     </select>
                     <NumericInput value={w.hitBonus} min={-20}
                       onChange={(v) => useMonsterStore.getState().updateWeapon(tokenId, w.id, { hitBonus: v })}
@@ -278,7 +291,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
                     {onAttack && (
                       <button onClick={() => onAttack(monster, w)}
                         className="px-2 py-0.5 text-[9px] bg-blood-dark/30 text-blood-bright border border-blood/30 rounded hover:bg-blood-dark/50 font-cinzel transition-colors">
-                        ⚔
+                        Атака
                       </button>
                     )}
                   </div>

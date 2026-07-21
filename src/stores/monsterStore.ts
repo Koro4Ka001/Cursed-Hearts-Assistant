@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { DamageType } from '../types';
+import type { DamageType, SpellV2 } from '../types';
 
 export interface MonsterWeapon {
   id: string;
@@ -27,6 +27,7 @@ export interface Monster {
     initiative: number;
   };
   weapons: MonsterWeapon[];
+  spells: SpellV2[];
   elementResistances: Partial<Record<DamageType, number>>;
 }
 
@@ -45,6 +46,7 @@ function migrateMonster(raw: Record<string, unknown>): Monster {
     armorByType: (raw.armorByType as Partial<Record<DamageType, number>>) || {},
     stats: raw.stats ? { ...defaultStats(), ...(raw.stats as Record<string, number>) } : defaultStats(),
     weapons: (raw.weapons as MonsterWeapon[]) || [],
+    spells: (raw.spells as SpellV2[]) || [],
     elementResistances: (raw.elementResistances as Partial<Record<DamageType, number>>) || {},
   };
 }
@@ -53,6 +55,7 @@ interface MonsterStore {
   monsters: Record<string, Monster>;
   add: (tokenId: string, name: string, maxHp: number, group: string) => void;
   remove: (tokenId: string) => void;
+  duplicate: (sourceTokenId: string, newTokenId: string) => void;
   setHp: (tokenId: string, hp: number) => void;
   setMaxHp: (tokenId: string, maxHp: number) => void;
   updateFields: (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => void;
@@ -61,6 +64,8 @@ interface MonsterStore {
   addWeapon: (tokenId: string, weapon: MonsterWeapon) => void;
   removeWeapon: (tokenId: string, weaponId: string) => void;
   updateWeapon: (tokenId: string, weaponId: string, fields: Partial<MonsterWeapon>) => void;
+  addSpell: (tokenId: string, spell: SpellV2) => void;
+  removeSpell: (tokenId: string, spellId: string) => void;
   setElementResistance: (tokenId: string, element: DamageType, multiplier: number) => void;
   getGroups: () => string[];
   get: (tokenId: string) => Monster | undefined;
@@ -79,6 +84,7 @@ export const useMonsterStore = create<MonsterStore>()(
             armor: 0, armorByType: {},
             stats: defaultStats(),
             weapons: [],
+            spells: [],
             elementResistances: {},
           },
         },
@@ -87,6 +93,13 @@ export const useMonsterStore = create<MonsterStore>()(
       remove: (tokenId) => set((s) => {
         const { [tokenId]: _, ...rest } = s.monsters;
         return { monsters: rest };
+      }),
+
+      duplicate: (sourceTokenId, newTokenId) => set((s) => {
+        const source = s.monsters[sourceTokenId];
+        if (!source) return s;
+        const copy = { ...source, tokenId: newTokenId, hp: source.maxHp };
+        return { monsters: { ...s.monsters, [newTokenId]: copy } };
       }),
 
       setHp: (tokenId, hp) => set((s) => {
@@ -173,6 +186,28 @@ export const useMonsterStore = create<MonsterStore>()(
               ...m,
               weapons: m.weapons.map(w => w.id === weaponId ? { ...w, ...fields } : w),
             },
+          },
+        };
+      }),
+
+      addSpell: (tokenId, spell) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, spells: [...m.spells, spell] },
+          },
+        };
+      }),
+
+      removeSpell: (tokenId, spellId) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, spells: m.spells.filter(sp => sp.id !== spellId) },
           },
         };
       }),

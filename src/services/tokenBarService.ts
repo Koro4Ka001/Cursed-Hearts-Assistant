@@ -1,9 +1,11 @@
 import OBR, {
   buildShape,
+  buildText,
   isImage,
   isShape,
   type Image,
   type Shape,
+  type Text,
 } from "@owlbear-rodeo/sdk";
 import type { Unit } from "../types";
 
@@ -42,6 +44,7 @@ interface Ids {
   manaFill?: string;
   crack1?: string;
   crack2?: string;
+  nameLabel?: string;
 }
 
 interface State {
@@ -150,7 +153,8 @@ class TokenBarService {
     tokenId: string,
     hpIn: number, maxHpIn: number,
     manaIn: number, maxManaIn: number,
-    useManaAsHp = false
+    useManaAsHp = false,
+    name?: string
   ): Promise<void> {
     if (!tokenId) return;
     try {
@@ -174,7 +178,7 @@ class TokenBarService {
       const manaPct = Math.max(0, Math.min(1, mana / maxMana));
       const showHp = !useManaAsHp;
 
-      const shapes: Shape[] = [];
+      const shapes: (Shape | Text)[] = [];
       const ids: Ids = {};
 
       const rect = (
@@ -202,6 +206,28 @@ class TokenBarService {
         shapes.push(s);
         ids[role] = s.id;
       };
+
+      // Name label above HP bar
+      if (name && name.trim()) {
+        const labelY = lay.hpY - 14;
+        const label = buildText()
+          .position({ x: lay.barX, y: labelY })
+          .plainText(name)
+          .fontSize(10)
+          .fontFamily("Arial")
+          .fillColor("#FFFFFF")
+          .strokeColor("#000000")
+          .strokeWidth(0.5)
+          .textType("PLAIN")
+          .layer("ATTACHMENT")
+          .locked(true).disableHit(true)
+          .visible(!dead)
+          .attachedTo(tokenId)
+          .metadata({ [META]: { type: "label", role: "nameLabel", tokenId } })
+          .build();
+        shapes.push(label);
+        ids.nameLabel = label.id;
+      }
 
       if (showHp && !dead) {
         rect("hpBg", lay.barX, lay.hpY, lay.barW, lay.barH, CFG.BG, 10, true);
@@ -313,17 +339,17 @@ class TokenBarService {
     try {
       const st = this.states.get(tokenId);
       const ids = st?.ids;
-      // Remove known bar shapes first (most reliable)
+      // Remove known bar shapes and labels first (most reliable)
       const knownIds = ids
-        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.crack1, ids.crack2].filter(Boolean) as string[]
+        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.crack1, ids.crack2, ids.nameLabel].filter(Boolean) as string[]
         : [];
       if (knownIds.length > 0) {
         try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
       }
-      // Fallback: remove any ATTACHMENT SHAPE attached to this token
+      // Fallback: remove any ATTACHMENT item (shape or text) attached to this token
       const items = await OBR.scene.items.getItems();
       const toDel = items.filter(
-        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT" && isShape(i) && !knownIds.includes(i.id)
+        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT" && (isShape(i) || i.type === "TEXT") && !knownIds.includes(i.id)
       );
       if (toDel.length > 0) {
         await OBR.scene.items.deleteItems(toDel.map((i) => i.id));
