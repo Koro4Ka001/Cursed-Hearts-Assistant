@@ -397,10 +397,11 @@ export function ProgressBar({
 
   if (type === 'hp') {
     return (
-      <div className={cn('hp-bar-wrap', isLow && 'hp-bar-low', className)}>
-        <div className="hp-bar-fill" style={{ width: `${pct}%` }} />
+      <div className={cn('hp-vessel', isLow && 'hp-vessel-low', className)}>
+        <div className="hp-vessel-bg" />
+        <div className="hp-vessel-fill" style={{ width: `${pct}%` }} />
         {showText && (
-          <div className="hp-bar-label">❤ {v}/{m}</div>
+          <div className="hp-vessel-label">❤ {v}/{m}</div>
         )}
       </div>
     );
@@ -418,10 +419,11 @@ export function ProgressBar({
   }
 
   return (
-    <div className={cn('mana-bar-wrap', className)}>
-      <div className="mana-bar-fill" style={{ width: `${pct}%` }} />
+    <div className={cn('mana-crystal', className)}>
+      <div className="mana-crystal-bg" />
+      <div className="mana-crystal-fill" style={{ width: `${pct}%` }} />
       {showText && (
-        <div className="mana-bar-label">💠 {v}/{m}</div>
+        <div className="mana-crystal-label">💠 {v}/{m}</div>
       )}
     </div>
   );

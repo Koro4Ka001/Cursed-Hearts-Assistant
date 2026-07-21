@@ -18,7 +18,7 @@ export function useMonsterTokens() {
       if (useMonsterStore.getState().get(item.id)) continue;
       const tokenName = name || item.name || 'Monster';
       useMonsterStore.getState().add(item.id, tokenName, maxHp, group);
-      await tokenBarService.createBars(item.id, maxHp, maxHp, 0, 0, true);
+      await tokenBarService.createBars(item.id, maxHp, maxHp, 0, 0, false);
     }
   }, []);
 
@@ -27,7 +27,7 @@ export function useMonsterTokens() {
     if (!m) return;
     const safe = Math.max(0, Math.min(hp, m.maxHp));
     useMonsterStore.getState().setHp(tokenId, safe);
-    await tokenBarService.updateBars(tokenId, safe, m.maxHp, 0, 0, true);
+    await tokenBarService.updateBars(tokenId, safe, m.maxHp, 0, 0, false);
   }, []);
 
   const updateMaxHp = useCallback(async (tokenId: string, maxHp: number) => {
@@ -35,13 +35,13 @@ export function useMonsterTokens() {
     if (!m) return;
     useMonsterStore.getState().setMaxHp(tokenId, maxHp);
     const fresh = useMonsterStore.getState().get(tokenId);
-    if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, true);
+    if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);
   }, []);
 
   const updateMonster = useCallback(async (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group'>>) => {
     useMonsterStore.getState().updateFields(tokenId, fields);
     const fresh = useMonsterStore.getState().get(tokenId);
-    if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, true);
+    if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);
   }, []);
 
   const unregister = useCallback(async (tokenId: string) => {

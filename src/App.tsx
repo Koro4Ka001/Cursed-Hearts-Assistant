@@ -348,7 +348,21 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('medium');
   const initRef = useRef(false);
-  const isGM = useIsGM();
+  const rawIsGM = useIsGM();
+  const [isGM, setIsGM] = useState<boolean | null>(null);
+
+  // Sync from hook, with safety timeout
+  useEffect(() => {
+    if (rawIsGM !== null) {
+      setIsGM(rawIsGM);
+      return;
+    }
+    // If still null after 8s, default to player mode
+    const timer = setTimeout(() => {
+      if (rawIsGM === null) setIsGM(false);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [rawIsGM]);
 
   const notifications = useGameStore(s => s.notifications);
   const clearNotification = useGameStore(s => s.clearNotification);

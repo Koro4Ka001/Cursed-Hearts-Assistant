@@ -6,6 +6,7 @@ export function useIsGM() {
 
   useEffect(() => {
     let mounted = true;
+    let unsubPlayer: (() => void) | null = null;
 
     async function checkRole() {
       try {
@@ -19,20 +20,30 @@ export function useIsGM() {
         }
         const role = await OBR.player.getRole();
         if (mounted) setIsGM(role === 'GM');
+
+        // Subscribe to role changes (only once)
+        if (!unsubPlayer) {
+          unsubPlayer = OBR.player.onChange((player) => {
+            if (mounted) setIsGM(player.role === 'GM');
+          });
+        }
       } catch {
         if (mounted) setIsGM(false);
       }
     }
 
+    // Start check immediately via isReady, don't wait for onReady callback
+    checkRole();
+
+    // Also try via onReady in case isReady isn't resolved yet
     OBR.onReady(() => {
-      checkRole();
-      const unsub = OBR.player.onChange((player) => {
-        if (mounted) setIsGM(player.role === 'GM');
-      });
-      return () => { unsub(); };
+      if (mounted) checkRole();
     });
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+      unsubPlayer?.();
+    };
   }, []);
 
   return isGM;

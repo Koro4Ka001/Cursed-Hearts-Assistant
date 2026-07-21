@@ -235,7 +235,14 @@ export function MagicTab() {
           ? evaluateElementEffects(selectedSpell.elements, result.context)
           : null;
         setLastElementEffects(elementEffects);
-        
+
+        // Применяем бонусный урон от стихий
+        let finalDamage = result.totalDamage;
+        if (elementEffects && elementEffects.totalBonusDamage > 0) {
+          finalDamage += elementEffects.totalBonusDamage;
+          result.log.push(`📈 Элемент. бонус: +${elementEffects.totalBonusDamage} (${elementEffects.effects.filter(e => e.triggered && e.bonusDamage).map(e => e.icon).join('')})`);
+        }
+
         // Астрал: половина стоимости при прокидке >18
         if (elementEffects && elementEffects.manaCostModifier < 0) {
           const halfCost = Math.floor(spellCost * 0.5);
@@ -246,13 +253,13 @@ export function MagicTab() {
             result.log.push(`🌟 Астрал: стоимость снижена на ${refunded} (прокидка ${elementEffects.castRollRaw} > 18)`);
           }
         }
-        
+
         // Формируем лог элементных эффектов
         const effectLogLines = elementEffects ? formatElementEffectLog(elementEffects) : [];
-        
+
         setCastLog([...result.log, ...effectLogLines]);
         setLastContext(result.context);
-        
+
         const diceResults: DiceRollResult[] = result.context.rolls.map(r => ({
           formula: r.formula,
           rolls: r.rolls,
@@ -263,22 +270,22 @@ export function MagicTab() {
           isCritFail: r.isCritFail,
         }));
         setCastResults(diceResults);
-        
+
         if (result.context.isCritFail) {
           triggerEffect('crit-fail');
         } else if (result.context.isCrit) {
           triggerEffect('crit-gold');
         }
-        
-        if (result.totalDamage > 0) {
+
+        if (finalDamage > 0) {
           await diceService.broadcastSpell(
             selectedSpell.name,
             unit.shortName ?? unit.name,
-            result.totalDamage,
+            finalDamage,
             result.damageType,
             result.context.isCrit
           );
-          addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${result.totalDamage} ${result.damageType ?? ''}`);
+          addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${finalDamage} ${result.damageType ?? ''}`);
         } else {
           addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, 'скастовано');
         }

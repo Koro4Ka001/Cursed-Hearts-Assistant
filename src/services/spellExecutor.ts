@@ -38,6 +38,7 @@ export interface ExecuteSpellResult {
 interface DiceGroup {
   count: number;
   sides: number;
+  sign: number;
 }
 
 interface ParsedFormula {
@@ -48,37 +49,37 @@ interface ParsedFormula {
 function parseFormula(formula: string): ParsedFormula {
   const dice: DiceGroup[] = [];
   let bonus = 0;
-  
+
   const tokens = formula.toLowerCase().replace(/\s/g, '').match(/[+-]?(\d*d\d+|\d+)/g) || [];
-  
+
   for (const token of tokens) {
     const diceMatch = token.match(/([+-]?)(\d*)d(\d+)/);
     if (diceMatch) {
       const sign = diceMatch[1] === '-' ? -1 : 1;
-      const count = parseInt(diceMatch[2] || '1', 10) * sign;
+      const count = parseInt(diceMatch[2] || '1', 10);
       const sides = parseInt(diceMatch[3]!, 10);
-      dice.push({ count: Math.abs(count), sides });
+      dice.push({ count, sides, sign });
     } else {
       const num = parseInt(token, 10);
       if (!isNaN(num)) bonus += num;
     }
   }
-  
+
   return { dice, bonus };
 }
 
 function rollDice(formula: string): { formula: string; rolls: number[]; bonus: number; total: number } {
   const { dice, bonus } = parseFormula(formula);
   const rolls: number[] = [];
-  
-  for (const { count, sides } of dice) {
+
+  for (const { count, sides, sign } of dice) {
     for (let i = 0; i < count; i++) {
-      rolls.push(Math.floor(Math.random() * sides) + 1);
+      rolls.push((Math.floor(Math.random() * sides) + 1) * sign);
     }
   }
-  
+
   const total = rolls.reduce((sum, r) => sum + r, 0) + bonus;
-  
+
   return { formula, rolls, bonus, total };
 }
 
@@ -87,9 +88,10 @@ function rollDice(formula: string): { formula: string; rolls: number[]; bonus: n
 // ═══════════════════════════════════════════════════════════════════════════
 
 function doubleDiceInFormula(formula: string): string {
-  return formula.replace(/(\d*)d(\d+)/gi, (_, count, sides) => {
-    const c = parseInt(count || '1', 10);
-    return `${c * 2}d${sides}`;
+  return formula.replace(/([+-]?\d*)d(\d+)/gi, (_, count, sides) => {
+    const sign = count.startsWith('-') ? '-' : '';
+    const c = Math.abs(parseInt(count || '1', 10));
+    return `${sign}${c * 2}d${sides}`;
   });
 }
 
@@ -100,10 +102,10 @@ function rollWithModifier(formula: string, modifier: RollModifier = 'normal'): {
   isCrit: boolean;
   isCritFail: boolean;
 } {
-  const result = rollDice(formula);
   const hasD20 = formula.toLowerCase().includes('d20');
-  
+
   if (!hasD20 || modifier === 'normal') {
+    const result = rollDice(formula);
     const rawD20 = hasD20 ? result.rolls[0] : undefined;
     return {
       result,
@@ -113,27 +115,33 @@ function rollWithModifier(formula: string, modifier: RollModifier = 'normal'): {
       isCritFail: rawD20 === 1
     };
   }
-  
+
+  // Advantage/disadvantage: roll d20 separately, then roll remaining dice normally
   const roll1 = Math.floor(Math.random() * 20) + 1;
   const roll2 = Math.floor(Math.random() * 20) + 1;
   const chosen = modifier === 'advantage' ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
-  
+
   const parsed = parseFormula(formula);
-  let total = chosen;
-  const rolls = [chosen];
-  
-  for (let i = 1; i < parsed.dice.length; i++) {
-    const die = parsed.dice[i];
-    if (die) {
+  const rolls: number[] = [];
+  let total = 0;
+  let d20Handled = false;
+
+  for (const die of parsed.dice) {
+    if (die.sides === 20 && !d20Handled) {
+      // Use the advantage/disadvantage roll for the first d20
+      rolls.push(chosen * die.sign);
+      total += chosen * die.sign;
+      d20Handled = true;
+    } else {
       for (let j = 0; j < die.count; j++) {
-        const roll = Math.floor(Math.random() * die.sides) + 1;
+        const roll = (Math.floor(Math.random() * die.sides) + 1) * die.sign;
         rolls.push(roll);
         total += roll;
       }
     }
   }
   total += parsed.bonus;
-  
+
   return {
     result: { formula, rolls, bonus: parsed.bonus, total },
     rawD20: chosen,
@@ -224,7 +232,7 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.lastRoll = result.total;
     context.lastD20 = rawD20;
     
-    const threshold = action.successThreshold ?? 10;
+    const threshold = action.successThreshold ?? 11;
     const isSuccess = !isCritFail && (isCrit || result.total >= threshold);
     
     context.success = isSuccess;
@@ -256,7 +264,7 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.lastRoll = result.total;
     context.lastD20 = rawD20;
 
-    const threshold = action.successThreshold ?? 10;
+    const threshold = action.successThreshold ?? 11;
     const isSuccess = !isCritFail && (isCrit || result.total >= threshold);
     
     context.success = isSuccess;
@@ -290,7 +298,7 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.isCrit = isCrit;
     context.isCritFail = isCritFail;
     
-    const threshold = action.successThreshold ?? 10;
+    const threshold = action.successThreshold ?? 11;
     const isSuccess = !isCritFail && (isCrit || result.total >= threshold);
     context.success = isSuccess;
 
@@ -418,11 +426,8 @@ const stepExecutors: Record<string, StepExecutor> = {
     const dmgResult = rollDice(dmgFormula);
     let dmgTotal = dmgResult.total;
     
-    const isTierCrit = result.total === 20; 
-    if (isTierCrit || context.isCrit) {
-      context.isCrit = true;
-    }
-    
+    // Note: tier selection roll does NOT set isCrit — only attack/cast rolls do
+
     let damageType: string | undefined;
     if (context.isCrit && action.forcePureOnCrit) {
       damageType = 'pure';
@@ -440,7 +445,7 @@ const stepExecutors: Record<string, StepExecutor> = {
     
     const typeLabel = damageType ? (DAMAGE_TYPE_NAMES[damageType as DamageType] ?? ELEMENT_NAMES[damageType] ?? damageType) : '';
     const pureLabel = damageType === 'pure' ? ' (ЧИСТЫЙ)' : '';
-    const critLabel = context.doubleDamageDice ? ' (КРИТ! Кубы ×2)' : (isTierCrit ? ' (КРИТ ТИРА!)' : '');
+    const critLabel = context.doubleDamageDice ? ' (КРИТ! Кубы ×2)' : '';
     const dmgRollsStr = `[${dmgResult.rolls.join(', ')}]`;
     
     context.log.push(`💥 Урон: ${dmgFormula} = ${dmgRollsStr} = ${dmgTotal} ${typeLabel}${pureLabel}${critLabel}`);
@@ -680,8 +685,23 @@ export const spellExecutor = {
   execute: executeSpell,
   calculateManaCost: (spell: SpellV2, caster: Unit): number => {
     const manaReduction = getElementBonus(caster, spell.elements, 'mana');
-    // Базовая стоимость без броска (для превью)
-    const base = typeof spell.cost === 'number' ? spell.cost : 0;
+    let base: number;
+    if (typeof spell.cost === 'number') {
+      base = spell.cost;
+    } else if (typeof spell.cost === 'string' && spell.cost.trim()) {
+      try {
+        const parsed = parseFormula(spell.cost);
+        let avg = parsed.bonus;
+        for (const d of parsed.dice) {
+          avg += d.count * ((d.sides + 1) / 2) * d.sign;
+        }
+        base = Math.max(0, Math.round(avg));
+      } catch {
+        base = 0;
+      }
+    } else {
+      base = 0;
+    }
     return Math.max(0, base - manaReduction);
   },
   getElementBonus,

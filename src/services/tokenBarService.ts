@@ -212,7 +212,8 @@ class TokenBarService {
         }
       }
 
-      if (!dead) {
+      const hasMana = (manaIn > 0 || maxManaIn > 0) && !useManaAsHp;
+      if (!dead && hasMana) {
         rect("manaBg", lay.barX, lay.manaY, lay.barW, lay.barH, CFG.BG, 10, true);
         if (manaPct > 0) {
           rect("manaFill", lay.barX, lay.manaY,
@@ -261,13 +262,14 @@ class TokenBarService {
     const hpPct = Math.max(0, Math.min(1, hp / maxHp));
     const manaPct = Math.max(0, Math.min(1, mana / maxMana));
 
+    const hasMana = (manaIn > 0 || maxManaIn > 0) && !useManaAsHp;
     const needRebuild =
       dead !== st.dead ||
       st.useManaAsHp !== useManaAsHp ||
       (!dead && !useManaAsHp && !ids.hpFill && hpPct > 0) ||
-      (!dead && !ids.manaFill && manaPct > 0) ||
+      (hasMana && !ids.manaFill && manaPct > 0) ||
       (!dead && !useManaAsHp && !ids.hpBg) ||
-      (!dead && !ids.manaBg);
+      (hasMana && !ids.manaBg);
 
     if (needRebuild) {
       await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);

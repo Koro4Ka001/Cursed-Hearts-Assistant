@@ -24,7 +24,7 @@ function InlineInput({ value, onChange, className = '' }: {
   if (!editing) {
     return (
       <span onDoubleClick={() => { setEditing(true); setText(value); }}
-        className={`cursor-pointer hover:text-gold transition-colors ${className}`}>
+        className={`cursor-pointer hover:text-gold transition-colors select-none ${className}`}>
         {value || 'Без имени'}
       </span>
     );
@@ -36,10 +36,10 @@ function InlineInput({ value, onChange, className = '' }: {
       onChange={(e) => setText(e.target.value)}
       onBlur={() => { setEditing(false); if (text.trim()) onChange(text.trim()); else setText(value); }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') { ref.current?.blur(); }
+        if (e.key === 'Enter') ref.current?.blur();
         if (e.key === 'Escape') { setEditing(false); setText(value); }
       }}
-      className={`bg-[#1a1a2a] border border-gold-dark/50 rounded px-1 py-0 text-bone text-xs focus:outline-none ${className}`}
+      className={`bg-[#1a1a2a] border border-gold-dark/50 rounded px-1 py-0 text-bone text-xs focus:outline-none w-full ${className}`}
     />
   );
 }
@@ -57,11 +57,8 @@ function NumericInput({ value, onChange, min = 0, className = '' }: {
 
   const commit = () => {
     const n = parseInt(text, 10);
-    if (isNaN(n) || n < min) {
-      setText(String(value));
-    } else {
-      onChange(n);
-    }
+    if (isNaN(n) || n < min) setText(String(value));
+    else onChange(n);
   };
 
   return (
@@ -83,7 +80,6 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove }:
   const isLow = pct <= 25 && !isDead;
 
   const hpColor = isDead ? '#333333' : isLow ? '#ff0000' : pct < 50 ? '#aa4400' : '#cc2222';
-  const groupColor = group ? getGroupColor(group) : '';
 
   return (
     <div className={`rounded-lg border transition-all ${selected ? 'bg-[#1a1a2a] border-gold-dark/40' : 'bg-[#111118] border-[#1a1a2a]/50 hover:border-[#2a2a3a]'} ${isDead ? 'opacity-50' : ''}`}>
@@ -98,15 +94,15 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove }:
               onChange={(v) => onUpdate(tokenId, { name: v })}
               className="text-xs font-cinzel truncate" />
             {group && (
-              <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-cinzel shrink-0 ${groupColor}`}>
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-cinzel shrink-0 ${getGroupColor(group)}`}>
                 {group}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-[10px] text-faded font-mono">{hp}/{maxHp}</span>
-            <div className="flex-1 h-[3px] bg-[#0a0505] rounded-full overflow-hidden">
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="text-[10px] text-faded font-mono w-12 text-right">{hp}/{maxHp}</span>
+            <div className="flex-1 h-[4px] bg-[#0a0505] rounded-full overflow-hidden">
               <div className="h-full rounded-full transition-all duration-300"
                 style={{ width: `${pct}%`, background: hpColor }} />
             </div>

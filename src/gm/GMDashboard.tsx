@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useMonsterTokens } from '../hooks/useMonsterTokens';
 import { MonsterCard } from './MonsterCard';
 import { RegistrationModal, getGroupColor } from './RegistrationModal';
+import { rollFormula } from '../services/diceService';
 
 type Tab = 'all' | 'alive' | 'dead';
 
@@ -9,12 +10,12 @@ export function GMDashboard() {
   const { monsters, registerTokens, updateMonster, unregister, getSelection, getGroups } = useMonsterTokens();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<Tab>('all');
-  const [quickAmount, setQuickAmount] = useState(10);
   const [isHeal, setIsHeal] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const [pendingTokens, setPendingTokens] = useState<{ tokenId: string; defaultName: string }[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [customAmount, setCustomAmount] = useState('');
+  const [formula, setFormula] = useState('');
+  const [lastResult, setLastResult] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (tab === 'alive') return monsters.filter((m) => m.hp > 0);
@@ -66,51 +67,41 @@ export function GMDashboard() {
     });
   }, []);
 
-  const applyQuick = useCallback(() => {
-    const amount = quickAmount;
+  const applyFormula = useCallback(async () => {
+    if (!formula.trim() || selected.size === 0) return;
+    const amount = rollFormula(formula);
+    let results: string[] = [];
     for (const id of selected) {
       const m = monsters.find((x) => x.tokenId === id);
       if (!m) continue;
-      const newHp = isHeal ? Math.min(m.maxHp, m.hp + amount) : Math.max(0, m.hp - amount);
-      updateMonster(id, { hp: newHp });
+      const newHp = isHeal
+        ? Math.min(m.maxHp, m.hp + amount)
+        : Math.max(0, m.hp - amount);
+      await updateMonster(id, { hp: newHp });
+      results.push(`${m.name}: ${m.hp} → ${newHp}`);
     }
-  }, [selected, monsters, quickAmount, isHeal, updateMonster]);
-
-  const applyCustom = useCallback(() => {
-    const amount = parseInt(customAmount, 10);
-    if (isNaN(amount) || amount <= 0) return;
-    for (const id of selected) {
-      const m = monsters.find((x) => x.tokenId === id);
-      if (!m) continue;
-      const newHp = isHeal ? Math.min(m.maxHp, m.hp + amount) : Math.max(0, m.hp - amount);
-      updateMonster(id, { hp: newHp });
-    }
-    setCustomAmount('');
-  }, [selected, monsters, customAmount, isHeal, updateMonster]);
+    setLastResult(`${isHeal ? '+' : '-'}${amount} (${formula}) → ${results.length} монстров`);
+    setTimeout(() => setLastResult(null), 3000);
+  }, [formula, selected, monsters, isHeal, updateMonster]);
 
   const removeSelected = useCallback(() => {
-    for (const id of selected) {
-      unregister(id);
-    }
+    for (const id of selected) unregister(id);
     setSelected(new Set());
   }, [selected, unregister]);
 
   const handleAddClick = async () => {
     const tokenIds = await getSelection();
     if (!tokenIds.length) return;
-    const tokens = tokenIds.map(id => {
-      const existing = monsters.find(m => m.tokenId === id);
-      return { tokenId: id, defaultName: existing?.name || '' };
-    }).filter(t => !monsters.find(m => m.tokenId === t.tokenId));
+    const tokens = tokenIds
+      .map(id => ({ tokenId: id, defaultName: monsters.find(m => m.tokenId === id)?.name || '' }))
+      .filter(t => !monsters.find(m => m.tokenId === t.tokenId));
     if (!tokens.length) return;
     setPendingTokens(tokens);
     setShowRegistration(true);
   };
 
   const handleRegister = (entries: { tokenId: string; name: string; maxHp: number; group: string }[]) => {
-    for (const e of entries) {
-      registerTokens([e.tokenId], e.name, e.maxHp, e.group);
-    }
+    for (const e of entries) registerTokens([e.tokenId], e.name, e.maxHp, e.group);
     setShowRegistration(false);
     setPendingTokens([]);
   };
@@ -134,7 +125,7 @@ export function GMDashboard() {
       )}
 
       <header className="px-4 py-3 bg-[#0d0d14] border-b border-[#1a1a2a] shrink-0">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <span className="font-cinzel-decorative text-sm text-gold tracking-wider">☠️ GM Grimoire</span>
           <button onClick={handleAddClick}
             className="px-3 py-1.5 text-[11px] bg-gold-dark/30 text-gold rounded-lg hover:bg-gold-dark/50 transition-colors font-cinzel">
@@ -179,8 +170,8 @@ export function GMDashboard() {
             {Array.from(grouped.groups.entries()).map(([group, items]) => (
               <div key={group} className="mb-2">
                 <button onClick={() => toggleCollapse(group)}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-[#111118] transition-colors group">
-                  <span className="text-[10px] text-faded">{collapsedGroups.has(group) ? '▶' : '▼'}</span>
+                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-[#111118] transition-colors">
+                  <span className="text-[10px] text-faded w-3">{collapsedGroups.has(group) ? '▶' : '▼'}</span>
                   <input type="checkbox" checked={items.every(m => selected.has(m.tokenId))}
                     onChange={() => toggleGroup(group)}
                     onClick={(e) => e.stopPropagation()}
@@ -222,32 +213,29 @@ export function GMDashboard() {
             </button>
             <button onClick={() => setIsHeal(true)}
               className={`px-3 py-1.5 text-[11px] rounded-lg font-cinzel transition-all ${isHeal ? 'bg-green-900/50 text-green-400 border border-green-800/50' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
-              💚 Исцеление
+              💚 Лечение
             </button>
-            <div className="flex-1" />
-            {[5, 10, 20, 50, 100].map((n) => (
-              <button key={n} onClick={() => setQuickAmount(n)}
-                className={`px-2 py-1 text-[10px] rounded font-mono transition-all ${quickAmount === n ? 'bg-gold-dark/30 text-gold border border-gold-dark/50' : 'bg-[#1a1a2a] text-faded border border-transparent hover:text-bone'}`}>
-                {n}
-              </button>
-            ))}
           </div>
 
           <div className="flex items-center gap-2">
-            <input type="text" inputMode="numeric" value={customAmount}
-              onChange={(e) => setCustomAmount(e.target.value.replace(/[^0-9]/g, ''))}
-              onKeyDown={(e) => { if (e.key === 'Enter') applyCustom(); }}
-              placeholder="Свое"
-              className="w-16 bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1 text-[10px] font-mono text-bone focus:border-gold-dark focus:outline-none" />
-            <button onClick={applyQuick}
-              className={`flex-1 py-2 rounded-lg font-cinzel text-xs font-bold transition-all ${!isHeal ? 'bg-blood-dark text-blood-bright hover:bg-blood border border-blood/50' : 'bg-green-900/50 text-green-400 hover:bg-green-900/80 border border-green-800/50'}`}>
-              {isHeal ? `💚 Исцелить −${quickAmount} ×${selected.size}` : `⚔️ Нанести ${quickAmount} ×${selected.size}`}
+            <input type="text" value={formula}
+              onChange={(e) => setFormula(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') applyFormula(); }}
+              placeholder="Формула: 10, 2d6+3, 1d20..."
+              className="flex-1 bg-[#1a1a2a] border border-[#2a2a3a] rounded-lg px-3 py-1.5 text-xs font-mono text-bone placeholder:text-faded/50 focus:border-gold-dark focus:outline-none" />
+            <button onClick={applyFormula}
+              className={`px-4 py-1.5 rounded-lg font-cinzel text-xs font-bold transition-all ${!isHeal ? 'bg-blood-dark text-blood-bright hover:bg-blood border border-blood/50' : 'bg-green-900/50 text-green-400 hover:bg-green-900/80 border border-green-800/50'}`}>
+              {isHeal ? 'Лечить' : 'Нанести'} ×{selected.size}
             </button>
             <button onClick={removeSelected}
-              className="py-2 px-3 text-[11px] text-faded hover:text-blood-bright hover:bg-blood-dark/30 rounded-lg border border-transparent hover:border-blood/30 font-cinzel transition-all">
+              className="py-1.5 px-2.5 text-[11px] text-faded hover:text-blood-bright hover:bg-blood-dark/30 rounded-lg border border-transparent hover:border-blood/30 transition-all">
               🗑️
             </button>
           </div>
+
+          {lastResult && (
+            <div className="text-[10px] text-gold/70 font-mono text-center animate-pulse">{lastResult}</div>
+          )}
         </div>
       )}
     </div>

@@ -57,9 +57,9 @@ function addToQueue(msg: BroadcastMessage) {
 // DICE PARSER
 // ═══════════════════════════════════════════════════════════════
 
-interface DG { count: number; sides: number; }
+interface DG { count: number; sides: number; sign: number; }
 
-function parseFormula(f: string): { groups: DG[]; bonus: number } {
+export function parseFormula(f: string): { groups: DG[]; bonus: number } {
   const groups: DG[] = [];
   let bonus = 0;
   const tokens = f.toLowerCase().replace(/\s/g, "").match(/[+-]?(\d*d\d+|\d+)/g) || [];
@@ -67,7 +67,7 @@ function parseFormula(f: string): { groups: DG[]; bonus: number } {
     const m = t.match(/([+-]?)(\d*)d(\d+)/);
     if (m) {
       const s = m[1] === "-" ? -1 : 1;
-      groups.push({ count: Math.abs(parseInt(m[2] || "1", 10) * s), sides: parseInt(m[3]!, 10) });
+      groups.push({ count: Math.abs(parseInt(m[2] || "1", 10)), sides: parseInt(m[3]!, 10), sign: s });
     } else {
       const n = parseInt(t, 10);
       if (!isNaN(n)) bonus += n;
@@ -76,8 +76,22 @@ function parseFormula(f: string): { groups: DG[]; bonus: number } {
   return { groups, bonus };
 }
 
+export function rollFormula(f: string): number {
+  const { groups, bonus } = parseFormula(f);
+  let total = bonus;
+  for (const { count, sides, sign } of groups) {
+    for (let i = 0; i < count; i++) {
+      total += (Math.floor(Math.random() * sides) + 1) * sign;
+    }
+  }
+  return Math.max(0, total);
+}
+
 function doubleDice(f: string): string {
-  return f.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || "1", 10) * 2}d${s}`);
+  return f.replace(/([+-]?\d*)d(\d+)/gi, (_, c, s) => {
+    const sign = c.startsWith('-') ? '-' : '';
+    return `${sign}${Math.abs(parseInt(c || "1", 10)) * 2}d${s}`;
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
