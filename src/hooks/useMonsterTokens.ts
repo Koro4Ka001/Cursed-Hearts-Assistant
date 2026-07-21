@@ -10,6 +10,25 @@ export function useMonsterTokens() {
 
   useEffect(() => { OBR.onReady(() => setReady(true)); }, []);
 
+  // Sync deleted tokens from OBR map to monster store
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    OBR.onReady(() => {
+      unsub = OBR.scene.items.onChange(async (items) => {
+        const trackedIds = Object.keys(useMonsterStore.getState().monsters);
+        if (trackedIds.length === 0) return;
+        const itemIds = new Set(items.map(i => i.id));
+        for (const id of trackedIds) {
+          if (!itemIds.has(id)) {
+            useMonsterStore.getState().remove(id);
+            await tokenBarService.removeBars(id);
+          }
+        }
+      });
+    });
+    return () => { unsub?.(); };
+  }, []);
+
   const registerTokens = useCallback(async (tokenIds: string[], name: string, maxHp: number, group: string) => {
     if (!(await OBR.scene.isReady())) return;
     const items = await OBR.scene.items.getItems(tokenIds);
@@ -38,7 +57,7 @@ export function useMonsterTokens() {
     if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);
   }, []);
 
-  const updateMonster = useCallback(async (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group'>>) => {
+  const updateMonster = useCallback(async (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => {
     useMonsterStore.getState().updateFields(tokenId, fields);
     const fresh = useMonsterStore.getState().get(tokenId);
     if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);

@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { DamageType } from '../types';
+
+export interface MonsterWeapon {
+  id: string;
+  name: string;
+  damageFormula: string;
+  damageType: DamageType;
+  hitBonus: number;
+}
 
 export interface Monster {
   tokenId: string;
@@ -7,6 +16,37 @@ export interface Monster {
   hp: number;
   maxHp: number;
   group: string;
+  armor: number;
+  armorByType: Partial<Record<DamageType, number>>;
+  stats: {
+    physicalPower: number;
+    dexterity: number;
+    vitality: number;
+    intelligence: number;
+    charisma: number;
+    initiative: number;
+  };
+  weapons: MonsterWeapon[];
+  elementResistances: Partial<Record<DamageType, number>>;
+}
+
+function defaultStats() {
+  return { physicalPower: 0, dexterity: 0, vitality: 0, intelligence: 0, charisma: 0, initiative: 0 };
+}
+
+function migrateMonster(raw: Record<string, unknown>): Monster {
+  return {
+    tokenId: raw.tokenId as string,
+    name: raw.name as string,
+    hp: raw.hp as number,
+    maxHp: raw.maxHp as number,
+    group: (raw.group as string) || '',
+    armor: (raw.armor as number) || 0,
+    armorByType: (raw.armorByType as Partial<Record<DamageType, number>>) || {},
+    stats: raw.stats ? { ...defaultStats(), ...(raw.stats as Record<string, number>) } : defaultStats(),
+    weapons: (raw.weapons as MonsterWeapon[]) || [],
+    elementResistances: (raw.elementResistances as Partial<Record<DamageType, number>>) || {},
+  };
 }
 
 interface MonsterStore {
@@ -15,7 +55,13 @@ interface MonsterStore {
   remove: (tokenId: string) => void;
   setHp: (tokenId: string, hp: number) => void;
   setMaxHp: (tokenId: string, maxHp: number) => void;
-  updateFields: (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group'>>) => void;
+  updateFields: (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => void;
+  setArmorByType: (tokenId: string, type: DamageType, value: number) => void;
+  setStats: (tokenId: string, stats: Partial<Monster['stats']>) => void;
+  addWeapon: (tokenId: string, weapon: MonsterWeapon) => void;
+  removeWeapon: (tokenId: string, weaponId: string) => void;
+  updateWeapon: (tokenId: string, weaponId: string, fields: Partial<MonsterWeapon>) => void;
+  setElementResistance: (tokenId: string, element: DamageType, multiplier: number) => void;
   getGroups: () => string[];
   get: (tokenId: string) => Monster | undefined;
 }
@@ -26,7 +72,16 @@ export const useMonsterStore = create<MonsterStore>()(
       monsters: {},
 
       add: (tokenId, name, maxHp, group) => set((s) => ({
-        monsters: { ...s.monsters, [tokenId]: { tokenId, name, hp: maxHp, maxHp, group } },
+        monsters: {
+          ...s.monsters,
+          [tokenId]: {
+            tokenId, name, hp: maxHp, maxHp, group,
+            armor: 0, armorByType: {},
+            stats: defaultStats(),
+            weapons: [],
+            elementResistances: {},
+          },
+        },
       })),
 
       remove: (tokenId) => set((s) => {
@@ -61,6 +116,81 @@ export const useMonsterStore = create<MonsterStore>()(
         return { monsters: { ...s.monsters, [tokenId]: updated } };
       }),
 
+      setArmorByType: (tokenId, type, value) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: {
+              ...m,
+              armorByType: { ...m.armorByType, [type]: Math.max(0, value) },
+            },
+          },
+        };
+      }),
+
+      setStats: (tokenId, stats) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, stats: { ...m.stats, ...stats } },
+          },
+        };
+      }),
+
+      addWeapon: (tokenId, weapon) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, weapons: [...m.weapons, weapon] },
+          },
+        };
+      }),
+
+      removeWeapon: (tokenId, weaponId) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, weapons: m.weapons.filter(w => w.id !== weaponId) },
+          },
+        };
+      }),
+
+      updateWeapon: (tokenId, weaponId, fields) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: {
+              ...m,
+              weapons: m.weapons.map(w => w.id === weaponId ? { ...w, ...fields } : w),
+            },
+          },
+        };
+      }),
+
+      setElementResistance: (tokenId, element, multiplier) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        const resistances = { ...m.elementResistances };
+        if (multiplier === 1) delete resistances[element];
+        else resistances[element] = Math.max(0, Math.min(2, multiplier));
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, elementResistances: resistances },
+          },
+        };
+      }),
+
       getGroups: () => {
         const monsters = Object.values(get().monsters);
         const groups = new Set<string>();
@@ -72,6 +202,17 @@ export const useMonsterStore = create<MonsterStore>()(
 
       get: (tokenId) => get().monsters[tokenId],
     }),
-    { name: 'ch-monsters' }
+    {
+      name: 'ch-monsters',
+      merge: (persisted, current) => {
+        const data = (persisted as Record<string, unknown>)?.monsters;
+        if (!data || typeof data !== 'object') return current;
+        const monsters: Record<string, Monster> = {};
+        for (const [key, val] of Object.entries(data)) {
+          monsters[key] = migrateMonster(val as Record<string, unknown>);
+        }
+        return { ...current, monsters } as MonsterStore;
+      },
+    }
   )
 );

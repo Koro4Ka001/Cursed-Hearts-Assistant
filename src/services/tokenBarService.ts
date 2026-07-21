@@ -311,9 +311,19 @@ class TokenBarService {
 
   async removeBars(tokenId: string): Promise<void> {
     try {
+      const st = this.states.get(tokenId);
+      const ids = st?.ids;
+      // Remove known bar shapes first (most reliable)
+      const knownIds = ids
+        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.crack1, ids.crack2].filter(Boolean) as string[]
+        : [];
+      if (knownIds.length > 0) {
+        try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
+      }
+      // Fallback: remove any ATTACHMENT SHAPE attached to this token
       const items = await OBR.scene.items.getItems();
       const toDel = items.filter(
-        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT" && i.type === "SHAPE"
+        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT" && isShape(i) && !knownIds.includes(i.id)
       );
       if (toDel.length > 0) {
         await OBR.scene.items.deleteItems(toDel.map((i) => i.id));

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface TokenInfo {
   tokenId: string;
@@ -68,25 +68,78 @@ function NumericInput({ value, onChange, min = 1, className = '' }: {
   );
 }
 
+function GroupInput({ value, onChange, existingGroups, className = '' }: {
+  value: string;
+  onChange: (v: string) => void;
+  existingGroups: string[];
+  className?: string;
+}) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filtered = value
+    ? existingGroups.filter(g => g.toLowerCase().includes(value.toLowerCase()) && g !== value)
+    : existingGroups;
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className={`relative ${className}`}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setShowSuggestions(true); }}
+        onFocus={() => setShowSuggestions(true)}
+        placeholder="Без группы"
+        className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1 text-bone text-xs focus:border-gold-dark focus:outline-none"
+      />
+      {showSuggestions && filtered.length > 0 && (
+        <div className="absolute z-20 top-full mt-1 w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded max-h-20 overflow-y-auto shadow-lg">
+          {filtered.map(g => (
+            <button
+              key={g}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onChange(g);
+                setShowSuggestions(false);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-faded hover:bg-[#2a2a3a] hover:text-bone"
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function RegistrationModal({ tokens, existingGroups, onConfirm, onClose }: Props) {
   const [entries, setEntries] = useState(() =>
     tokens.map(t => ({ tokenId: t.tokenId, name: t.defaultName, maxHp: 50, group: '' }))
   );
   const [commonGroup, setCommonGroup] = useState('');
-  const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
-  const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
+  const [groupApplied, setGroupApplied] = useState(false);
 
   const update = (idx: number, field: string, value: string | number) => {
     setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
 
-  const applyGroupToAll = () => {
+  const applyGroupToAll = useCallback(() => {
     setEntries(prev => prev.map(e => ({ ...e, group: commonGroup })));
-  };
-
-  const filteredSuggestions = commonGroup
-    ? existingGroups.filter(g => g.toLowerCase().includes(commonGroup.toLowerCase()) && g !== commonGroup)
-    : existingGroups;
+    setGroupApplied(true);
+    setTimeout(() => setGroupApplied(false), 1500);
+  }, [commonGroup]);
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -99,29 +152,27 @@ export function RegistrationModal({ tokens, existingGroups, onConfirm, onClose }
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
           <div className="space-y-1">
             <label className="text-[10px] text-faded uppercase tracking-wider font-cinzel">Группа для всех</label>
-            <div className="relative">
-              <input
-                type="text"
+            <div className="flex gap-2">
+              <GroupInput
                 value={commonGroup}
-                onChange={(e) => setCommonGroup(e.target.value)}
-                placeholder="Например: Гоблины"
-                className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-3 py-1.5 text-bone text-xs focus:border-gold-dark focus:outline-none"
+                onChange={setCommonGroup}
+                existingGroups={existingGroups}
+                className="flex-1"
               />
-              {filteredSuggestions.length > 0 && commonGroup && (
-                <div className="absolute z-10 top-full mt-1 w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded max-h-24 overflow-y-auto">
-                  {filteredSuggestions.map(g => (
-                    <button key={g} onClick={() => { setCommonGroup(g); applyGroupToAll(); }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-faded hover:bg-[#2a2a3a] hover:text-bone">
-                      {g}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <button
+                onClick={applyGroupToAll}
+                disabled={!commonGroup.trim()}
+                className={`px-3 py-1 text-[10px] rounded font-cinzel transition-all shrink-0 ${
+                  groupApplied
+                    ? 'bg-green-900/50 text-green-400 border border-green-800/50'
+                    : commonGroup.trim()
+                    ? 'bg-gold-dark/30 text-gold border border-gold-dark/50 hover:bg-gold-dark/50'
+                    : 'bg-[#1a1a2a] text-faded/50 border border-transparent cursor-not-allowed'
+                }`}
+              >
+                {groupApplied ? '✓ Применено' : 'Применить'}
+              </button>
             </div>
-            <button onClick={applyGroupToAll}
-              className="text-[10px] text-gold hover:text-gold-bright transition-colors font-cinzel">
-              Применить группу ко всем
-            </button>
           </div>
 
           <div className="h-px bg-[#1a1a2a]" />
@@ -146,24 +197,14 @@ export function RegistrationModal({ tokens, existingGroups, onConfirm, onClose }
                       className="w-full mt-0.5" />
                   </div>
                 </div>
-                <div className="relative">
+                <div>
                   <label className="text-[9px] text-faded uppercase tracking-wider">Группа</label>
-                  <input type="text" value={entry.group}
-                    onChange={(e) => { update(idx, 'group', e.target.value); setEditingGroupIdx(idx); }}
-                    onFocus={() => setEditingGroupIdx(idx)}
-                    onBlur={() => setTimeout(() => setEditingGroupIdx(null), 150)}
-                    placeholder="Без группы"
-                    className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1 text-bone text-xs focus:border-gold-dark focus:outline-none mt-0.5" />
-                  {editingGroupIdx === idx && existingGroups.filter(g => g.toLowerCase().includes(entry.group.toLowerCase())).length > 0 && (
-                    <div className="absolute z-10 top-full mt-1 w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded max-h-20 overflow-y-auto">
-                      {existingGroups.filter(g => g.toLowerCase().includes(entry.group.toLowerCase())).map(g => (
-                        <button key={g} onMouseDown={() => update(idx, 'group', g)}
-                          className="w-full text-left px-3 py-1.5 text-xs text-faded hover:bg-[#2a2a3a] hover:text-bone">
-                          {g}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <GroupInput
+                    value={entry.group}
+                    onChange={(v) => update(idx, 'group', v)}
+                    existingGroups={existingGroups}
+                    className="mt-0.5"
+                  />
                 </div>
               </div>
             ))}

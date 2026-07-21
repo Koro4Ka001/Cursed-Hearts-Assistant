@@ -2,7 +2,9 @@ import { useState, useCallback, useMemo } from 'react';
 import { useMonsterTokens } from '../hooks/useMonsterTokens';
 import { MonsterCard } from './MonsterCard';
 import { RegistrationModal, getGroupColor } from './RegistrationModal';
+import { WeaponAttackPanel } from './WeaponAttackPanel';
 import { rollFormula } from '../services/diceService';
+import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 
 type Tab = 'all' | 'alive' | 'dead';
 
@@ -16,6 +18,8 @@ export function GMDashboard() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [formula, setFormula] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [useArmor, setUseArmor] = useState(false);
+  const [attackContext, setAttackContext] = useState<{ monster: Monster; weapon: MonsterWeapon } | null>(null);
 
   const filtered = useMemo(() => {
     if (tab === 'alive') return monsters.filter((m) => m.hp > 0);
@@ -74,15 +78,37 @@ export function GMDashboard() {
     for (const id of selected) {
       const m = monsters.find((x) => x.tokenId === id);
       if (!m) continue;
+
+      let effectiveAmount = amount;
+      let armorBlocked = 0;
+
+      // Apply armor reduction if enabled
+      if (useArmor && !isHeal && amount > 0) {
+        const totalArmor = m.armor + Math.floor(
+          Object.values(m.armorByType || {}).reduce((s, v) => s + v, 0) /
+          Math.max(1, Object.keys(m.armorByType || {}).length)
+        );
+        if (totalArmor > 0) {
+          armorBlocked = Math.min(amount, totalArmor);
+          effectiveAmount = Math.max(0, amount - totalArmor);
+        }
+      }
+
       const newHp = isHeal
-        ? Math.min(m.maxHp, m.hp + amount)
-        : Math.max(0, m.hp - amount);
+        ? Math.min(m.maxHp, m.hp + effectiveAmount)
+        : Math.max(0, m.hp - effectiveAmount);
+
       await updateMonster(id, { hp: newHp });
-      results.push(`${m.name}: ${m.hp} → ${newHp}`);
+
+      if (useArmor && !isHeal && armorBlocked > 0) {
+        results.push(`${m.name}: ${m.hp} → ${newHp} (−${effectiveAmount}, 🛡${armorBlocked})`);
+      } else {
+        results.push(`${m.name}: ${m.hp} → ${newHp}`);
+      }
     }
     setLastResult(`${isHeal ? '+' : '-'}${amount} (${formula}) → ${results.length} монстров`);
     setTimeout(() => setLastResult(null), 3000);
-  }, [formula, selected, monsters, isHeal, updateMonster]);
+  }, [formula, selected, monsters, isHeal, updateMonster, useArmor]);
 
   const removeSelected = useCallback(() => {
     for (const id of selected) unregister(id);
@@ -106,6 +132,10 @@ export function GMDashboard() {
     setPendingTokens([]);
   };
 
+  const handleAttack = (monster: Monster, weapon: MonsterWeapon) => {
+    setAttackContext({ monster, weapon });
+  };
+
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'all', label: 'Все', count: monsters.length },
     { id: 'alive', label: 'Живые', count: monsters.filter((m) => m.hp > 0).length },
@@ -114,7 +144,7 @@ export function GMDashboard() {
 
   const renderMonster = (m: typeof monsters[0]) => (
     <MonsterCard key={m.tokenId} monster={m} selected={selected.has(m.tokenId)}
-      onToggle={toggle} onUpdate={updateMonster} onRemove={unregister} />
+      onToggle={toggle} onUpdate={updateMonster} onRemove={unregister} onAttack={handleAttack} />
   );
 
   return (
@@ -124,9 +154,17 @@ export function GMDashboard() {
           onConfirm={handleRegister} onClose={() => { setShowRegistration(false); setPendingTokens([]); }} />
       )}
 
+      {attackContext && (
+        <WeaponAttackPanel
+          attacker={attackContext.monster}
+          weapon={attackContext.weapon}
+          onClose={() => setAttackContext(null)}
+        />
+      )}
+
       <header className="px-4 py-3 bg-[#0d0d14] border-b border-[#1a1a2a] shrink-0">
         <div className="flex items-center justify-between mb-3">
-          <span className="font-cinzel-decorative text-sm text-gold tracking-wider">☠️ GM Grimoire</span>
+          <span className="font-cinzel-decorative text-sm text-gold tracking-wider">☠️ Cursed Assistant</span>
           <button onClick={handleAddClick}
             className="px-3 py-1.5 text-[11px] bg-gold-dark/30 text-gold rounded-lg hover:bg-gold-dark/50 transition-colors font-cinzel">
             + Добавить
@@ -215,6 +253,12 @@ export function GMDashboard() {
               className={`px-3 py-1.5 text-[11px] rounded-lg font-cinzel transition-all ${isHeal ? 'bg-green-900/50 text-green-400 border border-green-800/50' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
               💚 Лечение
             </button>
+            {!isHeal && (
+              <button onClick={() => setUseArmor(!useArmor)}
+                className={`px-2 py-1.5 text-[10px] rounded-lg font-cinzel transition-all ${useArmor ? 'bg-[#1a1a2a] text-gold border border-gold-dark/30' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
+                🛡 Броня
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
