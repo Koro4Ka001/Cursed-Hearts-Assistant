@@ -4,6 +4,8 @@ import { MonsterCard } from './MonsterCard';
 import { RegistrationModal, getGroupColor } from './RegistrationModal';
 import { WeaponAttackPanel } from './WeaponAttackPanel';
 import { rollFormula } from '../services/diceService';
+import { tokenBarService } from '../services/tokenBarService';
+import { calculateMonsterDamage } from '../utils/monsterDamage';
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
 import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { useMonsterStore } from '../stores/monsterStore';
@@ -25,7 +27,6 @@ export function GMDashboard() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [formula, setFormula] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
-  const [useArmor, setUseArmor] = useState(false);
   const [damageType, setDamageType] = useState<DamageType>('slashing');
   const [attackContext, setAttackContext] = useState<{ monster: Monster; weapon: MonsterWeapon } | null>(null);
 
@@ -85,14 +86,11 @@ export function GMDashboard() {
       let effectiveAmount = amount;
       let armorBlocked = 0;
 
-      // Apply armor reduction if enabled and dealing damage
-      if (useArmor && !isHeal && amount > 0) {
-        const typeArmor = m.armorByType?.[damageType] ?? 0;
-        const totalArmor = m.armor + typeArmor;
-        if (totalArmor > 0) {
-          armorBlocked = Math.min(amount, totalArmor);
-          effectiveAmount = Math.max(0, amount - totalArmor);
-        }
+      // Apply proper damage calculation if dealing damage
+      if (!isHeal && amount > 0) {
+        const dmgResult = calculateMonsterDamage(amount, damageType, m);
+        effectiveAmount = dmgResult.finalDamage;
+        armorBlocked = dmgResult.armorApplied;
       }
 
       const newHp = isHeal
@@ -101,7 +99,7 @@ export function GMDashboard() {
 
       await updateMonster(id, { hp: newHp });
 
-      if (useArmor && !isHeal && armorBlocked > 0) {
+      if (!isHeal && armorBlocked > 0) {
         results.push(`${m.name}: ${m.hp} → ${newHp} (−${effectiveAmount}, 🛡${armorBlocked})`);
       } else {
         results.push(`${m.name}: ${m.hp} → ${newHp}`);
@@ -109,7 +107,7 @@ export function GMDashboard() {
     }
     setLastResult(`${isHeal ? '+' : '-'}${amount} (${formula}) → ${results.length} монстров`);
     setTimeout(() => setLastResult(null), 3000);
-  }, [formula, selected, monsters, isHeal, updateMonster, useArmor, damageType]);
+  }, [formula, selected, monsters, isHeal, updateMonster, damageType]);
 
   const removeSelected = useCallback(() => {
     for (const id of selected) unregister(id);
@@ -139,14 +137,19 @@ export function GMDashboard() {
 
   const handleDuplicate = async (tokenId: string) => {
     const tokenIds = await getSelection();
-    if (!tokenIds.length) return;
-    const newTokenId = tokenIds[0];
-    if (!newTokenId || newTokenId === tokenId) return;
+    if (!tokenIds.length) {
+      // No token selected on map - show notification
+      alert('Выделите токен на карте для копирования');
+      return;
+    }
+    const newTokenId = tokenIds.find(id => id !== tokenId);
+    if (!newTokenId) {
+      alert('Выделите ДРУГОЙ токен на карте (не тот же самый)');
+      return;
+    }
     useMonsterStore.getState().duplicate(tokenId, newTokenId);
-    // Create bars for the new token
     const m = useMonsterStore.getState().get(newTokenId);
     if (m) {
-      const { tokenBarService } = await import('../services/tokenBarService');
       await tokenBarService.createBars(newTokenId, m.maxHp, m.maxHp, 0, 0, false, m.name);
     }
   };
@@ -280,12 +283,6 @@ export function GMDashboard() {
                   <option key={dt} value={dt}>{ELEMENT_NAMES_MAP[dt] ?? dt}</option>
                 ))}
               </select>
-              <label className="flex items-center gap-1 text-[9px] text-faded shrink-0 cursor-pointer">
-                <input type="checkbox" checked={useArmor}
-                  onChange={(e) => setUseArmor(e.target.checked)}
-                  className="w-3 h-3 accent-[#c9a84c]" />
-                🛡 Броня
-              </label>
             </div>
           )}
 

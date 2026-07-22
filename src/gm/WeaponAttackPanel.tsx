@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { useMonsterStore } from '../stores/monsterStore';
 import { rollDice } from '../utils/dice';
+import { calculateMonsterDamage } from '../utils/monsterDamage';
 import OBR from '@owlbear-rodeo/sdk';
 import { DICE_BROADCAST_CHANNEL } from '../services/diceService';
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
@@ -14,7 +15,6 @@ interface Props {
 }
 
 export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
-  const monsters = useMonsterStore(s => Object.values(s.monsters));
   const [targetId, setTargetId] = useState<string>('');
   const [advantage, setAdvantage] = useState<'normal' | 'advantage' | 'disadvantage'>('normal');
   const [result, setResult] = useState<{
@@ -22,19 +22,23 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
     hitTotal: number;
     isHit: boolean;
     isCrit: boolean;
-    damageRoll: number;
     damageTotal: number;
     damageType: string;
     log: string[];
   } | null>(null);
+  const [attackCount, setAttackCount] = useState(0);
+
+  // Read target directly from store (no subscription)
+  const target = targetId ? useMonsterStore.getState().monsters[targetId] : undefined;
+  // Force re-render when monsters change (for target HP display)
+  const _monstersVersion = useMonsterStore(s => Object.keys(s.monsters).length);
 
   const executeAttack = useCallback(() => {
-    // Read target from store directly to avoid stale closure
     const currentTarget = useMonsterStore.getState().monsters[targetId];
     if (!currentTarget) return;
     const log: string[] = [];
 
-    // Hit roll: d20 + hitBonus + dexterity bonus
+    // Hit roll
     const agiMod = Math.floor((attacker.stats.dexterity || 0) * 3);
     const hitFormula = `d20+${weapon.hitBonus + agiMod}`;
     const hitResult = rollDice(hitFormula, 'Атака', advantage);
@@ -42,68 +46,49 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
     const isCrit = hitResult.isCrit ?? false;
     const isCritFail = hitResult.isCritFail ?? false;
 
-    log.push(`🎯 Бросок атаки: [${hitResult.rolls.join(', ')}] + ${weapon.hitBonus + agiMod} = ${hitResult.total}`);
-    if (isCrit) log.push('✨ КРИТИЧЕСКОЕ ПОПАДАНИЕ!');
-    if (isCritFail) log.push('💀 КРИТИЧЕСКИЙ ПРОВАЛ!');
+    log.push(`🎯 Бросок: [${hitResult.rolls.join(', ')}] + ${weapon.hitBonus + agiMod} = ${hitResult.total}`);
+    if (isCrit) log.push('✨ КРИТ!');
+    if (isCritFail) log.push('💀 ПРОВАЛ!');
 
-    // Check hit vs target armor
-    const targetArmor = currentTarget.armor + Math.floor(
-      Object.values(currentTarget.armorByType || {}).reduce((s, v) => s + v, 0) /
-      Math.max(1, Object.keys(currentTarget.armorByType || {}).length)
-    );
-    const isHit = isCrit || (!isCritFail && hitResult.total >= (11 + targetArmor));
+    // Determine hit
+    const isHit = isCrit || (!isCritFail && hitResult.total >= 11);
 
-    log.push(`🛡 Броня цели: ${targetArmor} | Порог: ${11 + targetArmor} | ${isHit ? 'Попадание!' : 'Промах'}`);
+    if (!isHit) {
+      log.push(`💨 Промах (порог: 11)`);
+    }
 
-    let damageTotal = 0;
-    let damageRoll = 0;
-
+    // Roll damage if hit
+    let rawDamage = 0;
     if (isHit) {
-      // Damage roll
       let formula = weapon.damageFormula;
-      if (isCrit) {
-        formula = formula.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || '1') * 2}d${s}`);
-      }
+      if (isCrit) formula = formula.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || '1') * 2}d${s}`);
       const strMod = Math.floor((attacker.stats.physicalPower || 0) * 5);
       if (strMod > 0) formula += `+${strMod}`;
+      rawDamage = rollDice(formula, 'Урон').total;
+    }
 
-      const dmgResult = rollDice(formula, 'Урон');
-      damageRoll = dmgResult.total;
-      damageTotal = dmgResult.total;
+    let damageTotal = 0;
+    if (isHit && rawDamage > 0) {
+      const dmgResult = calculateMonsterDamage(rawDamage, weapon.damageType, currentTarget);
+      damageTotal = dmgResult.finalDamage;
+      log.push(`💥 ${weapon.name}: ${rawDamage} → ${dmgResult.finalDamage} урона`);
+      if (dmgResult.armorApplied > 0) log.push(`🛡 Броня: −${dmgResult.armorApplied}`);
+      if (dmgResult.multiplier !== 1) log.push(`🔮 Множитель: ×${dmgResult.multiplier}`);
 
-      // Apply target resistance
-      const resistance = currentTarget.elementResistances?.[weapon.damageType as keyof typeof currentTarget.elementResistances];
-      if (resistance !== undefined && resistance !== 1) {
-        const original = damageTotal;
-        damageTotal = Math.round(damageTotal * resistance);
-        log.push(`🔮 Сопротивление ${ELEMENT_NAMES_MAP[weapon.damageType] ?? weapon.damageType}: ×${resistance} → ${original} → ${damageTotal}`);
-      }
-
-      // Apply target armor reduction for physical damage
-      const isPhysical = ['slashing', 'piercing', 'bludgeoning', 'chopping'].includes(weapon.damageType);
-      if (isPhysical) {
-        const typeArmor = currentTarget.armorByType?.[weapon.damageType as keyof typeof currentTarget.armorByType] ?? 0;
-        const totalArmor = currentTarget.armor + typeArmor;
-        damageTotal = Math.max(0, damageTotal - totalArmor);
-        log.push(`🛡 Броня: −${totalArmor} → ${damageTotal}`);
-      }
-
-      // Apply damage to target
+      // Apply damage
       const newHp = Math.max(0, currentTarget.hp - damageTotal);
       useMonsterStore.getState().setHp(currentTarget.tokenId, newHp);
-
-      log.push(`💥 ${weapon.name}: [${dmgResult.rolls.join(', ')}] = ${dmgResult.total} → ${damageTotal} урона`);
       log.push(`❤ ${currentTarget.name}: ${currentTarget.hp} → ${newHp} HP`);
 
       // Broadcast
       const msg: BroadcastMessage = {
         id: `gm-atk-${Date.now()}`,
-        type: 'hit',
+        type: isCrit ? 'hit' : 'hit',
         unitName: attacker.name,
         title: `${weapon.name} → ${currentTarget.name}`,
         subtitle: isCrit ? 'КРИТ!' : undefined,
         icon: '⚔',
-        rolls: dmgResult.rolls,
+        rolls: hitResult.rolls,
         total: damageTotal,
         isCrit,
         isCritFail: false,
@@ -115,19 +100,21 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
     }
 
-    setResult({
+    // Use functional state update to avoid stale closure issues
+    setResult(prev => ({
       hitRoll: hitResult.rolls[0] || 0,
       hitTotal: hitResult.total,
       isHit,
       isCrit,
-      damageRoll,
       damageTotal,
       damageType: weapon.damageType,
       log,
-    });
+    }));
+    setAttackCount(c => c + 1);
   }, [attacker, weapon, targetId, advantage]);
 
-  const target = monsters.find(m => m.tokenId === targetId);
+  // Get fresh target for display
+  const displayTarget = useMonsterStore(s => targetId ? s.monsters[targetId] : undefined);
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -137,19 +124,24 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
             <h3 className="font-cinzel text-sm text-gold">⚔ {weapon.name}</h3>
             <button onClick={onClose} className="text-faded hover:text-bone text-xs">✕</button>
           </div>
-          <p className="text-[10px] text-faded mt-1">{attacker.name} → {target?.name || '...'}</p>
+          <p className="text-[10px] text-faded mt-1">
+            {attacker.name} → {displayTarget?.name || '...'}
+            {displayTarget && ` (${displayTarget.hp}/${displayTarget.maxHp})`}
+          </p>
         </div>
 
         <div className="px-4 py-3 space-y-3">
-          {/* Target selection */}
+          {/* Target */}
           <div>
             <label className="text-[9px] text-faded uppercase tracking-wider">Цель</label>
             <select value={targetId} onChange={(e) => setTargetId(e.target.value)}
               className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1.5 text-bone text-xs focus:border-gold-dark focus:outline-none mt-0.5">
               <option value="">Выбери цель...</option>
-              {monsters.filter(m => m.tokenId !== attacker.tokenId && m.hp > 0).map(m => (
-                <option key={m.tokenId} value={m.tokenId}>{m.name} ({m.hp}/{m.maxHp})</option>
-              ))}
+              {useMonsterStore.getState() ? Object.values(useMonsterStore.getState().monsters)
+                .filter(m => m.tokenId !== attacker.tokenId && m.hp > 0)
+                .map(m => (
+                  <option key={m.tokenId} value={m.tokenId}>{m.name} ({m.hp}/{m.maxHp})</option>
+                )) : null}
             </select>
           </div>
 
@@ -172,23 +164,23 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
           {/* Info */}
           <div className="text-[9px] text-faded space-y-0.5">
             <div>Формула: <span className="text-bone font-mono">{weapon.damageFormula}</span> ({ELEMENT_NAMES_MAP[weapon.damageType] ?? weapon.damageType})</div>
-            <div>Бонус атаки: <span className="text-bone">+{weapon.hitBonus + Math.floor((attacker.stats.dexterity || 0) * 3)} (бонус + {Math.floor((attacker.stats.dexterity || 0) * 3)} ловк.)</span></div>
-            <div>Бонус урона: <span className="text-bone">+{Math.floor((attacker.stats.physicalPower || 0) * 5)} (сила)</span></div>
+            <div>Бонус атаки: <span className="text-bone">+{weapon.hitBonus + Math.floor((attacker.stats.dexterity || 0) * 3)}</span></div>
+            <div>Бонус урона: <span className="text-bone">+{Math.floor((attacker.stats.physicalPower || 0) * 5)}</span></div>
           </div>
 
           {/* Attack button */}
-          <button onClick={executeAttack} disabled={!target}
+          <button onClick={executeAttack} disabled={!displayTarget}
             className={`w-full py-2.5 rounded-lg font-cinzel text-sm font-bold transition-all ${
-              target
-                ? 'bg-blood-dark text-blood-bright hover:bg-blood border border-blood/50 shadow-lg shadow-blood/10'
+              displayTarget
+                ? 'bg-blood-dark text-blood-bright hover:bg-blood border border-blood/50'
                 : 'bg-[#1a1a2a] text-faded/50 border border-transparent cursor-not-allowed'
             }`}>
-            ⚔ Атаковать {target ? `→ ${target.name}` : ''}
+            ⚔ Атаковать {displayTarget ? `→ ${displayTarget.name}` : ''}
           </button>
 
           {/* Result */}
           {result && (
-            <div className="bg-[#111118] rounded-lg p-3 space-y-1 border border-[#1a1a2a]/50">
+            <div className="bg-[#111118] rounded-lg p-3 space-y-1 border border-[#1a1a2a]/50" key={attackCount}>
               <div className="flex items-center gap-2 text-xs">
                 <span className={result.isHit ? 'text-green-400' : 'text-blood-bright'}>
                   {result.isHit ? '🎯 Попадание!' : '💨 Промах'}
@@ -200,7 +192,7 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
               </div>
               {result.damageTotal > 0 && (
                 <div className="text-[10px] text-faded font-mono">
-                  Урон: {result.damageTotal} ({ELEMENT_NAMES_MAP[result.damageType] ?? result.damageType})
+                  Итого: {result.damageTotal} ({ELEMENT_NAMES_MAP[result.damageType] ?? result.damageType})
                 </div>
               )}
               <div className="space-y-0.5 mt-1">

@@ -346,11 +346,15 @@ class TokenBarService {
       if (knownIds.length > 0) {
         try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
       }
-      // Fallback: remove any ATTACHMENT item (shape or text) attached to this token
+      // Fallback: remove any ATTACHMENT item with our metadata attached to this token
       const items = await OBR.scene.items.getItems();
-      const toDel = items.filter(
-        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT" && (isShape(i) || i.type === "TEXT") && !knownIds.includes(i.id)
-      );
+      const toDel = items.filter((i) => {
+        if (i.attachedTo !== tokenId || i.layer !== "ATTACHMENT") return false;
+        if (knownIds.includes(i.id)) return false;
+        // Check if item belongs to us via metadata
+        const meta = (i.metadata as Record<string, unknown>)?.[META];
+        return meta !== undefined;
+      });
       if (toDel.length > 0) {
         await OBR.scene.items.deleteItems(toDel.map((i) => i.id));
       }
