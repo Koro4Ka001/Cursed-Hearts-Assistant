@@ -39,12 +39,12 @@ export function calculateMonsterDamage(
   // Armor
   let armorApplied = 0;
   if (category === 'physical') {
-    // Flat armor + type-specific armor
     const typeArmor = target.armorByType?.[damageType] ?? 0;
     armorApplied = target.armor + typeArmor;
   } else if (category === 'magical') {
-    // Magical: flat armor applies as magic resistance
-    armorApplied = target.armor;
+    // Magical: flat armor + element-specific armor from armorByType
+    const typeArmor = target.armorByType?.[damageType] ?? 0;
+    armorApplied = target.armor + typeArmor;
   }
 
   const afterMultiplier = Math.round(rawDamage * multiplier);

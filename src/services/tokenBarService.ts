@@ -163,7 +163,7 @@ class TokenBarService {
       const hp = Number(hpIn) || 0;
       const maxHp = Number(maxHpIn) || 1;
       const mana = Number(manaIn) || 0;
-      const maxMana = Number(maxManaIn) || 1;
+      const maxMana = Number(maxManaIn);
 
       await this.removeBars(tokenId);
 
@@ -174,8 +174,8 @@ class TokenBarService {
 
       const lay = this.calcLayout(tok as Image, useManaAsHp);
       const dead = hp <= 0;
-      const hpPct = Math.max(0, Math.min(1, hp / maxHp));
-      const manaPct = Math.max(0, Math.min(1, mana / maxMana));
+      const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+      const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const showHp = !useManaAsHp;
 
       const shapes: (Shape | Text)[] = [];
@@ -276,7 +276,7 @@ class TokenBarService {
     const hp = Number(hpIn) || 0;
     const maxHp = Number(maxHpIn) || 1;
     const mana = Number(manaIn) || 0;
-    const maxMana = Number(maxManaIn) || 1;
+    const maxMana = Number(maxManaIn);
 
     if (!st) {
       await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
@@ -285,8 +285,8 @@ class TokenBarService {
 
     const dead = hp <= 0;
     const ids = st.ids;
-    const hpPct = Math.max(0, Math.min(1, hp / maxHp));
-    const manaPct = Math.max(0, Math.min(1, mana / maxMana));
+    const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+    const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
 
     const hasMana = (manaIn > 0 || maxManaIn > 0) && !useManaAsHp;
     const needRebuild =

@@ -258,52 +258,58 @@ export function GMDashboard() {
         )}
       </main>
 
-      {/* Damage/Heal panel */}
-      {selected.size > 0 && (
-        <div className="px-3 py-3 bg-[#0d0d14] border-t border-[#1a1a2a] shrink-0 space-y-2">
-          {/* Mode selector */}
-          <div className="flex items-center gap-2">
-            <button onClick={() => setIsHeal(false)}
-              className={`px-3 py-1.5 text-[11px] rounded-lg font-cinzel transition-all ${!isHeal ? 'bg-blood-dark text-blood-bright border border-blood/50' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
-              ⚔️ Урон
-            </button>
-            <button onClick={() => setIsHeal(true)}
-              className={`px-3 py-1.5 text-[11px] rounded-lg font-cinzel transition-all ${isHeal ? 'bg-green-900/50 text-green-400 border border-green-800/50' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
-              💚 Лечение
-            </button>
+      {/* Damage/Heal panel — always visible */}
+      <div className="px-3 py-3 bg-[#0d0d14] border-t border-[#1a1a2a] shrink-0 space-y-2">
+        {selected.size === 0 ? (
+          <div className="text-center text-[10px] text-faded py-1">
+            Выделите монстров галочками для нанесения урона или лечения
           </div>
-
-          {/* Damage type + formula */}
-          {!isHeal && (
+        ) : (
+          <>
+            {/* Mode selector */}
             <div className="flex items-center gap-2">
-              <select value={damageType}
-                onChange={(e) => setDamageType(e.target.value as DamageType)}
-                className="bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1.5 text-bone text-[10px] focus:border-gold-dark focus:outline-none shrink-0 w-28">
-                {ALL_DAMAGE_TYPES.map(dt => (
-                  <option key={dt} value={dt}>{ELEMENT_NAMES_MAP[dt] ?? dt}</option>
-                ))}
-              </select>
+              <button onClick={() => setIsHeal(false)}
+                className={`px-3 py-1.5 text-[11px] rounded-lg font-cinzel transition-all ${!isHeal ? 'bg-blood-dark text-blood-bright border border-blood/50' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
+                ⚔️ Урон
+              </button>
+              <button onClick={() => setIsHeal(true)}
+                className={`px-3 py-1.5 text-[11px] rounded-lg font-cinzel transition-all ${isHeal ? 'bg-green-900/50 text-green-400 border border-green-800/50' : 'bg-[#1a1a2a] text-faded border border-transparent'}`}>
+                💚 Лечение
+              </button>
             </div>
-          )}
 
-          {/* Formula input + action */}
-          <div className="flex items-center gap-2">
-            <input type="text" value={formula}
-              onChange={(e) => setFormula(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') applyFormula(); }}
-              placeholder="Формула: 10, 2d6+3, 1d20..."
-              className="flex-1 bg-[#1a1a2a] border border-[#2a2a3a] rounded-lg px-3 py-1.5 text-xs font-mono text-bone placeholder:text-faded/50 focus:border-gold-dark focus:outline-none" />
-            <button onClick={applyFormula}
-              className={`px-4 py-1.5 rounded-lg font-cinzel text-xs font-bold transition-all ${!isHeal ? 'bg-blood-dark text-blood-bright hover:bg-blood border border-blood/50' : 'bg-green-900/50 text-green-400 hover:bg-green-900/80 border border-green-800/50'}`}>
-              {isHeal ? 'Лечить' : 'Нанести'} ×{selected.size}
-            </button>
-          </div>
+            {/* Damage type */}
+            {!isHeal && (
+              <div className="flex items-center gap-2">
+                <select value={damageType}
+                  onChange={(e) => setDamageType(e.target.value as DamageType)}
+                  className="bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1.5 text-bone text-[10px] focus:border-gold-dark focus:outline-none shrink-0 w-28">
+                  {ALL_DAMAGE_TYPES.map(dt => (
+                    <option key={dt} value={dt}>{ELEMENT_NAMES_MAP[dt] ?? dt}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-          {lastResult && (
-            <div className="text-[10px] text-gold/70 font-mono text-center animate-pulse">{lastResult}</div>
-          )}
-        </div>
-      )}
+            {/* Formula input + action */}
+            <div className="flex items-center gap-2">
+              <input type="text" value={formula}
+                onChange={(e) => setFormula(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyFormula(); }}
+                placeholder="Формула: 10, 2d6+3, 1d20..."
+                className="flex-1 bg-[#1a1a2a] border border-[#2a2a3a] rounded-lg px-3 py-1.5 text-xs font-mono text-bone placeholder:text-faded/50 focus:border-gold-dark focus:outline-none" />
+              <button onClick={applyFormula}
+                className={`px-4 py-1.5 rounded-lg font-cinzel text-xs font-bold transition-all ${!isHeal ? 'bg-blood-dark text-blood-bright hover:bg-blood border border-blood/50' : 'bg-green-900/50 text-green-400 hover:bg-green-900/80 border border-green-800/50'}`}>
+                {isHeal ? 'Лечить' : 'Нанести'} ×{selected.size}
+              </button>
+            </div>
+
+            {lastResult && (
+              <div className="text-[10px] text-gold/70 font-mono text-center animate-pulse">{lastResult}</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
