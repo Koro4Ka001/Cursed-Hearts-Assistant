@@ -154,125 +154,12 @@ export function rollDice(
 }
 
 /**
- * Бросок с удвоением кубиков при крите
- * При крите удваивается количество КУБИКОВ, не бонусы
- */
-export function rollWithCrit(
-  formula: string,
-  isCrit: boolean,
-  label?: string,
-  modifier: RollModifier = 'normal'
-): DiceRollResult {
-  if (!isCrit) {
-    return rollDice(formula, label, modifier);
-  }
-  
-  // Удваиваем количество кубиков в формуле
-  const { dice, flatBonus } = parseFormula(formula);
-  
-  const doubledDice = dice.map(d => ({ ...d, count: d.count * 2 }));
-  
-  // Собираем новую формулу
-  let newFormula = doubledDice
-    .map(d => `${d.count}d${d.sides}`)
-    .join('+');
-  
-  if (flatBonus !== 0) {
-    newFormula += flatBonus > 0 ? `+${flatBonus}` : `${flatBonus}`;
-  }
-  
-  const result = rollDice(newFormula, label, 'normal'); // урон без модификатора
-  // Отмечаем что это был крит
-  return { ...result, isCrit: true };
-}
-
-/**
- * Простой бросок d20
- */
-export function rollD20(modifier: RollModifier = 'normal'): number {
-  const { value } = rollD20WithModifier(modifier);
-  return value;
-}
-
-/**
- * Бросок d20 с модификатором (бонусом к броску)
- */
-export function rollD20WithMod(
-  bonus: number,
-  label?: string,
-  modifier: RollModifier = 'normal'
-): DiceRollResult {
-  const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
-  return rollDice(formula, label, modifier);
-}
-
-/**
- * Форматирование результата броска для отображения
- */
-export function formatRollResult(result: DiceRollResult): string {
-  let text = '';
-  
-  // Показываем модификатор если был
-  if (result.rollModifier === 'advantage') {
-    text += '🎯 Преим. ';
-  } else if (result.rollModifier === 'disadvantage') {
-    text += '💨 Помеха ';
-  }
-  
-  if (result.isCrit) {
-    text += '✨ КРИТ! ';
-  } else if (result.isCritFail) {
-    text += '💀 ПРОВАЛ! ';
-  }
-  
-  // Показываем все d20 если было преимущество/помеха
-  if (result.allD20Rolls && result.allD20Rolls.length > 1) {
-    const chosen = result.rawD20;
-    const displayRolls = result.allD20Rolls.map(r =>
-      r === chosen ? `[${r}]` : `~~${r}~~`
-    ).join(', ');
-    text += `{${displayRolls}} `;
-  }
-  
-  text += `[${result.rolls.join(', ')}]`;
-  
-  if (result.bonus !== 0) {
-    text += result.bonus > 0 ? ` + ${result.bonus}` : ` − ${Math.abs(result.bonus)}`;
-  }
-  
-  text += ` = ${result.total}`;
-  
-  return text;
-}
-
-/**
  * Проверка, является ли бросок попаданием (>= 11 или крит)
  */
 export function isHit(result: DiceRollResult, threshold: number = 11): boolean {
   if (result.isCrit) return true;
   if (result.isCritFail) return false;
   return result.total >= threshold;
-}
-
-/**
- * Вычисляет бонус к броску магии на основе элементов заклинания
- * Берётся МАКСИМАЛЬНЫЙ бонус из всех элементов
- */
-export function getMaxMagicBonus(
-  elements: string[],
-  magicBonuses: Record<string, number>
-): number {
-  if (elements.length === 0) return 0;
-  
-  let maxBonus = 0;
-  for (const element of elements) {
-    const bonus = magicBonuses[element.toLowerCase()] ?? 0;
-    if (bonus > maxBonus) {
-      maxBonus = bonus;
-    }
-  }
-  
-  return maxBonus;
 }
 
 /**

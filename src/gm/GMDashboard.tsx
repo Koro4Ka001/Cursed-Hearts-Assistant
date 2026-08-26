@@ -15,7 +15,7 @@ const ALL_DAMAGE_TYPES: DamageType[] = [
   'slashing', 'piercing', 'bludgeoning', 'chopping',
   'огонь', 'вода', 'земля', 'воздух', 'свет', 'тьма',
   'пространство', 'астрал', 'скверна', 'электричество', 'пустота', 'жизнь',
-  'смерть', 'pure',
+  'смерть', 'ужас', 'запредельность', 'pure',
 ];
 
 export function GMDashboard() {

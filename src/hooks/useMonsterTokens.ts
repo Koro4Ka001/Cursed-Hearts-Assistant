@@ -12,9 +12,13 @@ export function useMonsterTokens() {
 
   // Sync deleted tokens from OBR map to monster store
   useEffect(() => {
-    let unsub: (() => void) | null = null;
+    let unsubItems: (() => void) | null = null;
+    let mounted = true;
+    // OBR.onReady не возвращает функцию отписки, поэтому используем флаг:
+    // если колбэк сработает после размонтирования — подписка не создаётся
     OBR.onReady(() => {
-      unsub = OBR.scene.items.onChange(async (items) => {
+      if (!mounted) return;
+      unsubItems = OBR.scene.items.onChange(async (items) => {
         const trackedIds = Object.keys(useMonsterStore.getState().monsters);
         if (trackedIds.length === 0) return;
         const itemIds = new Set(items.map(i => i.id));
@@ -26,7 +30,10 @@ export function useMonsterTokens() {
         }
       });
     });
-    return () => { unsub?.(); };
+    return () => {
+      mounted = false;
+      unsubItems?.();
+    };
   }, []);
 
   const registerTokens = useCallback(async (tokenIds: string[], name: string, maxHp: number, group: string) => {

@@ -620,6 +620,7 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
   
   let currentIndex = 0;
   let iterations = 0;
+  let d20ModifierUsed = false;
   const MAX_ITERATIONS = 100;
   
   while (currentIndex < sortedActions.length && !context.stopped && iterations < MAX_ITERATIONS) {
@@ -637,7 +638,11 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
     const executor = stepExecutors[action.type];
     let nextStepId: string | null = null;
     if (executor) {
-      const useModifier = iterations === 1 ? rollModifier : 'normal';
+      // Преимущество/помеха применяем к первому d20-броску цепочки,
+      // а не просто к первому шагу (который может быть не броском d20)
+      const isD20Roll = action.type === 'roll_attack' || action.type === 'roll_cast' || action.type === 'roll_check';
+      const useModifier = !d20ModifierUsed && isD20Roll ? rollModifier : 'normal';
+      if (isD20Roll) d20ModifierUsed = true;
       nextStepId = executor(action, context, spell, caster, useModifier);
     } else {
       context.log.push(`⚠️ Неизвестный тип шага: ${action.type}`);

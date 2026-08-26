@@ -36,9 +36,13 @@ export function validateFormula(formula: string): FormulaValidationResult {
     return { isValid: false, error: 'Формула не может быть пустой' };
   }
   
-  // Проверяем на недопустимые символы
-  if (!/^[0-9d+\-*\/()a-zA-Zа-яА-Я_]+$/i.test(cleaned)) {
-    return { isValid: false, error: 'Формула содержит недопустимые символы' };
+  // Проверяем на недопустимые символы.
+  // Валидатор согласован с парсерами (utils/dice, services/diceService,
+  // services/spellExecutor): поддерживаются только цифры, 'd', '+' и '-'.
+  // Операторы *, /, ( ) и буквальные переменные ни одним исполнителем не
+  // вычисляются — считаем такие формулы невалидными.
+  if (!/^[0-9d+-]+$/i.test(cleaned)) {
+    return { isValid: false, error: 'Формула содержит недопустимые символы (разрешены только NdM, + и -)' };
   }
   
   // Разбиваем на термы по + и -
@@ -75,14 +79,7 @@ export function validateFormula(formula: string): FormulaValidationResult {
       continue;
     }
     
-    // Это переменная?
-    const varMatch = term.match(/^(-)?([A-ZА-Яa-zа-я_][A-ZА-Яa-zа-я0-9_]*)$/);
-    if (varMatch) {
-      variables.push(varMatch[2]);
-      continue;
-    }
-    
-    // Неизвестный терм
+    // Неизвестный терм (переменные не поддерживаются исполнителями формул)
     return { isValid: false, error: `Неизвестный элемент формулы: "${term}"` };
   }
   

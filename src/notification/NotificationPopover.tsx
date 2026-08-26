@@ -229,7 +229,7 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
   // HP bar state class
   const getHpBarClass = () => {
     if (!notification.hpBar) return '';
-    const percent = notification.hpBar.current / notification.hpBar.max;
+    const percent = notification.hpBar.current / (notification.hpBar.max || 1);
     if (percent <= 0.1) return 'critical';
     if (percent <= 0.25) return 'low';
     return '';
@@ -304,7 +304,7 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
             <div 
               className={`hpbar-fill ${getHpBarClass()}`}
               style={{ 
-                width: `${Math.max(0, Math.min(100, (notification.hpBar.current / notification.hpBar.max) * 100))}%` 
+                width: `${Math.max(0, Math.min(100, (notification.hpBar.current / (notification.hpBar.max || 1)) * 100))}%` 
               }}
             />
           </div>

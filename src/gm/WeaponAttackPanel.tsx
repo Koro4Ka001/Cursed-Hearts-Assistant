@@ -28,10 +28,8 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
   } | null>(null);
   const [attackCount, setAttackCount] = useState(0);
 
-  // Read target directly from store (no subscription)
-  const target = targetId ? useMonsterStore.getState().monsters[targetId] : undefined;
-  // Force re-render when monsters change (for target HP display)
-  const _monstersVersion = useMonsterStore(s => Object.keys(s.monsters).length);
+  // Подписка на список монстров: HP/имя цели обновляют панель реактивно
+  const monstersList = useMonsterStore(s => Object.values(s.monsters));
 
   const executeAttack = useCallback(() => {
     const currentTarget = useMonsterStore.getState().monsters[targetId];
@@ -83,7 +81,7 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       // Broadcast
       const msg: BroadcastMessage = {
         id: `gm-atk-${Date.now()}`,
-        type: isCrit ? 'hit' : 'hit',
+        type: 'hit',
         unitName: attacker.name,
         title: `${weapon.name} → ${currentTarget.name}`,
         subtitle: isCrit ? 'КРИТ!' : undefined,
@@ -137,11 +135,11 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
             <select value={targetId} onChange={(e) => setTargetId(e.target.value)}
               className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1.5 text-bone text-xs focus:border-gold-dark focus:outline-none mt-0.5">
               <option value="">Выбери цель...</option>
-              {useMonsterStore.getState() ? Object.values(useMonsterStore.getState().monsters)
+              {monstersList
                 .filter(m => m.tokenId !== attacker.tokenId && m.hp > 0)
                 .map(m => (
                   <option key={m.tokenId} value={m.tokenId}>{m.name} ({m.hp}/{m.maxHp})</option>
-                )) : null}
+                ))}
             </select>
           </div>
 

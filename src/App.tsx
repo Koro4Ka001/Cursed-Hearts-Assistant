@@ -368,6 +368,7 @@ export function App() {
   const clearNotification = useGameStore(s => s.clearNotification);
   const setConnection = useGameStore(s => s.setConnection);
   const startAutoSync = useGameStore(s => s.startAutoSync);
+  const stopAutoSync = useGameStore(s => s.stopAutoSync);
 
   const changeMode = (mode: ViewMode) => {
     setViewMode(mode);
@@ -412,7 +413,7 @@ export function App() {
               await useGameStore.getState().pullAllFromDocs();
               
               const freshState = useGameStore.getState();
-              if (freshState.settings.showTokenBars) {
+              if (freshState.settings.showTokenBars ?? true) {
                 await tokenBarService.syncAllBars(freshState.units);
               }
             }
@@ -429,6 +430,9 @@ export function App() {
     };
 
     init();
+
+    // Останавливаем интервал авто-синхронизации при размонтировании
+    return () => { stopAutoSync(); };
   }, []);
 
   if (isLoading || isGM === null) {

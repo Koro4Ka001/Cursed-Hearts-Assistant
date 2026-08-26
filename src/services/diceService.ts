@@ -131,17 +131,17 @@ function localRoll(
   let allD20Rolls: number[] | undefined;
   let hasD20 = false;
   
-  for (const { count, sides } of groups) {
+  for (const { count, sides, sign } of groups) {
     for (let i = 0; i < count; i++) {
       if (sides === 20 && !hasD20 && modifier !== 'normal') {
         const { value, allRolls } = rollD20WithModifier(modifier);
-        rolls.push(value);
+        rolls.push(value * sign);
         rawD20 = value;
         allD20Rolls = allRolls;
         hasD20 = true;
       } else {
         const r = Math.floor(Math.random() * sides) + 1;
-        rolls.push(r);
+        rolls.push(r * sign);
         if (sides === 20 && !hasD20) {
           rawD20 = r;
           hasD20 = true;
@@ -270,15 +270,6 @@ class DiceService {
       });
     }
     return r;
-  }
-
-  async rollWithCrit(
-    formula: string,
-    isCrit: boolean,
-    label?: string,
-    unitName?: string
-  ): Promise<DiceRollResult> {
-    return this.rollDamage(formula, label, unitName, isCrit);
   }
 
   async announceHit(
@@ -488,28 +479,6 @@ class DiceService {
     });
   }
 
-  async announceRokCard(
-    unitName: string,
-    cardIdx: number,
-    isHit: boolean,
-    effectName: string,
-    hitRoll: number,
-    effectRoll: number
-  ): Promise<void> {
-    await this.broadcastRokCard(
-      unitName,
-      cardIdx,
-      isHit,
-      hitRoll === 20,
-      hitRoll === 1,
-      '🃏',
-      effectName,
-      hitRoll,
-      effectRoll,
-      []
-    );
-  }
-  
   async broadcastSpell(
     spellName: string,
     unitName: string,

@@ -202,6 +202,7 @@ interface GameState {
   setNextRollModifier: (mod: RollModifier) => void;
   setConnection: (type: keyof Omit<Connections, 'lastSyncTime'>, connected: boolean) => void;
   startAutoSync: () => void;
+  stopAutoSync: () => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -209,7 +210,7 @@ interface GameState {
 // ═══════════════════════════════════════════════════════════════
 
 async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
-  if (!settings.showTokenBars || !unit.owlbearTokenId) return;
+  if (!(settings.showTokenBars ?? true) || !unit.owlbearTokenId) return;
   
   try {
     await tokenBarService.updateBars(
@@ -1036,7 +1037,10 @@ export const useGameStore = create<GameState>()(
       
       startAutoSync: () => {
         const { settings } = get();
-        if (!settings.googleDocsUrl) return;
+        if (!settings.googleDocsUrl) {
+          get().stopAutoSync();
+          return;
+        }
         
         ensureDocsUrl(settings);
         
@@ -1055,6 +1059,14 @@ export const useGameStore = create<GameState>()(
         };
         
         autoSyncIntervalId = setInterval(doSync, intervalMinutes * 60 * 1000);
+      },
+      
+      stopAutoSync: () => {
+        if (autoSyncIntervalId !== null) {
+          clearInterval(autoSyncIntervalId);
+          autoSyncIntervalId = null;
+          console.log('[Store] 📄 Auto-sync stopped');
+        }
       }
     }),
     {
