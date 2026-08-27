@@ -34,6 +34,20 @@ function addToLocalQueue(msg: BroadcastMessage) {
 }
 
 // Открытие popover
+// 🔧 disableClickAway: false — клик вне плашки закрывает её, и игрок сразу может
+// бросать кубики/кликать по карте (раньше плашка перехватывала все клики, пока
+// не приходило новое сообщение). Дополнительно — автозакрытие через 10 секунд.
+const POPOVER_AUTO_CLOSE_MS = 10_000;
+let popoverAutoCloseTimer: number | null = null;
+
+function schedulePopoverAutoClose() {
+  if (popoverAutoCloseTimer !== null) window.clearTimeout(popoverAutoCloseTimer);
+  popoverAutoCloseTimer = window.setTimeout(() => {
+    popoverAutoCloseTimer = null;
+    OBR.popover.close(NOTIFICATION_POPOVER_ID).catch(() => {});
+  }, POPOVER_AUTO_CLOSE_MS);
+}
+
 async function openNotificationPopover() {
   try {
     await OBR.popover.open({
@@ -43,13 +57,14 @@ async function openNotificationPopover() {
       height: 500,
       anchorOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
       transformOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
-      disableClickAway: true,
+      disableClickAway: false,
       hidePaper: true,
       marginThreshold: 0
     });
   } catch {
     // Ошибка означает что popover уже открыт — это нормально
   }
+  schedulePopoverAutoClose();
 }
 
 // Регистрируем слушатели уведомлений при готовности OBR

@@ -51,7 +51,8 @@ export function useMonsterTokens() {
   const updateHp = useCallback(async (tokenId: string, hp: number) => {
     const m = useMonsterStore.getState().get(tokenId);
     if (!m) return;
-    const safe = Math.max(0, Math.min(hp, m.maxHp));
+    // 🔧 Нижний кламп убран: HP монстра может уходить в минус.
+    const safe = Math.min(hp, m.maxHp);
     useMonsterStore.getState().setHp(tokenId, safe);
     await tokenBarService.updateBars(tokenId, safe, m.maxHp, 0, 0, false);
   }, []);

@@ -95,7 +95,8 @@ export function GMDashboard() {
 
       const newHp = isHeal
         ? Math.min(m.maxHp, m.hp + effectiveAmount)
-        : Math.max(0, m.hp - effectiveAmount);
+        // 🔧 Нижний кламп убран: HP монстра может уходить в минус.
+        : m.hp - effectiveAmount;
 
       await updateMonster(id, { hp: newHp });
 

@@ -180,7 +180,7 @@ function calculateBonus(unit: Unit, bonuses: SpellAction['bonuses'], spellElemen
   return total;
 }
 
-function interpolateMessage(template: string, context: CastContext): string {
+export function interpolateMessage(template: string, context: CastContext): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => {
     const value = context.values[key];
     if (value === undefined) return `{${key}}`;

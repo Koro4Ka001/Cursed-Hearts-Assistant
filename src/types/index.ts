@@ -391,6 +391,13 @@ export interface CustomActionV2 {
   description?: string;
   costs: ActionCost[];
   defaultRollModifier: RollModifier;
+  /**
+   * 🔧 Кастомный шаблон broadcast-сообщения. Опционально: если не задан —
+   * отправляется стандартный «Успех/Провал». Переменные: {lastRoll},
+   * {totalDamage}, {success}, {crit}, {fail}, {manaCost}, {hpCost},
+   * {rageCost}, {resourceCost} + любые ключи из saveResultAs/set_value.
+   */
+  broadcastTemplate?: string;
   actions: SpellAction[];
 }
 

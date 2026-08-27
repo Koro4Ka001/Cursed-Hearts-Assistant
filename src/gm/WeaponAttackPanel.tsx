@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { useMonsterStore } from '../stores/monsterStore';
+import { useShallow } from 'zustand/shallow';
 import { rollDice } from '../utils/dice';
 import { calculateMonsterDamage } from '../utils/monsterDamage';
 import OBR from '@owlbear-rodeo/sdk';
@@ -28,8 +29,11 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
   } | null>(null);
   const [attackCount, setAttackCount] = useState(0);
 
-  // Подписка на список монстров: HP/имя цели обновляют панель реактивно
-  const monstersList = useMonsterStore(s => Object.values(s.monsters));
+  // Подписка на список монстров: HP/имя цели обновляют панель реактивно.
+  // 🔧 useShallow обязателен: Object.values() возвращает НОВЫЙ массив на каждый
+  // вызов селектора, и без shallow-сравнения zustand v5 зацикливает перерисовку
+  // (снимок никогда не равен предыдущему → бесконечный ре-рендер компонента).
+  const monstersList = useMonsterStore(useShallow((s) => Object.values(s.monsters)));
 
   const executeAttack = useCallback(() => {
     const currentTarget = useMonsterStore.getState().monsters[targetId];
@@ -74,7 +78,8 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       if (dmgResult.multiplier !== 1) log.push(`🔮 Множитель: ×${dmgResult.multiplier}`);
 
       // Apply damage
-      const newHp = Math.max(0, currentTarget.hp - damageTotal);
+      // 🔧 Нижний кламп убран: HP монстра может уходить в минус.
+      const newHp = currentTarget.hp - damageTotal;
       useMonsterStore.getState().setHp(currentTarget.tokenId, newHp);
       log.push(`❤ ${currentTarget.name}: ${currentTarget.hp} → ${newHp} HP`);
 

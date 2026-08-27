@@ -216,7 +216,13 @@ export function RegistrationModal({ tokens, existingGroups, onConfirm, onClose }
             className="flex-1 py-2 text-xs text-faded border border-[#2a2a3a] rounded-lg hover:bg-[#1a1a2a] font-cinzel transition-colors">
             Отмена
           </button>
-          <button onClick={() => onConfirm(entries)}
+          <button onClick={() => {
+            // 🔧 Если «Группа для всех» введена, но кнопка «Применить» не нажималась,
+            // подставляем её как значение по умолчанию для записей с пустой группой.
+            // Индивидуально указанные группы имеют приоритет.
+            const cg = commonGroup.trim();
+            onConfirm(entries.map(e => (e.group.trim() ? e : { ...e, group: cg })));
+          }}
             className="flex-1 py-2 text-xs text-gold bg-gold-dark/30 border border-gold-dark/50 rounded-lg hover:bg-gold-dark/50 font-cinzel transition-colors">
             Добавить ({entries.length})
           </button>

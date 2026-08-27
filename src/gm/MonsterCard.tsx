@@ -76,6 +76,34 @@ function NumericInput({ value, onChange, min = 0, className = '' }: {
   );
 }
 
+/**
+ * 🔧 Буферизованный текстовый инпут: пишет в стор только по blur/Enter, а не на
+ * каждый символ. Нужен для поля «Группа»: живая запись в стор заставляла
+ * GMDashboard перегруппировывать карточки во время набора, инпут переезжал между
+ * DOM-контейнерами секций и терял фокус после каждого символа.
+ */
+function BufferedInput({ value, onCommit, placeholder, className = '' }: {
+  value: string;
+  onCommit: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [text, setText] = useState(value);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setText(value); }, [value]);
+
+  return (
+    <input ref={ref} type="text" value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onCommit(text.trim())}
+      onKeyDown={(e) => { if (e.key === 'Enter') ref.current?.blur(); }}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
+
 const STAT_LABELS: Record<string, string> = {
   physicalPower: 'Физ. сила',
   dexterity: 'Ловкость',
@@ -204,8 +232,9 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
             </div>
             <div>
               <label className="text-[9px] text-faded uppercase tracking-wider">Группа</label>
-              <input type="text" value={group}
-                onChange={(e) => onUpdate(tokenId, { group: e.target.value })}
+              <BufferedInput
+                value={group}
+                onCommit={(v) => onUpdate(tokenId, { group: v })}
                 placeholder="—"
                 className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1 text-bone text-[10px] focus:border-gold-dark focus:outline-none mt-0.5" />
             </div>

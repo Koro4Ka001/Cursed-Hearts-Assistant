@@ -105,7 +105,8 @@ export const useMonsterStore = create<MonsterStore>()(
       setHp: (tokenId, hp) => set((s) => {
         const m = s.monsters[tokenId];
         if (!m) return s;
-        return { monsters: { ...s.monsters, [tokenId]: { ...m, hp: Math.max(0, Math.min(hp, m.maxHp)) } } };
+        // 🔧 Нижний кламп убран: HP монстра может уходить в минус.
+        return { monsters: { ...s.monsters, [tokenId]: { ...m, hp: Math.min(hp, m.maxHp) } } };
       }),
 
       setMaxHp: (tokenId, maxHp) => set((s) => {
@@ -124,7 +125,8 @@ export const useMonsterStore = create<MonsterStore>()(
           updated.hp = Math.min(m.hp, updated.maxHp);
         }
         if (fields.hp !== undefined) {
-          updated.hp = Math.max(0, Math.min(fields.hp, updated.maxHp));
+          // 🔧 Нижний кламп убран: HP монстра может уходить в минус.
+          updated.hp = Math.min(fields.hp, updated.maxHp);
         }
         return { monsters: { ...s.monsters, [tokenId]: updated } };
       }),

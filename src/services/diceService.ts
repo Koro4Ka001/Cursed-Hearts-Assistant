@@ -514,17 +514,21 @@ class DiceService {
     actionName: string,
     unitName: string,
     success: boolean,
-    isCrit?: boolean
+    isCrit?: boolean,
+    subtitle?: string,
+    details?: string[]
   ): Promise<void> {
     await broadcast({
       id: msgId(),
       type: 'custom',
       unitName,
       title: actionName,
-      subtitle: isCrit ? '✨ Критический успех!' : success ? 'Успех' : 'Провал',
+      // 🔧 Если передан кастомный шаблон — используем его, иначе старый текст
+      subtitle: subtitle?.trim() ? subtitle : isCrit ? '✨ Критический успех!' : success ? 'Успех' : 'Провал',
       icon: success ? '⚡' : '💨',
       isCrit,
       color: isCrit ? 'gold' : success ? 'green' : 'white',
+      details,
       timestamp: Date.now()
     });
   }

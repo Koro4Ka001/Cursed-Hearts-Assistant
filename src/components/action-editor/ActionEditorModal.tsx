@@ -337,6 +337,21 @@ export function ActionEditorModal({
               />
               
               <div>
+                <Input
+                  label="Шаблон broadcast (необязательно)"
+                  value={localAction.broadcastTemplate ?? ''}
+                  onChange={(e) => update({ broadcastTemplate: e.target.value || undefined })}
+                  placeholder="Проверка на ловкость: {lastRoll}"
+                />
+                <div className="text-[10px] text-faded mt-1 leading-relaxed">
+                  Пусто → стандартное «Успех/Провал». Переменные:{' '}
+                  {'{lastRoll}'} {'{totalDamage}'} {'{success}'} {'{crit}'} {'{fail}'}{' '}
+                  {'{manaCost}'} {'{hpCost}'} {'{rageCost}'} {'{resourceCost}'}{' '}
+                  + ключи из «Сохранить результат».
+                </div>
+              </div>
+              
+              <div>
                 <label className="font-cinzel text-[10px] text-faded uppercase tracking-widest">
                   Описание
                 </label>

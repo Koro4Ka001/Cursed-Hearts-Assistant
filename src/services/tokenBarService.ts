@@ -259,7 +259,7 @@ class TokenBarService {
       });
 
       if (showHp && dead && this.mode === "quality") {
-        this.addDeathX(tokenId, lay);
+        await this.addDeathX(tokenId, lay);
       }
     } catch (e) {
       console.error("[Bars] createBars failed:", e);
@@ -452,9 +452,14 @@ class TokenBarService {
           .build();
       const c1 = mk("crack1", 45);
       const c2 = mk("crack2", -45);
-      await OBR.scene.items.addItems([c1, c2]);
+      // 🔧 Регистрируем id трещин в состоянии ДО вставки на сцену: если во время
+      // await ниже параллельный updateBars/createBars вызовет removeBars, id уже
+      // будут известны, и трещины не останутся «сиротами» на ожившем токене
+      // (раньше id записывались только после addItems — при гонке они терялись,
+      // и бар навсегда оставался «разбитым»).
       st.ids.crack1 = c1.id;
       st.ids.crack2 = c2.id;
+      await OBR.scene.items.addItems([c1, c2]);
     } catch (e) {
       console.error("[Bars] Death FX error:", e);
     }

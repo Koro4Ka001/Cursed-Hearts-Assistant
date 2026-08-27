@@ -7,7 +7,7 @@ import {
   EmptyState, DiceResultDisplay 
 } from '../ui';
 import { ActionEditorModal } from '../action-editor';
-import { spellExecutor } from '../../services/spellExecutor';
+import { spellExecutor, interpolateMessage } from '../../services/spellExecutor';
 import { diceService } from '../../services/diceService';
 import { evaluateElementEffects, formatElementEffectLog } from '../../utils/elementEffects';
 import type { 
@@ -268,12 +268,38 @@ export function ActionsTab() {
         triggerEffect('crit-gold');
       }
       
-      // Broadcast
+      // Broadcast — 🔧 кастомный шаблон сообщения + детали стоимости
+      const sumCost = (type: string) =>
+        costResults.filter(c => c.cost.type === type).reduce((s, c) => s + c.value, 0);
+      
+      let broadcastSubtitle: string | undefined;
+      if (action.broadcastTemplate?.trim()) {
+        broadcastSubtitle = interpolateMessage(
+          action.broadcastTemplate,
+          {
+            ...result.context,
+            values: {
+              ...result.context.values,
+              success: result.success,
+              crit: result.context.isCrit,
+              fail: result.context.isCritFail,
+              totalDamage: result.totalDamage,
+              manaCost: sumCost('mana'),
+              hpCost: sumCost('health'),
+              rageCost: sumCost('rage'),
+              resourceCost: sumCost('resource'),
+            },
+          }
+        ).trim() || undefined;
+      }
+      
       await diceService.broadcastAction(
         action.name,
         unit.shortName ?? unit.name,
         result.success,
-        result.context.isCrit
+        result.context.isCrit,
+        broadcastSubtitle,
+        costLog.length > 0 ? costLog : undefined
       );
       
     } catch (err) {

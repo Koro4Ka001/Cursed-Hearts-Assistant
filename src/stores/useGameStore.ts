@@ -353,7 +353,9 @@ export const useGameStore = create<GameState>()(
         if (!unit) return;
         
         const previousValue = unit.health.current;
-        const newHP = Math.max(0, Math.min(value, unit.health.max));
+        // 🔧 Нижний кламп убран: HP может уходить в минус (требование геймдизайна).
+        // Верхний кламп остаётся — лечение не поднимает HP выше максимума.
+        const newHP = Math.min(value, unit.health.max);
         
         const undoEntry: UndoEntry = {
           id: generateId(),
