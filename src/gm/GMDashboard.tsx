@@ -31,7 +31,7 @@ export function GMDashboard() {
   const [formula, setFormula] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [damageType, setDamageType] = useState<DamageType>('slashing');
-  const [attackContext, setAttackContext] = useState<{ monster: Monster; weapon: MonsterWeapon } | null>(null);
+  const [attackContext, setAttackContext] = useState<{ monster: Monster; weapon: MonsterWeapon | null } | null>(null);
 
   const searchLower = searchQuery.trim().toLowerCase();
   const searchActive = searchLower.length > 0;
@@ -180,7 +180,7 @@ export function GMDashboard() {
     setPendingTokens([]);
   };
 
-  const handleAttack = (monster: Monster, weapon: MonsterWeapon) => {
+  const handleAttack = (monster: Monster, weapon: MonsterWeapon | null) => {
     setAttackContext({ monster, weapon });
   };
 

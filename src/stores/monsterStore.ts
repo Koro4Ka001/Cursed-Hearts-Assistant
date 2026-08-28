@@ -8,6 +8,11 @@ export interface MonsterWeapon {
   damageFormula: string;
   damageType: DamageType;
   hitBonus: number;
+  /**
+   * 🔧 Тип оружия: melee (бонус урона +5×физ.сила) или ranged (+3×ловкость).
+   * Ловкость НЕ даёт бонуса к попаданию. Опционально для старых данных (дефолт melee).
+   */
+  weaponType?: 'melee' | 'ranged';
 }
 
 export interface Monster {

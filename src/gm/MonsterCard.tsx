@@ -3,6 +3,7 @@ import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { useMonsterStore } from '../stores/monsterStore';
 import { getGroupColor } from './RegistrationModal';
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
+import { SPELL_TEMPLATES } from '../constants/spellActions';
 import type { DamageType } from '../types';
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
   onToggle: (id: string) => void;
   onUpdate: (id: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor' | 'notes'>>) => void;
   onRemove: (id: string) => void;
-  onAttack?: (monster: Monster, weapon: MonsterWeapon) => void;
+  onAttack?: (monster: Monster, weapon: MonsterWeapon | null) => void;
   onDuplicate?: (tokenId: string) => void;
 }
 
@@ -174,7 +175,7 @@ const ALL_DAMAGE_TYPES: DamageType[] = [
 
 export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, onAttack, onDuplicate }: Props) {
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'notes' | 'armor' | 'stats' | 'weapons'>('armor');
+  const [settingsTab, setSettingsTab] = useState<'notes' | 'armor' | 'stats' | 'weapons' | 'spells'>('armor');
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { tokenId, name, hp, maxHp, group, armor, stats, weapons } = monster;
@@ -195,7 +196,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [menuOpen]);
 
-  const openSettings = (tab: 'notes' | 'armor' | 'stats' | 'weapons') => {
+  const openSettings = (tab: 'notes' | 'armor' | 'stats' | 'weapons' | 'spells') => {
     setSettingsTab(tab);
     setShowSettings(true);
     setMenuOpen(false);
@@ -205,7 +206,14 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
     const id = `w-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     useMonsterStore.getState().addWeapon(tokenId, {
       id, name: 'Оружие', damageFormula: '1d6', damageType: 'slashing', hitBonus: 0,
+      weaponType: 'melee' as const,
     });
+  };
+
+  const handleAddSpell = () => {
+    const blank = SPELL_TEMPLATES.find(t => t.id === 'empty')?.create();
+    if (!blank) return;
+    useMonsterStore.getState().addSpell(tokenId, { ...blank, name: 'Заклинание' });
   };
 
   return (
@@ -249,14 +257,14 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
 
         {/* Actions: Атака (всегда видима) + ⋮ Ещё */}
         <div className="flex items-center gap-0.5 shrink-0 relative" ref={menuRef}>
-          <button onClick={() => { if (weapons.length > 0) onAttack?.(monster, weapons[0]); }}
-            disabled={weapons.length === 0}
+          <button onClick={() => { if (weapons.length > 0 || monster.spells.length > 0) onAttack?.(monster, weapons[0] ?? null); }}
+            disabled={weapons.length === 0 && monster.spells.length === 0}
             className={`w-6 h-6 flex items-center justify-center text-[11px] rounded transition-colors ${
-              weapons.length === 0
+              weapons.length === 0 && monster.spells.length === 0
                 ? 'text-faded/30 cursor-not-allowed'
                 : 'text-blood-bright/80 hover:text-blood-bright hover:bg-blood-dark/30'
             }`}
-            title={weapons.length > 0 ? `Атака: ${weapons[0].name}` : 'Нет оружия'}>
+            title={weapons.length > 0 ? `Атака: ${weapons[0].name}` : monster.spells.length > 0 ? 'Каст / прокидки' : 'Нет оружия'}>
             ⚔
           </button>
           <button onClick={() => setMenuOpen(v => !v)}
@@ -317,14 +325,14 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
 
           {/* Tab buttons */}
           <div className="flex gap-1">
-            {(['notes', 'armor', 'stats', 'weapons'] as const).map(tab => (
+            {(['notes', 'armor', 'stats', 'weapons', 'spells'] as const).map(tab => (
               <button key={tab} onClick={() => setSettingsTab(tab)}
                 className={`px-2 py-0.5 text-[9px] rounded font-cinzel transition-all ${
                   settingsTab === tab
                     ? 'bg-gold-dark/20 text-gold border border-gold-dark/30'
                     : 'text-faded hover:text-bone border border-transparent'
                 }`}>
-                {tab === 'notes' ? '📝 Заметки' : tab === 'armor' ? '🛡 Броня' : tab === 'stats' ? '📊 Хар-ки' : '⚔ Оружие'}
+                {tab === 'notes' ? '📝 Заметки' : tab === 'armor' ? '🛡 Броня' : tab === 'stats' ? '📊 Хар-ки' : tab === 'weapons' ? '⚔ Оружие' : '✨ Заклинания'}
               </button>
             ))}
           </div>
@@ -393,6 +401,15 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
                       className="bg-[#1a1a2a] border border-[#2a2a3a] rounded px-1 py-0.5 text-bone text-[9px] focus:border-gold-dark focus:outline-none">
                       {ALL_DAMAGE_TYPES.map(dt => <option key={dt} value={dt}>{ELEMENT_NAMES_MAP[dt] ?? dt}</option>)}
                     </select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <select value={w.weaponType ?? 'melee'}
+                      onChange={(e) => useMonsterStore.getState().updateWeapon(tokenId, w.id, { weaponType: e.target.value as 'melee' | 'ranged' })}
+                      className="flex-1 bg-[#1a1a2a] border border-[#2a2a3a] rounded px-1 py-0.5 text-bone text-[9px] focus:border-gold-dark focus:outline-none"
+                      title="Ближнее: урон +5×физ.сила · Дальнее: урон +3×ловкость (ловкость НЕ даёт бонуса к попаданию)">
+                      <option value="melee">🗡 Ближнее (+5×ФС)</option>
+                      <option value="ranged">🏹 Дальнее (+3×ЛОВ)</option>
+                    </select>
                     <NumericInput value={w.hitBonus} min={-20}
                       onChange={(v) => useMonsterStore.getState().updateWeapon(tokenId, w.id, { hitBonus: v })}
                       className="w-10 text-center"
@@ -409,6 +426,35 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
               <button onClick={handleAddWeapon}
                 className="w-full py-1 text-[9px] text-gold/70 hover:text-gold border border-dashed border-[#2a2a3a] hover:border-gold-dark/30 rounded transition-colors font-cinzel">
                 + Добавить оружие
+              </button>
+            </div>
+          )}
+
+          {/* Spells tab */}
+          {settingsTab === 'spells' && (
+            <div className="space-y-1.5">
+              {monster.spells.length === 0 && (
+                <div className="text-[10px] text-faded text-center py-2">Нет заклинаний</div>
+              )}
+              {monster.spells.map(s => (
+                <div key={s.id} className="bg-[#0d0d14] rounded p-2 flex items-center gap-1 border border-[#1a1a2a]/30">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] text-bone font-cinzel truncate">{s.name}</div>
+                    <div className="text-[9px] text-faded">{s.actions?.length ?? 0} шагов · {s.elements?.length ? s.elements.join(', ') : 'без элементов'}</div>
+                  </div>
+                  {onAttack && (
+                    <button onClick={() => onAttack(monster, null)}
+                      className="px-2 py-0.5 text-[9px] bg-[#1a2a4a]/60 text-[#7aa2ff] border border-[#2244aa]/40 rounded hover:bg-[#1a2a4a] transition-colors font-cinzel shrink-0">
+                      ✨ Каст
+                    </button>
+                  )}
+                  <button onClick={() => useMonsterStore.getState().removeSpell(tokenId, s.id)}
+                    className="text-[9px] text-faded hover:text-blood-bright px-1 shrink-0">✕</button>
+                </div>
+              ))}
+              <button onClick={handleAddSpell}
+                className="w-full py-1 text-[9px] text-gold/70 hover:text-gold border border-dashed border-[#2a2a3a] hover:border-gold-dark/30 rounded transition-colors font-cinzel">
+                + Добавить заклинание
               </button>
             </div>
           )}

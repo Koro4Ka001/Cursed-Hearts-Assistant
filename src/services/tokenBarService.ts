@@ -435,31 +435,38 @@ class TokenBarService {
     const st = this.states.get(id);
     if (!st || st.ids.crack1) return;
     try {
-      const sz = Math.min(lay.barW, Math.max(40, lay.barW * 0.3));
       const cx = lay.barX + lay.barW / 2;
       const cy = lay.hpY + lay.barH / 2;
-      const ch = Math.max(6, lay.barH);
-      const mk = (role: "crack1" | "crack2", rot: number) =>
-        buildShape()
-          .shapeType("RECTANGLE")
-          .width(sz).height(ch)
-          .position({ x: cx - sz / 2, y: cy - ch / 2 })
-          .rotation(rot)
-          .fillColor("#000000").strokeColor("#ff0000").strokeWidth(2)
-          .attachedTo(id).layer("ATTACHMENT")
-          .locked(true).disableHit(true)
-          .metadata({ [META]: { type: "crack", role, tokenId: id } })
-          .build();
-      const c1 = mk("crack1", 45);
-      const c2 = mk("crack2", -45);
-      // 🔧 Регистрируем id трещин в состоянии ДО вставки на сцену: если во время
-      // await ниже параллельный updateBars/createBars вызовет removeBars, id уже
-      // будут известны, и трещины не останутся «сиротами» на ожившем токене
-      // (раньше id записывались только после addItems — при гонке они терялись,
-      // и бар навсегда оставался «разбитым»).
-      st.ids.crack1 = c1.id;
-      st.ids.crack2 = c2.id;
-      await OBR.scene.items.addItems([c1, c2]);
+      // 🔧 Аккуратный «разбитый» вид: тёмная подложка над зоной бара + тонкий ✕
+      // (вместо прежних двух грубых пересекающихся прямоугольников)
+      const overlay = buildShape()
+        .shapeType("RECTANGLE")
+        .width(lay.barW + 4)
+        .height(Math.max(lay.barH + 4, 12))
+        .position({ x: lay.barX - 2, y: lay.hpY - 2 })
+        .fillColor("#120808")
+        .strokeColor("#3a1414")
+        .strokeWidth(1)
+        .attachedTo(id).layer("ATTACHMENT")
+        .locked(true).disableHit(true)
+        .metadata({ [META]: { type: "crack", role: "crack1", tokenId: id } })
+        .build();
+      const fontSize = Math.max(12, lay.barH + 6);
+      const mark = buildText()
+        .position({ x: cx - fontSize * 0.4, y: cy - fontSize * 0.65 })
+        .plainText("✕")
+        .fontSize(fontSize)
+        .fontFamily("Arial")
+        .fillColor("#ff3333")
+        .textType("PLAIN")
+        .attachedTo(id).layer("ATTACHMENT")
+        .locked(true).disableHit(true)
+        .metadata({ [META]: { type: "crack", role: "crack2", tokenId: id } })
+        .build();
+      // id регистрируются ДО вставки (защита от гонки с removeBars)
+      st.ids.crack1 = overlay.id;
+      st.ids.crack2 = mark.id;
+      await OBR.scene.items.addItems([overlay, mark]);
     } catch (e) {
       console.error("[Bars] Death FX error:", e);
     }
