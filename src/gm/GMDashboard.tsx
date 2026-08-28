@@ -203,10 +203,10 @@ export function GMDashboard() {
     }
   };
 
-  const renderMonster = (m: Monster) => (
+  const renderMonster = (m: Monster, isLast: boolean = false) => (
     <MonsterCard key={m.tokenId} monster={m} selected={selected.has(m.tokenId)}
       onToggle={toggle} onUpdate={updateMonster} onRemove={unregister}
-      onAttack={handleAttack} onDuplicate={handleDuplicate} />
+      onAttack={handleAttack} onDuplicate={handleDuplicate} isLast={isLast} />
   );
 
   return (
@@ -311,7 +311,7 @@ export function GMDashboard() {
                 {/* Во время поиска показываем совпадения даже в свёрнутых группах */}
                 {(!collapsedGroups.has(group) || searchActive) && (
                   <div className="divide-y divide-[#1a1a2a]/40">
-                    {items.map(renderMonster)}
+                    {items.map((m, i) => renderMonster(m, i === items.length - 1))}
                   </div>
                 )}
               </div>
@@ -326,7 +326,7 @@ export function GMDashboard() {
                   <span className="text-[10px] text-faded font-sans ml-1">({grouped.ungrouped.length})</span>
                 </div>
                 <div className="divide-y divide-[#1a1a2a]/40">
-                  {grouped.ungrouped.map(renderMonster)}
+                  {grouped.ungrouped.map((m, i) => renderMonster(m, i === grouped.ungrouped.length - 1))}
                 </div>
               </div>
             )}

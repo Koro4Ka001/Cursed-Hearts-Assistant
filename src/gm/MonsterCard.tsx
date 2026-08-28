@@ -3,14 +3,16 @@ import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { useMonsterStore } from '../stores/monsterStore';
 import { getGroupColor } from './RegistrationModal';
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
-import { SPELL_TEMPLATES } from '../constants/spellActions';
-import type { DamageType } from '../types';
+import { SpellEditorModal } from '../components/spell-editor';
+import type { DamageType, SpellV2 } from '../types';
 
 interface Props {
   monster: Monster;
   selected: boolean;
   onToggle: (id: string) => void;
   onUpdate: (id: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor' | 'notes'>>) => void;
+  /** Последняя строка в своей секции — ⋮-меню открывается вверх, чтобы не обрезаться */
+  isLast?: boolean;
   onRemove: (id: string) => void;
   onAttack?: (monster: Monster, weapon: MonsterWeapon | null) => void;
   onDuplicate?: (tokenId: string) => void;
@@ -173,10 +175,12 @@ const ALL_DAMAGE_TYPES: DamageType[] = [
   'смерть', 'pure',
 ];
 
-export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, onAttack, onDuplicate }: Props) {
+export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, onAttack, onDuplicate, isLast }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'notes' | 'armor' | 'stats' | 'weapons' | 'spells'>('armor');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingSpell, setEditingSpell] = useState<SpellV2 | null>(null);
+  const [isCreatingSpell, setIsCreatingSpell] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { tokenId, name, hp, maxHp, group, armor, stats, weapons } = monster;
   const notes = monster.notes ?? '';
@@ -211,9 +215,24 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
   };
 
   const handleAddSpell = () => {
-    const blank = SPELL_TEMPLATES.find(t => t.id === 'empty')?.create();
-    if (!blank) return;
-    useMonsterStore.getState().addSpell(tokenId, { ...blank, name: 'Заклинание' });
+    // 🔧 Открываем полноценный редактор заклинаний (как у игроков)
+    setEditingSpell(null);
+    setIsCreatingSpell(true);
+  };
+
+  const handleEditSpell = (s: SpellV2) => {
+    setEditingSpell(s);
+    setIsCreatingSpell(false);
+  };
+
+  const handleSaveSpell = (sp: SpellV2) => {
+    if (editingSpell) {
+      useMonsterStore.getState().updateSpell(tokenId, sp);
+    } else {
+      useMonsterStore.getState().addSpell(tokenId, sp);
+    }
+    setEditingSpell(null);
+    setIsCreatingSpell(false);
   };
 
   return (
@@ -244,13 +263,26 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
 
           {/* HP: сердце + компактный бар (60px) + current/max (цифры — plain sans) */}
           <div className="flex items-center gap-1.5 mt-1">
-            <HeartIcon color={statusColor} dead={isDead} />
-            <div className="w-[60px] h-[5px] bg-[#0a0505] rounded-full overflow-hidden shrink-0 border border-[#2a2a3a]/60">
+            <svg width="12" height="12" viewBox="0 0 24 24" className="shrink-0" aria-hidden
+              style={{ filter: isDead ? 'none' : `drop-shadow(0 0 2px ${statusColor}88)` }}>
+              <path
+                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                fill={isDead ? '#3a3a3a' : statusColor}
+              />
+              {isDead && (
+                <path d="M12 5.5 L10.4 9.5 L13.2 12.5 L11 17" stroke="#0a0a0f" strokeWidth="1.7" fill="none" strokeLinecap="round" />
+              )}
+            </svg>
+            <div className="w-[60px] h-[6px] bg-black/70 rounded-full overflow-hidden shrink-0 border border-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]">
               <div className="h-full rounded-full transition-all duration-300"
-                style={{ width: `${pct}%`, background: statusColor }} />
+                style={{
+                  width: `${pct}%`,
+                  background: `linear-gradient(180deg, ${statusColor}cc 0%, ${statusColor} 55%, ${statusColor}99 100%)`,
+                  boxShadow: isDead ? 'none' : `0 0 4px ${statusColor}66`,
+                }} />
             </div>
             <span className="text-[10px] font-sans shrink-0" style={{ color: isDead ? '#8a8a8a' : statusColor }}>
-              {hp}<span className="text-faded">/{maxHp}</span>
+              <span className="font-semibold">{hp}</span><span className="text-faded">/{maxHp}</span>
             </span>
           </div>
         </div>
@@ -273,7 +305,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
             ⋮
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-7 z-30 w-40 bg-[#111118] border border-[#2a2a3a] rounded-lg shadow-xl overflow-hidden">
+            <div className={`absolute right-0 z-30 w-40 bg-[#111118] border border-[#2a2a3a] rounded-lg shadow-xl overflow-hidden ${isLast ? 'bottom-7' : 'top-7'}`}>
               <button onClick={() => openSettings('notes')}
                 className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📝 Заметки</button>
               <button onClick={() => openSettings('armor')}
@@ -383,6 +415,10 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
               {weapons.map(w => (
                 <div key={w.id} className="bg-[#0d0d14] rounded p-2 space-y-1 border border-[#1a1a2a]/30">
                   <div className="flex items-center gap-1">
+                    <span className="text-[10px] shrink-0 cursor-help"
+                      title={(w.weaponType ?? 'melee') === 'melee' ? 'Ближнее: урон +5×физ.сила' : 'Дальнее: урон +3×ловкость (ловкость НЕ даёт бонуса к попаданию)'}>
+                      {(w.weaponType ?? 'melee') === 'melee' ? '🗡' : '🏹'}
+                    </span>
                     <input type="text" value={w.name}
                       onChange={(e) => useMonsterStore.getState().updateWeapon(tokenId, w.id, { name: e.target.value })}
                       className="flex-1 bg-[#1a1a2a] border border-[#2a2a3a] rounded px-1.5 py-0.5 text-bone text-[10px] focus:border-gold-dark focus:outline-none"
@@ -442,6 +478,9 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
                     <div className="text-[11px] text-bone font-cinzel truncate">{s.name}</div>
                     <div className="text-[9px] text-faded">{s.actions?.length ?? 0} шагов · {s.elements?.length ? s.elements.join(', ') : 'без элементов'}</div>
                   </div>
+                  <button onClick={() => handleEditSpell(s)}
+                    className="px-1.5 py-0.5 text-[9px] text-faded hover:text-gold border border-[#2a2a3a] rounded hover:border-gold-dark/40 transition-colors shrink-0"
+                    title="Редактировать заклинание">✏️</button>
                   {onAttack && (
                     <button onClick={() => onAttack(monster, null)}
                       className="px-2 py-0.5 text-[9px] bg-[#1a2a4a]/60 text-[#7aa2ff] border border-[#2244aa]/40 rounded hover:bg-[#1a2a4a] transition-colors font-cinzel shrink-0">
@@ -458,6 +497,14 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
               </button>
             </div>
           )}
+
+          {/* 🔧 Полноценный редактор заклинаний (как у игроков) */}
+          <SpellEditorModal
+            isOpen={editingSpell !== null || isCreatingSpell}
+            onClose={() => { setEditingSpell(null); setIsCreatingSpell(false); }}
+            spell={editingSpell}
+            onSave={handleSaveSpell}
+          />
         </div>
       )}
     </div>

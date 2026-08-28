@@ -72,6 +72,7 @@ interface MonsterStore {
   removeWeapon: (tokenId: string, weaponId: string) => void;
   updateWeapon: (tokenId: string, weaponId: string, fields: Partial<MonsterWeapon>) => void;
   addSpell: (tokenId: string, spell: SpellV2) => void;
+  updateSpell: (tokenId: string, spell: SpellV2) => void;
   removeSpell: (tokenId: string, spellId: string) => void;
   setElementResistance: (tokenId: string, element: DamageType, multiplier: number) => void;
   getGroups: () => string[];
@@ -206,6 +207,17 @@ export const useMonsterStore = create<MonsterStore>()(
           monsters: {
             ...s.monsters,
             [tokenId]: { ...m, spells: [...m.spells, spell] },
+          },
+        };
+      }),
+
+      updateSpell: (tokenId, spell) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, spells: m.spells.map(sp => (sp.id === spell.id ? spell : sp)) },
           },
         };
       }),
