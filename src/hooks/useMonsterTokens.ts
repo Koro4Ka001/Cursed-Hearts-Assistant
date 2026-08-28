@@ -65,7 +65,7 @@ export function useMonsterTokens() {
     if (fresh) await tokenBarService.updateBars(tokenId, fresh.hp, fresh.maxHp, 0, 0, false);
   }, []);
 
-  const updateMonster = useCallback(async (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => {
+  const updateMonster = useCallback(async (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor' | 'notes'>>) => {
     useMonsterStore.getState().updateFields(tokenId, fields);
     const fresh = useMonsterStore.getState().get(tokenId);
     if (fresh) {

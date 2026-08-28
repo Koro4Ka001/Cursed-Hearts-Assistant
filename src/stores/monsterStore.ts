@@ -16,6 +16,7 @@ export interface Monster {
   hp: number;
   maxHp: number;
   group: string;
+  notes: string;
   armor: number;
   armorByType: Partial<Record<DamageType, number>>;
   stats: {
@@ -42,6 +43,7 @@ function migrateMonster(raw: Record<string, unknown>): Monster {
     hp: raw.hp as number,
     maxHp: raw.maxHp as number,
     group: (raw.group as string) || '',
+    notes: (raw.notes as string) || '',
     armor: (raw.armor as number) || 0,
     armorByType: (raw.armorByType as Partial<Record<DamageType, number>>) || {},
     stats: raw.stats ? { ...defaultStats(), ...(raw.stats as Record<string, number>) } : defaultStats(),
@@ -58,7 +60,7 @@ interface MonsterStore {
   duplicate: (sourceTokenId: string, newTokenId: string) => void;
   setHp: (tokenId: string, hp: number) => void;
   setMaxHp: (tokenId: string, maxHp: number) => void;
-  updateFields: (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor'>>) => void;
+  updateFields: (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor' | 'notes'>>) => void;
   setArmorByType: (tokenId: string, type: DamageType, value: number) => void;
   setStats: (tokenId: string, stats: Partial<Monster['stats']>) => void;
   addWeapon: (tokenId: string, weapon: MonsterWeapon) => void;
@@ -80,7 +82,7 @@ export const useMonsterStore = create<MonsterStore>()(
         monsters: {
           ...s.monsters,
           [tokenId]: {
-            tokenId, name, hp: maxHp, maxHp, group,
+            tokenId, name, hp: maxHp, maxHp, group, notes: '',
             armor: 0, armorByType: {},
             stats: defaultStats(),
             weapons: [],
