@@ -515,36 +515,38 @@ class TokenBarService {
     try {
       const cx = lay.barX + lay.barW / 2;
       const cy = lay.hpY + lay.barH / 2;
-      // 🔧 Аккуратный «разбитый» вид: тёмная подложка над зоной бара + тонкий ✕
-      // (вместо прежних двух грубых пересекающихся прямоугольников)
+      // 🔧 «Разбит» = тёмная подложка + одна тонкая диагональная линия-шрам.
+      // Прежний жирный крестик (✕) выглядел грубо и перекрывал весь бар.
       const overlay = buildShape()
         .shapeType("RECTANGLE")
         .width(lay.barW + 4)
         .height(Math.max(lay.barH + 4, 12))
         .position({ x: lay.barX - 2, y: lay.hpY - 2 })
-        .fillColor("#120808")
-        .strokeColor("#3a1414")
+        .fillColor("#1a0505")
+        .strokeColor("#5c1010")
         .strokeWidth(1)
         .attachedTo(id).layer("ATTACHMENT")
         .locked(true).disableHit(true)
         .metadata({ [META]: { type: "crack", role: "crack1", tokenId: id } })
         .build();
-      const fontSize = Math.max(12, lay.barH + 6);
-      const mark = buildText()
-        .position({ x: cx - fontSize * 0.4, y: cy - fontSize * 0.65 })
-        .plainText("✕")
-        .fontSize(fontSize)
-        .fontFamily("Arial")
-        .fillColor("#ff3333")
-        .textType("PLAIN")
+      const diag = Math.hypot(lay.barW + 4, Math.max(lay.barH + 4, 12)) * 0.72;
+      const slash = buildShape()
+        .shapeType("RECTANGLE")
+        .width(diag)
+        .height(2)
+        .position({ x: cx - diag / 2, y: cy - 1 })
+        .rotation(45)
+        .fillColor("#c01818")
+        .strokeColor("#c01818")
+        .strokeWidth(0)
         .attachedTo(id).layer("ATTACHMENT")
         .locked(true).disableHit(true)
         .metadata({ [META]: { type: "crack", role: "crack2", tokenId: id } })
         .build();
       // id регистрируются ДО вставки (защита от гонки с removeBars)
       st.ids.crack1 = overlay.id;
-      st.ids.crack2 = mark.id;
-      await OBR.scene.items.addItems([overlay, mark]);
+      st.ids.crack2 = slash.id;
+      await OBR.scene.items.addItems([overlay, slash]);
     } catch (e) {
       console.error("[Bars] Death FX error:", e);
     }

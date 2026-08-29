@@ -482,6 +482,11 @@ export const useGameStore = create<GameState>()(
           connections: { ...state.connections, lastSyncTime: Date.now() }
         }));
         
+        // 🔧 Синхронизация рейдж-бара на карте: раньше не вызывалась —
+        // бар создавался, но не заполнялся при изменении рейджа
+        const freshUnit = get().units.find(u => u.id === unitId);
+        if (freshUnit) await updateTokenBars(freshUnit, settings);
+        
         if (connections.docs && settings.syncRage && unit.googleDocsHeader) {
           if (!ensureDocsUrl(settings)) return;
           try {

@@ -65,19 +65,26 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
     let damageTotal = 0;
     if (isHit) {
       let formula = w.damageFormula;
-      if (isCrit) formula = formula.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || '1') * 2}d${s}`);
+      // 🔧 Крит: удваиваются и кубы, и бонус (физ.мощь/ловкость + владение)
       const statBonus = isMelee
         ? Math.floor((attacker.stats.physicalPower || 0) * 5)
         : Math.floor((attacker.stats.dexterity || 0) * 3);
-      // Владение оружием: +5 за очко
       const profType = w.proficiencyType;
       const profValue = profType ? (attacker.proficiencies?.[profType] ?? 0) : 0;
       const profBonus = profValue * 5;
-      const totalBonus = statBonus + profBonus;
-      if (totalBonus > 0) formula += `+${totalBonus}`;
+      const critMultiplier = isCrit ? 2 : 1;
+      const totalBonus = (statBonus + profBonus) * critMultiplier;
+      if (isCrit) {
+        formula = formula.replace(/(\d*)d(\d+)/gi, (_, c, s) => `${parseInt(c || '1') * 2}d${s}`);
+      }
+      if (totalBonus !== 0) formula += totalBonus > 0 ? `+${totalBonus}` : `${totalBonus}`;
       damageTotal = rollDice(formula, 'Урон').total;
       lines.push(`💥 Урон: ${formula} = ${damageTotal} (${ELEMENT_NAMES_MAP[w.damageType] ?? w.damageType})`);
-      lines.push(`Бонус: ${isMelee ? 'ближнее +5×ФС' : 'дальнее +3×ЛОВ'} = +${statBonus}${profBonus > 0 ? `, владение +${profBonus}` : ''}`);
+      if (isCrit) {
+        lines.push(`Бонус ×2: (${isMelee ? 'ближнее +5×ФС' : 'дальнее +3×ЛОВ'} + владение) = +${totalBonus}`);
+      } else if (totalBonus !== 0) {
+        lines.push(`Бонус: ${isMelee ? 'ближнее +5×ФС' : 'дальнее +3×ЛОВ'}${profBonus > 0 ? ` + владение` : ''} = +${totalBonus}`);
+      }
     } else {
       lines.push('💨 Промах — урон не прокидывается');
     }

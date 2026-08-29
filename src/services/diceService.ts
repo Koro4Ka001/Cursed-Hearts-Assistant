@@ -88,10 +88,19 @@ export function rollFormula(f: string): number {
 }
 
 function doubleDice(f: string): string {
-  return f.replace(/([+-]?\d*)d(\d+)/gi, (_, c, s) => {
-    const sign = c.startsWith('-') ? '-' : '';
-    return `${sign}${Math.abs(parseInt(c || "1", 10)) * 2}d${s}`;
-  });
+  // 🔧 Крит-механика: удваиваются ВСЕ кубы И плоский бонус.
+  // Раньше удваивались только кубы ("5d20+6d12+40" → "10d20+12d12+40"),
+  // а бонус владения+силы оставался одинарным.
+  const { groups, bonus } = parseFormula(f);
+  const parts: string[] = [];
+  for (const g of groups) {
+    parts.push(`${g.sign < 0 ? '-' : '+'}${Math.abs(g.count) * 2}d${g.sides}`);
+  }
+  if (bonus !== 0) {
+    parts.push(`${bonus > 0 ? '+' : '-'}${Math.abs(bonus) * 2}`);
+  }
+  const doubled = parts.join('').replace(/^\+/, '');
+  return doubled || f;
 }
 
 // ═══════════════════════════════════════════════════════════════
