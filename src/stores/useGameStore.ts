@@ -211,7 +211,11 @@ interface GameState {
 
 async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
   if (!(settings.showTokenBars ?? true) || !unit.owlbearTokenId) return;
-  
+
+  // 🔧 Бары обновляются для всех юнитов (игроков и зарегистрированных сущностей).
+  // Прежний фильтр isMonster блокировал ВСЕХ: id юнитов игроков никогда не совпадают
+  // с ключами monsterStore (там tokenId), из-за чего рейдж-бар создавался, но
+  // никогда не обновлялся, а бары useManaAsHp-юнитов не пересоздавались.
   try {
     const hasRage = unit.hasRage ?? false;
     await tokenBarService.updateBars(

@@ -26,7 +26,11 @@ const CFG = {
   HP_LOW: "#ff0000",
   HP_CRIT: "#550000",
   MANA: "#2244aa",
-  RAGE: "#aa4400",
+  // 🔧 Rage: огненный оранжево-красный — сильно контрастирует и с синей маной,
+  // и с красным HP. При >50% — раскалённо-золотой + пульсация (см. tickPulse)
+  RAGE: "#ff3300",
+  RAGE_BRIGHT: "#ffd700",
+  RAGE_PULSE: "#fff050",
   DEAD: "#333333",
 } as const;
 
@@ -188,7 +192,8 @@ class TokenBarService {
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const ragePct = maxRage > 0 ? Math.max(0, Math.min(1, rage / maxRage)) : 0;
-      const showHp = !useManaAsHp;
+      // 🔧 При useManaAsHp: мана-бар рисуется на позиции HP (это и есть жизнь)
+      const showHp = !useManaAsHp || (manaIn > 0 || maxManaIn > 0);
 
       const shapes: (Shape | Text)[] = [];
       const ids: Ids = {};
@@ -241,12 +246,16 @@ class TokenBarService {
         ids.nameLabel = label.id;
       }
 
+      // HP-бар (или мана-бар на позиции HP при useManaAsHp)
       if (showHp && !dead) {
+        const isManaAsHpBar = useManaAsHp;
+        const pct = isManaAsHpBar ? manaPct : hpPct;
+        const barColor = isManaAsHpBar ? CFG.MANA : this.hpColor(hp, maxHp);
         rect("hpBg", lay.barX, lay.hpY, lay.barW, lay.barH, CFG.BG, 10, true);
-        if (hpPct > 0) {
+        if (pct > 0) {
           rect("hpFill", lay.barX, lay.hpY,
-            Math.round(Math.max(1, lay.barW * hpPct)), lay.barH,
-            this.hpColor(hp, maxHp), 11, true, true);
+            Math.round(Math.max(1, lay.barW * pct)), lay.barH,
+            barColor, 11, true, true);
         }
       }
 
@@ -261,11 +270,12 @@ class TokenBarService {
       }
 
       if (!dead && hasRage) {
+        const rageColor = ragePct > 0.5 ? CFG.RAGE_BRIGHT : CFG.RAGE;
         rect("rageBg", lay.barX, lay.rageY, lay.barW, lay.barH, CFG.BG, 10, true);
         if (ragePct > 0) {
           rect("rageFill", lay.barX, lay.rageY,
             Math.round(Math.max(1, lay.barW * ragePct)), lay.barH,
-            CFG.RAGE, 11, true, true);
+            rageColor, 11, true, true);
         }
       }
 
@@ -280,7 +290,9 @@ class TokenBarService {
         dead, ids,
       });
 
-      if (showHp && dead && this.mode === "quality") {
+      // 🔧 Трещины смерти — для всех мёртвых (включая useManaAsHp-существ,
+      // у которых смерть = мана <= 0), не только для классического HP
+      if (dead && this.mode === "quality") {
         await this.addDeathX(tokenId, lay);
       }
     } catch (e) {
@@ -319,10 +331,11 @@ class TokenBarService {
       dead !== st.dead ||
       st.useManaAsHp !== useManaAsHp ||
       st.hasRage !== hasRage ||
-      (!dead && !useManaAsHp && !ids.hpFill && hpPct > 0) ||
+      // 🔧 useManaAsHp: hpFill существует (синий мана-бар), проверяем manaPct
+      (!dead && !ids.hpFill && (useManaAsHp ? manaPct > 0 : hpPct > 0)) ||
       (hasMana && !ids.manaFill && manaPct > 0) ||
       (hasRage && !ids.rageFill && ragePct > 0) ||
-      (!dead && !useManaAsHp && !ids.hpBg) ||
+      (!dead && !ids.hpBg) ||
       (hasMana && !ids.manaBg) ||
       (hasRage && !ids.rageBg);
 
@@ -347,18 +360,23 @@ class TokenBarService {
         for (const item of sceneItems) {
           if (!isShape(item)) continue;
           if (item.id === ids.hpFill) {
-            item.width = Math.round(Math.max(0, bw * hpPct));
-            item.style.fillColor = this.hpColor(hp, maxHp);
-            item.visible = !dead && !useManaAsHp && hpPct > 0;
+            // 🔧 useManaAsHp: мана-бар на позиции HP
+            const isManaAsHpBar = useManaAsHp;
+            const pct = isManaAsHpBar ? manaPct : hpPct;
+            const barColor = isManaAsHpBar ? CFG.MANA : this.hpColor(hp, maxHp);
+            item.width = Math.round(Math.max(0, bw * pct));
+            item.style.fillColor = barColor;
+            item.visible = !dead && pct > 0;
           } else if (item.id === ids.hpBg) {
-            item.visible = !dead && !useManaAsHp;
+            item.visible = !dead;
           } else if (item.id === ids.manaFill) {
             item.width = Math.round(Math.max(0, bw * manaPct));
-            item.visible = !dead && manaPct > 0;
+            item.visible = !dead && !useManaAsHp && manaPct > 0;
           } else if (item.id === ids.manaBg) {
-            item.visible = !dead;
+            item.visible = !dead && !useManaAsHp;
           } else if (item.id === ids.rageFill) {
             item.width = Math.round(Math.max(0, bw * ragePct));
+            item.style.fillColor = ragePct > 0.5 ? CFG.RAGE_BRIGHT : CFG.RAGE;
             item.visible = !dead && ragePct > 0;
           } else if (item.id === ids.rageBg) {
             item.visible = !dead;
@@ -376,7 +394,7 @@ class TokenBarService {
       const ids = st?.ids;
       // Remove known bar shapes and labels first (most reliable)
       const knownIds = ids
-        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.crack1, ids.crack2, ids.nameLabel].filter(Boolean) as string[]
+        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.rageBg, ids.rageFill, ids.crack1, ids.crack2, ids.nameLabel].filter(Boolean) as string[]
         : [];
       if (knownIds.length > 0) {
         try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
@@ -417,7 +435,8 @@ class TokenBarService {
         u.useManaAsHp ? u.mana.current : u.health.current,
         u.useManaAsHp ? u.mana.max : u.health.max,
         u.mana.current, u.mana.max, u.useManaAsHp,
-        u.name,
+        undefined, // 🔧 Имя-лейбл не рисуем: у юнитов (игроков) оно не нужно.
+        // removeBars внутри createBars удаляет старые лейблы, оставшиеся на сцене.
         hasRage ? (u.rage?.current ?? 0) : 0,
         hasRage ? (u.rage?.max ?? u.rageConfig?.max ?? 100) : 100,
         hasRage
@@ -468,6 +487,25 @@ class TokenBarService {
             if (isShape(i)) i.style.fillColor = color;
         })
         .catch(() => {});
+
+      // 🔧 Rage >50%: пульсация между золотым и ярко-пламенным — бар «горит»
+      if (st.hasRage && st.ids.rageFill && !st.dead) {
+        const ragePct = st.maxRage > 0 ? st.rage / st.maxRage : 0;
+        if (ragePct > 0.5) {
+          const t2 = (Math.sin(this.frame * 0.6 * 0.05) + 1) / 2;
+          const rageColor = this.lerp(CFG.RAGE_BRIGHT, CFG.RAGE_PULSE, t2);
+          const rKey = `${st.id}:rage`;
+          if (this.lastColor.get(rKey) !== rageColor) {
+            this.lastColor.set(rKey, rageColor);
+            OBR.scene.items
+              .updateItems([st.ids.rageFill], (items) => {
+                for (const i of items)
+                  if (isShape(i)) i.style.fillColor = rageColor;
+              })
+              .catch(() => {});
+          }
+        }
+      }
     }
   }
 

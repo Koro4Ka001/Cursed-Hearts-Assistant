@@ -117,6 +117,7 @@ function FixedMenu({ anchorRef, isLast, onClose, onNotes, onSettings, onDuplicat
   onRemove: () => void;
 }) {
   const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const btn = anchorRef.current;
@@ -132,30 +133,35 @@ function FixedMenu({ anchorRef, isLast, onClose, onNotes, onSettings, onDuplicat
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // Закрываем только если клик И вне кнопки-якоря, И вне самого меню
+      const clickedAnchor = anchorRef.current?.contains(target);
+      const clickedMenu = menuRef.current?.contains(target);
+      if (!clickedAnchor && !clickedMenu) {
         onClose();
       }
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
   }, [anchorRef, onClose]);
 
   if (!pos) return null;
 
   return (
     <div
+      ref={menuRef}
       className="fixed z-50 w-40 bg-[#111118] border border-[#2a2a3a] rounded-lg shadow-xl overflow-hidden"
       style={pos}
     >
-      <button onClick={onNotes}
+      <button onClick={(e) => { e.stopPropagation(); onNotes(); }}
         className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📝 Заметки</button>
-      <button onClick={onSettings}
+      <button onClick={(e) => { e.stopPropagation(); onSettings(); }}
         className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">⚙ Настройки</button>
       {onDuplicate && (
-        <button onClick={onDuplicate}
+        <button onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
           className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📋 Копировать</button>
       )}
-      <button onClick={onRemove}
+      <button onClick={(e) => { e.stopPropagation(); onRemove(); }}
         className="w-full px-3 py-1.5 text-left text-[11px] text-blood-bright hover:bg-blood-dark/30 transition-colors border-t border-[#2a2a3a]/60">🗑 Удалить</button>
     </div>
   );
@@ -252,6 +258,9 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
   
 
   const openSettings = (tab: 'notes' | 'armor' | 'stats' | 'weapons' | 'spells') => {
+    // 🔧 Без setTimeout: menuOpen/showSettings/settingsTab — независимые стейты,
+    // обновляются пакетно в одном рендере. setTimeout давал гонку: закрытие меню
+    // триггерило ре-рендер, и отложенное setShowSettings иногда терялось.
     setSettingsTab(tab);
     setShowSettings(true);
     setMenuOpen(false);

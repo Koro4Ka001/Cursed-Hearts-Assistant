@@ -211,6 +211,15 @@ class DiceService {
     return "local"; 
   }
 
+  /**
+   * Публичный broadcast: очередь + локальные слушатели + отправка другим игрокам.
+   * Нужен для сообщений, собранных вне сервиса (например, атака оружием монстра):
+   * прямой OBR.broadcast.sendMessage не доставляет сообщение отправителю.
+   */
+  async broadcastMessage(msg: BroadcastMessage): Promise<void> {
+    await broadcast(msg);
+  }
+
   async roll(
     formula: string,
     label?: string,

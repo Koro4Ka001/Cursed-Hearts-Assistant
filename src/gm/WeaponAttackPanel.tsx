@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { Monster, MonsterWeapon } from '../stores/monsterStore';
 import { rollDice } from '../utils/dice';
-import OBR from '@owlbear-rodeo/sdk';
-import { DICE_BROADCAST_CHANNEL, diceService } from '../services/diceService';
+import { diceService } from '../services/diceService';
 import { spellExecutor } from '../services/spellExecutor';
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
 import type { BroadcastMessage, RollModifier, Unit } from '../types';
@@ -99,8 +98,12 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       timestamp: Date.now(),
       details: lines,
     };
+    // 🔧 Broadcast через diceService (addToQueue + emitLocal + sendMessage):
+    // прямой OBR.broadcast.sendMessage НЕ доставляет сообщение отправителю —
+    // поэтому ГМ не видел плашку своей же атаки. Быстрые прокидки и касты
+    // работают, потому что идут через diceService.
     try {
-      await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+      await diceService.broadcastMessage(msg);
     } catch (e) {
       console.warn('[WeaponAttackPanel] ❌ Broadcast failed:', e);
     }
