@@ -236,11 +236,18 @@ export function MagicTab() {
           : null;
         setLastElementEffects(elementEffects);
 
-        // Применяем бонусный урон от стихий
-        let finalDamage = result.totalDamage;
+        // Бонус от интеллекта: +3 к урону заклинаний
+        const intBonus = Math.floor((unit.stats.intelligence || 0) * 3);
+        if (intBonus > 0 && result.totalDamage > 0) {
+          result.totalDamage += intBonus;
+          result.log.push(`🧠 Интеллект: +${intBonus} к урону заклинания`);
+        }
+
+        // Элементный бонус — показываем отдельно как напоминание, НЕ суммируем в итог автоматически
+        const cleanDamage = result.totalDamage;
+        let finalDamage = cleanDamage;
         if (elementEffects && elementEffects.totalBonusDamage > 0) {
-          finalDamage += elementEffects.totalBonusDamage;
-          result.log.push(`📈 Элемент. бонус: +${elementEffects.totalBonusDamage} (${elementEffects.effects.filter(e => e.triggered && e.bonusDamage).map(e => e.icon).join('')})`);
+          result.log.push(`📈 Элемент. бонус: +${elementEffects.totalBonusDamage} (${elementEffects.effects.filter(e => e.triggered && e.bonusDamage).map(e => e.icon).join('')}) — по соответствующим существам`);
         }
 
         // Астрал: половина стоимости при прокидке >18
@@ -277,15 +284,15 @@ export function MagicTab() {
           triggerEffect('crit-gold');
         }
 
-        if (finalDamage > 0) {
+        if (cleanDamage > 0) {
           await diceService.broadcastSpell(
             selectedSpell.name,
             unit.shortName ?? unit.name,
-            finalDamage,
+            cleanDamage,
             result.damageType,
             result.context.isCrit
           );
-          addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${finalDamage} ${result.damageType ?? ''}`);
+          addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${cleanDamage} ${result.damageType ?? ''}`);
         } else {
           addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, 'скастовано');
         }

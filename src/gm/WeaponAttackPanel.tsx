@@ -70,10 +70,15 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       const statBonus = isMelee
         ? Math.floor((attacker.stats.physicalPower || 0) * 5)
         : Math.floor((attacker.stats.dexterity || 0) * 3);
-      if (statBonus > 0) formula += `+${statBonus}`;
+      // Владение оружием: +5 за очко
+      const profType = w.proficiencyType;
+      const profValue = profType ? (attacker.proficiencies?.[profType] ?? 0) : 0;
+      const profBonus = profValue * 5;
+      const totalBonus = statBonus + profBonus;
+      if (totalBonus > 0) formula += `+${totalBonus}`;
       damageTotal = rollDice(formula, 'Урон').total;
       lines.push(`💥 Урон: ${formula} = ${damageTotal} (${ELEMENT_NAMES_MAP[w.damageType] ?? w.damageType})`);
-      lines.push(`Бонус: ${isMelee ? 'ближнее +5×ФС' : 'дальнее +3×ЛОВ'} = +${statBonus}`);
+      lines.push(`Бонус: ${isMelee ? 'ближнее +5×ФС' : 'дальнее +3×ЛОВ'} = +${statBonus}${profBonus > 0 ? `, владение +${profBonus}` : ''}`);
     } else {
       lines.push('💨 Промах — урон не прокидывается');
     }
@@ -120,6 +125,12 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
         targetCount: 1,
         rollModifier: 'normal',
       });
+      // Бонус от интеллекта: +3 к урону заклинаний
+      const intBonus = Math.floor((attacker.stats.intelligence || 0) * 3);
+      if (intBonus > 0 && result.totalDamage > 0) {
+        result.totalDamage += intBonus;
+        result.context.log.push(`🧠 Интеллект: +${intBonus} к урону заклинания`);
+      }
       const lines = [...result.context.log];
       if (result.totalDamage > 0) {
         lines.push(`💥 Итого урона: ${result.totalDamage}${result.damageType ? ` (${ELEMENT_NAMES_MAP[result.damageType] ?? result.damageType})` : ''}`);

@@ -13,6 +13,8 @@ export interface MonsterWeapon {
    * Ловкость НЕ даёт бонуса к попаданию. Опционально для старых данных (дефолт melee).
    */
   weaponType?: 'melee' | 'ranged';
+  /** Тип владения оружием (ключ в proficiencies). Каждое очко = +5 к урону. */
+  proficiencyType?: string;
 }
 
 export interface Monster {
@@ -35,6 +37,8 @@ export interface Monster {
   weapons: MonsterWeapon[];
   spells: SpellV2[];
   elementResistances: Partial<Record<DamageType, number>>;
+  /** Владения оружием: ключ → очки (каждое = +5 к урону) */
+  proficiencies?: Record<string, number>;
 }
 
 function defaultStats() {
@@ -55,6 +59,7 @@ function migrateMonster(raw: Record<string, unknown>): Monster {
     weapons: (raw.weapons as MonsterWeapon[]) || [],
     spells: (raw.spells as SpellV2[]) || [],
     elementResistances: (raw.elementResistances as Partial<Record<DamageType, number>>) || {},
+    proficiencies: (raw.proficiencies as Record<string, number>) || {},
   };
 }
 
