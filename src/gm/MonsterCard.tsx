@@ -103,6 +103,65 @@ function HeartIcon({ color, dead }: { color: string; dead: boolean }) {
 }
 
 /**
+ * Выпадающее меню с position: fixed — рендерится вне DOM-иерархии карточки,
+ * поэтому не обрезается overflow:hidden родительских контейнеров.
+ * Позиция вычисляется относительно кнопки-якоря.
+ */
+function FixedMenu({ anchorRef, isLast, onClose, onNotes, onSettings, onDuplicate, onRemove }: {
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  isLast?: boolean;
+  onClose: () => void;
+  onNotes: () => void;
+  onSettings: () => void;
+  onDuplicate?: () => void;
+  onRemove: () => void;
+}) {
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+
+  useEffect(() => {
+    const btn = anchorRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const right = window.innerWidth - rect.right;
+    if (isLast) {
+      setPos({ bottom: window.innerHeight - rect.top + 4, right });
+    } else {
+      setPos({ top: rect.bottom + 4, right });
+    }
+  }, [anchorRef, isLast]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [anchorRef, onClose]);
+
+  if (!pos) return null;
+
+  return (
+    <div
+      className="fixed z-50 w-40 bg-[#111118] border border-[#2a2a3a] rounded-lg shadow-xl overflow-hidden"
+      style={pos}
+    >
+      <button onClick={onNotes}
+        className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📝 Заметки</button>
+      <button onClick={onSettings}
+        className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">⚙ Настройки</button>
+      {onDuplicate && (
+        <button onClick={onDuplicate}
+          className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📋 Копировать</button>
+      )}
+      <button onClick={onRemove}
+        className="w-full px-3 py-1.5 text-left text-[11px] text-blood-bright hover:bg-blood-dark/30 transition-colors border-t border-[#2a2a3a]/60">🗑 Удалить</button>
+    </div>
+  );
+}
+
+/**
  * 🔧 Буферизованный текстовый инпут: пишет в стор только по blur/Enter, а не на
  * каждый символ. Нужен для поля «Группа»: живая запись в стор заставляла
  * GMDashboard перегруппировывать карточки во время набора, инпут переезжал между
@@ -181,7 +240,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingSpell, setEditingSpell] = useState<SpellV2 | null>(null);
   const [isCreatingSpell, setIsCreatingSpell] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const { tokenId, name, hp, maxHp, group, armor, stats, weapons } = monster;
   const notes = monster.notes ?? '';
 
@@ -190,15 +249,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
   const isDead = hp <= 0;
   const statusColor = isDead ? '#4a4a4a' : pct > 50 ? '#22c55e' : pct >= 25 ? '#eab308' : '#ef4444';
 
-  // Закрытие ⋮-меню по клику вне
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDocMouseDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [menuOpen]);
+  
 
   const openSettings = (tab: 'notes' | 'armor' | 'stats' | 'weapons' | 'spells') => {
     setSettingsTab(tab);
@@ -288,7 +339,7 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
         </div>
 
         {/* Actions: Атака (всегда видима) + ⋮ Ещё */}
-        <div className="flex items-center gap-0.5 shrink-0 relative" ref={menuRef}>
+        <div className="flex items-center gap-0.5 shrink-0 relative">
           <button onClick={() => { if (weapons.length > 0 || monster.spells.length > 0) onAttack?.(monster, weapons[0] ?? null); }}
             disabled={weapons.length === 0 && monster.spells.length === 0}
             className={`w-6 h-6 flex items-center justify-center text-[11px] rounded transition-colors ${
@@ -300,26 +351,26 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
             ⚔
           </button>
           <button onClick={() => setMenuOpen(v => !v)}
+            ref={menuBtnRef}
             className={`w-6 h-6 flex items-center justify-center text-[13px] leading-none rounded transition-colors ${menuOpen ? 'text-gold bg-gold-dark/20' : 'text-faded hover:text-bone hover:bg-[#1a1a2a]'}`}
             title="Ещё">
             ⋮
           </button>
-          {menuOpen && (
-            <div className={`absolute right-0 z-30 w-40 bg-[#111118] border border-[#2a2a3a] rounded-lg shadow-xl overflow-hidden ${isLast ? 'bottom-7' : 'top-7'}`}>
-              <button onClick={() => openSettings('notes')}
-                className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📝 Заметки</button>
-              <button onClick={() => openSettings('armor')}
-                className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">⚙ Настройки</button>
-              {onDuplicate && (
-                <button onClick={() => { setMenuOpen(false); onDuplicate(tokenId); }}
-                  className="w-full px-3 py-1.5 text-left text-[11px] text-bone hover:bg-[#1a1a2a] transition-colors">📋 Копировать</button>
-              )}
-              <button onClick={() => { setMenuOpen(false); onRemove(tokenId); }}
-                className="w-full px-3 py-1.5 text-left text-[11px] text-blood-bright hover:bg-blood-dark/30 transition-colors border-t border-[#2a2a3a]/60">🗑 Удалить</button>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Выпадающее меню — position: fixed, не обрезается overflow родителей */}
+      {menuOpen && (
+        <FixedMenu
+          anchorRef={menuBtnRef}
+          isLast={isLast}
+          onClose={() => setMenuOpen(false)}
+          onNotes={() => openSettings('notes')}
+          onSettings={() => openSettings('armor')}
+          onDuplicate={onDuplicate ? () => { setMenuOpen(false); onDuplicate(tokenId); } : undefined}
+          onRemove={() => { setMenuOpen(false); onRemove(tokenId); }}
+        />
+      )}
 
       {/* Settings panel */}
       {showSettings && (

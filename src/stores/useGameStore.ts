@@ -213,13 +213,17 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
   if (!(settings.showTokenBars ?? true) || !unit.owlbearTokenId) return;
   
   try {
+    const hasRage = unit.hasRage ?? false;
     await tokenBarService.updateBars(
       unit.owlbearTokenId,
       unit.useManaAsHp ? unit.mana.current : unit.health.current,
       unit.useManaAsHp ? unit.mana.max : unit.health.max,
       unit.mana.current,
       unit.mana.max,
-      unit.useManaAsHp
+      unit.useManaAsHp,
+      hasRage ? (unit.rage?.current ?? 0) : 0,
+      hasRage ? (unit.rage?.max ?? unit.rageConfig?.max ?? 100) : 100,
+      hasRage
     );
   } catch (e) {
     console.warn('[Store] Failed to update token bars:', e);

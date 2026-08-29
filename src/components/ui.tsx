@@ -1,5 +1,6 @@
 // src/components/ui.tsx
 import React, { useState, useCallback, Component, type ReactNode, type ChangeEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../utils/cn';
 import type { DiceRollResult } from '../types';
 
@@ -508,7 +509,7 @@ interface ModalProps {
 export function Modal({ isOpen, onClose, title, children, className }: ModalProps) {
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div
         className={cn('modal-box', className)}
@@ -531,7 +532,8 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
         </div>
         <div className="p-5 overflow-y-auto flex-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

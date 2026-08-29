@@ -240,14 +240,20 @@ export function MagicTab() {
         const intBonus = Math.floor((unit.stats.intelligence || 0) * 3);
         if (intBonus > 0 && result.totalDamage > 0) {
           result.totalDamage += intBonus;
+          result.context.totalDamage += intBonus; // 🔧 синхронизируем с context для UI
           result.log.push(`🧠 Интеллект: +${intBonus} к урону заклинания`);
         }
 
         // Элементный бонус — показываем отдельно как напоминание, НЕ суммируем в итог автоматически
         const cleanDamage = result.totalDamage;
-        let finalDamage = cleanDamage;
         if (elementEffects && elementEffects.totalBonusDamage > 0) {
           result.log.push(`📈 Элемент. бонус: +${elementEffects.totalBonusDamage} (${elementEffects.effects.filter(e => e.triggered && e.bonusDamage).map(e => e.icon).join('')}) — по соответствующим существам`);
+        }
+
+        // Итоговый урон для отображения в логе (с интеллектом, но без элементного бонуса)
+        const totalWithInt = cleanDamage;
+        if (totalWithInt > 0) {
+          result.log.push(`💥 Итого урона: ${totalWithInt}${result.damageType ? ` (${result.damageType})` : ''}`);
         }
 
         // Астрал: половина стоимости при прокидке >18

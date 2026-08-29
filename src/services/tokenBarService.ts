@@ -26,6 +26,7 @@ const CFG = {
   HP_LOW: "#ff0000",
   HP_CRIT: "#550000",
   MANA: "#2244aa",
+  RAGE: "#aa4400",
   DEAD: "#333333",
 } as const;
 
@@ -35,6 +36,7 @@ interface Layout {
   barX: number;
   hpY: number;
   manaY: number;
+  rageY: number;
 }
 
 interface Ids {
@@ -42,6 +44,8 @@ interface Ids {
   hpFill?: string;
   manaBg?: string;
   manaFill?: string;
+  rageBg?: string;
+  rageFill?: string;
   crack1?: string;
   crack2?: string;
   nameLabel?: string;
@@ -53,6 +57,9 @@ interface State {
   maxHp: number;
   mana: number;
   maxMana: number;
+  rage: number;
+  maxRage: number;
+  hasRage: boolean;
   useManaAsHp: boolean;
   tx: number;
   ty: number;
@@ -121,7 +128,7 @@ class TokenBarService {
     });
   }
 
-  private calcLayout(tok: Image, useManaAsHp: boolean): Layout {
+  private calcLayout(tok: Image, useManaAsHp: boolean, hasRage: boolean): Layout {
     const sx = Math.abs(Number(tok.scale?.x) || 1);
     const sy = Math.abs(Number(tok.scale?.y) || 1);
     const imgW = Number(tok.image?.width) || 150;
@@ -145,8 +152,9 @@ class TokenBarService {
     const barX = Math.round(tok.position.x - bw / 2);
     const hpY = Math.round(tok.position.y + wH / 2 + offY);
     const manaY = useManaAsHp ? hpY : hpY + bh + gap;
+    const rageY = hasRage ? (useManaAsHp ? hpY + bh + gap : manaY + bh + gap) : manaY;
 
-    return { barW: bw, barH: bh, barX, hpY, manaY };
+    return { barW: bw, barH: bh, barX, hpY, manaY, rageY };
   }
 
   async createBars(
@@ -154,7 +162,8 @@ class TokenBarService {
     hpIn: number, maxHpIn: number,
     manaIn: number, maxManaIn: number,
     useManaAsHp = false,
-    name?: string
+    name?: string,
+    rageIn = 0, maxRageIn = 100, hasRage = false
   ): Promise<void> {
     if (!tokenId) return;
     try {
@@ -164,6 +173,8 @@ class TokenBarService {
       const maxHp = Number(maxHpIn) || 1;
       const mana = Number(manaIn) || 0;
       const maxMana = Number(maxManaIn);
+      const rage = Number(rageIn) || 0;
+      const maxRage = Number(maxRageIn) || 100;
 
       await this.removeBars(tokenId);
 
@@ -172,10 +183,11 @@ class TokenBarService {
       const tok = items[0];
       if (!isImage(tok)) return;
 
-      const lay = this.calcLayout(tok as Image, useManaAsHp);
+      const lay = this.calcLayout(tok as Image, useManaAsHp, hasRage);
       const dead = hp <= 0;
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+      const ragePct = maxRage > 0 ? Math.max(0, Math.min(1, rage / maxRage)) : 0;
       const showHp = !useManaAsHp;
 
       const shapes: (Shape | Text)[] = [];
@@ -248,11 +260,21 @@ class TokenBarService {
         }
       }
 
+      if (!dead && hasRage) {
+        rect("rageBg", lay.barX, lay.rageY, lay.barW, lay.barH, CFG.BG, 10, true);
+        if (ragePct > 0) {
+          rect("rageFill", lay.barX, lay.rageY,
+            Math.round(Math.max(1, lay.barW * ragePct)), lay.barH,
+            CFG.RAGE, 11, true, true);
+        }
+      }
+
       if (shapes.length > 0) await OBR.scene.items.addItems(shapes);
 
       this.states.set(tokenId, {
         id: tokenId,
         hp, maxHp, mana, maxMana, useManaAsHp,
+        rage, maxRage, hasRage,
         tx: tok.position.x, ty: tok.position.y,
         bw: lay.barW, bh: lay.barH,
         dead, ids,
@@ -270,16 +292,19 @@ class TokenBarService {
     tokenId: string,
     hpIn: number, maxHpIn: number,
     manaIn: number, maxManaIn: number,
-    useManaAsHp = false
+    useManaAsHp = false,
+    rageIn = 0, maxRageIn = 100, hasRage = false
   ): Promise<void> {
     const st = this.states.get(tokenId);
     const hp = Number(hpIn) || 0;
     const maxHp = Number(maxHpIn) || 1;
     const mana = Number(manaIn) || 0;
     const maxMana = Number(maxManaIn);
+    const rage = Number(rageIn) || 0;
+    const maxRage = Number(maxRageIn) || 100;
 
     if (!st) {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage);
       return;
     }
 
@@ -287,26 +312,31 @@ class TokenBarService {
     const ids = st.ids;
     const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
     const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
+    const ragePct = maxRage > 0 ? Math.max(0, Math.min(1, rage / maxRage)) : 0;
 
     const hasMana = (manaIn > 0 || maxManaIn > 0) && !useManaAsHp;
     const needRebuild =
       dead !== st.dead ||
       st.useManaAsHp !== useManaAsHp ||
+      st.hasRage !== hasRage ||
       (!dead && !useManaAsHp && !ids.hpFill && hpPct > 0) ||
       (hasMana && !ids.manaFill && manaPct > 0) ||
+      (hasRage && !ids.rageFill && ragePct > 0) ||
       (!dead && !useManaAsHp && !ids.hpBg) ||
-      (hasMana && !ids.manaBg);
+      (hasMana && !ids.manaBg) ||
+      (hasRage && !ids.rageBg);
 
     if (needRebuild) {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage);
       return;
     }
 
     st.hp = hp; st.maxHp = maxHp;
     st.mana = mana; st.maxMana = maxMana;
+    st.rage = rage; st.maxRage = maxRage; st.hasRage = hasRage;
     st.dead = dead; st.useManaAsHp = useManaAsHp;
 
-    const toUpdate = [ids.hpFill, ids.hpBg, ids.manaFill, ids.manaBg].filter(
+    const toUpdate = [ids.hpFill, ids.hpBg, ids.manaFill, ids.manaBg, ids.rageFill, ids.rageBg].filter(
       Boolean
     ) as string[];
     if (toUpdate.length === 0) return;
@@ -327,11 +357,16 @@ class TokenBarService {
             item.visible = !dead && manaPct > 0;
           } else if (item.id === ids.manaBg) {
             item.visible = !dead;
+          } else if (item.id === ids.rageFill) {
+            item.width = Math.round(Math.max(0, bw * ragePct));
+            item.visible = !dead && ragePct > 0;
+          } else if (item.id === ids.rageBg) {
+            item.visible = !dead;
           }
         }
       });
     } catch {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage);
     }
   }
 
@@ -376,11 +411,16 @@ class TokenBarService {
     for (const u of units) {
       if (!u.owlbearTokenId) continue;
       valid.add(u.owlbearTokenId);
+      const hasRage = u.hasRage ?? false;
       await this.createBars(
         u.owlbearTokenId,
         u.useManaAsHp ? u.mana.current : u.health.current,
         u.useManaAsHp ? u.mana.max : u.health.max,
-        u.mana.current, u.mana.max, u.useManaAsHp
+        u.mana.current, u.mana.max, u.useManaAsHp,
+        u.name,
+        hasRage ? (u.rage?.current ?? 0) : 0,
+        hasRage ? (u.rage?.max ?? u.rageConfig?.max ?? 100) : 100,
+        hasRage
       );
     }
     for (const id of this.states.keys()) {

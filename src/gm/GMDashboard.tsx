@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import OBR from '@owlbear-rodeo/sdk';
 import { useMonsterTokens } from '../hooks/useMonsterTokens';
 import { MonsterCard } from './MonsterCard';
 import { RegistrationModal, getGroupColor } from './RegistrationModal';
@@ -20,6 +21,8 @@ const ALL_DAMAGE_TYPES: DamageType[] = [
 
 const UNGROUPED_KEY = '__ungrouped__';
 
+type GmViewMode = 'compact' | 'medium' | 'large';
+
 export function GMDashboard() {
   const { monsters, registerTokens, updateMonster, unregister, getSelection, getGroups } = useMonsterTokens();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -32,6 +35,21 @@ export function GMDashboard() {
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [damageType, setDamageType] = useState<DamageType>('slashing');
   const [attackContext, setAttackContext] = useState<{ monster: Monster; weapon: MonsterWeapon | null } | null>(null);
+  const [viewMode, setViewMode] = useState<GmViewMode>('medium');
+
+  // Change window size when view mode changes
+  useEffect(() => {
+    const sizes: Record<GmViewMode, { width: number; height: number }> = {
+      compact: { width: 300, height: 150 },
+      medium: { width: 420, height: 700 },
+      large: { width: 700, height: 850 },
+    };
+    const size = sizes[viewMode];
+    try {
+      OBR.action.setWidth(size.width);
+      OBR.action.setHeight(size.height);
+    } catch { /* ignore */ }
+  }, [viewMode]);
 
   const searchLower = searchQuery.trim().toLowerCase();
   const searchActive = searchLower.length > 0;
@@ -229,6 +247,20 @@ export function GMDashboard() {
         <div className="flex items-center justify-between mb-2">
           <span className="font-cinzel-decorative text-sm text-gold tracking-wider">☠️ Cursed Assistant</span>
           <div className="flex items-center gap-2">
+            {/* View mode switcher */}
+            <div className="flex items-center gap-0.5 mr-2">
+              {(['compact', 'medium', 'large'] as GmViewMode[]).map(mode => (
+                <button key={mode} onClick={() => setViewMode(mode)}
+                  className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
+                    viewMode === mode
+                      ? 'bg-gold-dark/30 text-gold border border-gold-dark/40'
+                      : 'text-faded hover:text-bone border border-transparent'
+                  }`}
+                  title={mode === 'compact' ? 'Компактный' : mode === 'medium' ? 'Средний' : 'Большой'}>
+                  {mode === 'compact' ? '▢' : mode === 'medium' ? '▬' : '▣'}
+                </button>
+              ))}
+            </div>
             {selected.size > 0 && (
               <span className="text-[10px] text-gold bg-gold-dark/20 px-2 py-0.5 rounded-full border border-gold-dark/30">
                 {selected.size} выбрано

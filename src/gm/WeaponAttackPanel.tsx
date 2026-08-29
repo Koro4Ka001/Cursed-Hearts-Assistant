@@ -48,7 +48,7 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
   // При результате ≥11 (или крите) — прокидывается урон. Урон НИКТО не получает
   // автоматически — это бросок, ГМ применяет результат сам.
   // Бонус урона: ближнее +5×физ.сила, дальнее +3×ловкость.
-  const executeAttack = useCallback(() => {
+  const executeAttack = useCallback(async () => {
     const w = activeWeapon;
     if (!w) return;
     const isMelee = (w.weaponType ?? 'melee') === 'melee';
@@ -83,7 +83,7 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       lines.push('💨 Промах — урон не прокидывается');
     }
 
-    // Broadcast игрокам
+    // Broadcast игрокам — используем diceService для единообразия (с await + локальная очередь)
     const msg: BroadcastMessage = {
       id: `gm-atk-${Date.now()}`,
       type: 'hit',
@@ -99,7 +99,11 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       timestamp: Date.now(),
       details: lines,
     };
-    OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+    try {
+      await OBR.broadcast.sendMessage(DICE_BROADCAST_CHANNEL, msg);
+    } catch (e) {
+      console.warn('[WeaponAttackPanel] ❌ Broadcast failed:', e);
+    }
 
     pushLog(`⚔ ${w.name} — ${isHit ? 'попадание' : 'промах'}`, lines);
   }, [activeWeapon, attacker, modifier, pushLog]);
@@ -129,6 +133,7 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
       const intBonus = Math.floor((attacker.stats.intelligence || 0) * 3);
       if (intBonus > 0 && result.totalDamage > 0) {
         result.totalDamage += intBonus;
+        result.context.totalDamage += intBonus; // 🔧 синхронизация
         result.context.log.push(`🧠 Интеллект: +${intBonus} к урону заклинания`);
       }
       const lines = [...result.context.log];
