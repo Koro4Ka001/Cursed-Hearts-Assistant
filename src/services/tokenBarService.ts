@@ -52,6 +52,7 @@ interface Ids {
   rageFill?: string;
   crack1?: string;
   crack2?: string;
+  crack3?: string;
   nameLabel?: string;
 }
 
@@ -394,7 +395,7 @@ class TokenBarService {
       const ids = st?.ids;
       // Remove known bar shapes and labels first (most reliable)
       const knownIds = ids
-        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.rageBg, ids.rageFill, ids.crack1, ids.crack2, ids.nameLabel].filter(Boolean) as string[]
+        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.rageBg, ids.rageFill, ids.crack1, ids.crack2, ids.crack3, ids.nameLabel].filter(Boolean) as string[]
         : [];
       if (knownIds.length > 0) {
         try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
@@ -509,44 +510,40 @@ class TokenBarService {
     }
   }
 
+  /**
+   * 🔧 «Разбит» — минимально: маленькая трещинка-зигзаг в центре бара.
+   * Без подложки и без крестика: заливка HP остаётся видимой (тёмно-серой),
+   * поверх неё — 3 коротких тёмных сегмента со сдвигом, имитирующих трещину.
+   */
   private async addDeathX(id: string, lay: Layout): Promise<void> {
     const st = this.states.get(id);
     if (!st || st.ids.crack1) return;
     try {
-      const cx = lay.barX + lay.barW / 2;
-      const cy = lay.hpY + lay.barH / 2;
-      // 🔧 «Разбит» = тёмная подложка + одна тонкая диагональная линия-шрам.
-      // Прежний жирный крестик (✕) выглядел грубо и перекрывал весь бар.
-      const overlay = buildShape()
-        .shapeType("RECTANGLE")
-        .width(lay.barW + 4)
-        .height(Math.max(lay.barH + 4, 12))
-        .position({ x: lay.barX - 2, y: lay.hpY - 2 })
-        .fillColor("#1a0505")
-        .strokeColor("#5c1010")
-        .strokeWidth(1)
-        .attachedTo(id).layer("ATTACHMENT")
-        .locked(true).disableHit(true)
-        .metadata({ [META]: { type: "crack", role: "crack1", tokenId: id } })
-        .build();
-      const diag = Math.hypot(lay.barW + 4, Math.max(lay.barH + 4, 12)) * 0.72;
-      const slash = buildShape()
-        .shapeType("RECTANGLE")
-        .width(diag)
-        .height(2)
-        .position({ x: cx - diag / 2, y: cy - 1 })
-        .rotation(45)
-        .fillColor("#c01818")
-        .strokeColor("#c01818")
-        .strokeWidth(0)
-        .attachedTo(id).layer("ATTACHMENT")
-        .locked(true).disableHit(true)
-        .metadata({ [META]: { type: "crack", role: "crack2", tokenId: id } })
-        .build();
-      // id регистрируются ДО вставки (защита от гонки с removeBars)
-      st.ids.crack1 = overlay.id;
-      st.ids.crack2 = slash.id;
-      await OBR.scene.items.addItems([overlay, slash]);
+      const cx = lay.barX + lay.barW * 0.5;
+      const by = lay.hpY;
+      const bh = Math.max(lay.barH, 4);
+      const shapes: (Shape | Text)[] = [];
+      const mk = (role: keyof Ids, x: number, y: number, w: number, h: number): void => {
+        const s = buildShape()
+          .shapeType("RECTANGLE")
+          .width(w).height(h)
+          .position({ x, y })
+          .fillColor("#0a0505")
+          .strokeColor("#0a0505")
+          .strokeWidth(0)
+          .attachedTo(id).layer("ATTACHMENT")
+          .locked(true).disableHit(true)
+          .zIndex(12)
+          .metadata({ [META]: { type: "crack", role, tokenId: id } })
+          .build();
+        shapes.push(s);
+        st.ids[role] = s.id;
+      };
+      // Зигзаг: три смещённых сегмента — простой и аккуратный намёк на трещину
+      mk("crack1", cx - 1, by, 1.5, bh * 0.5);
+      mk("crack2", cx + 1.5, by + bh * 0.3, 1.5, bh * 0.45);
+      mk("crack3", cx - 2.5, by + bh * 0.55, 1.5, bh * 0.45);
+      await OBR.scene.items.addItems(shapes);
     } catch (e) {
       console.error("[Bars] Death FX error:", e);
     }
