@@ -50,9 +50,6 @@ interface Ids {
   manaFill?: string;
   rageBg?: string;
   rageFill?: string;
-  crack1?: string;
-  crack2?: string;
-  crack3?: string;
   nameLabel?: string;
 }
 
@@ -247,16 +244,20 @@ class TokenBarService {
         ids.nameLabel = label.id;
       }
 
-      // HP-бар (или мана-бар на позиции HP при useManaAsHp)
-      if (showHp && !dead) {
-        const isManaAsHpBar = useManaAsHp;
-        const pct = isManaAsHpBar ? manaPct : hpPct;
-        const barColor = isManaAsHpBar ? CFG.MANA : this.hpColor(hp, maxHp);
+      // HP-бар (или мана-бар на позиции HP при useManaAsHp):
+      // фон рисуем всегда (даже мёртвый — пустой тёмный прямоугольник),
+      // красную заливку — только при жизни.
+      if (showHp) {
         rect("hpBg", lay.barX, lay.hpY, lay.barW, lay.barH, CFG.BG, 10, true);
-        if (pct > 0) {
-          rect("hpFill", lay.barX, lay.hpY,
-            Math.round(Math.max(1, lay.barW * pct)), lay.barH,
-            barColor, 11, true, true);
+        if (!dead) {
+          const isManaAsHpBar = useManaAsHp;
+          const pct = isManaAsHpBar ? manaPct : hpPct;
+          if (pct > 0) {
+            const barColor = isManaAsHpBar ? CFG.MANA : this.hpColor(hp, maxHp);
+            rect("hpFill", lay.barX, lay.hpY,
+              Math.round(Math.max(1, lay.barW * pct)), lay.barH,
+              barColor, 11, true, true);
+          }
         }
       }
 
@@ -291,11 +292,6 @@ class TokenBarService {
         dead, ids,
       });
 
-      // 🔧 Трещины смерти — для всех мёртвых (включая useManaAsHp-существ,
-      // у которых смерть = мана <= 0), не только для классического HP
-      if (dead && this.mode === "quality") {
-        await this.addDeathX(tokenId, lay);
-      }
     } catch (e) {
       console.error("[Bars] createBars failed:", e);
     }
@@ -369,7 +365,7 @@ class TokenBarService {
             item.style.fillColor = barColor;
             item.visible = !dead && pct > 0;
           } else if (item.id === ids.hpBg) {
-            item.visible = !dead;
+            item.visible = true;
           } else if (item.id === ids.manaFill) {
             item.width = Math.round(Math.max(0, bw * manaPct));
             item.visible = !dead && !useManaAsHp && manaPct > 0;
@@ -395,7 +391,7 @@ class TokenBarService {
       const ids = st?.ids;
       // Remove known bar shapes and labels first (most reliable)
       const knownIds = ids
-        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.rageBg, ids.rageFill, ids.crack1, ids.crack2, ids.crack3, ids.nameLabel].filter(Boolean) as string[]
+        ? [ids.hpBg, ids.hpFill, ids.manaBg, ids.manaFill, ids.rageBg, ids.rageFill, ids.nameLabel].filter(Boolean) as string[]
         : [];
       if (knownIds.length > 0) {
         try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
@@ -507,45 +503,6 @@ class TokenBarService {
           }
         }
       }
-    }
-  }
-
-  /**
-   * 🔧 «Разбит» — минимально: маленькая трещинка-зигзаг в центре бара.
-   * Без подложки и без крестика: заливка HP остаётся видимой (тёмно-серой),
-   * поверх неё — 3 коротких тёмных сегмента со сдвигом, имитирующих трещину.
-   */
-  private async addDeathX(id: string, lay: Layout): Promise<void> {
-    const st = this.states.get(id);
-    if (!st || st.ids.crack1) return;
-    try {
-      const cx = lay.barX + lay.barW * 0.5;
-      const by = lay.hpY;
-      const bh = Math.max(lay.barH, 4);
-      const shapes: (Shape | Text)[] = [];
-      const mk = (role: keyof Ids, x: number, y: number, w: number, h: number): void => {
-        const s = buildShape()
-          .shapeType("RECTANGLE")
-          .width(w).height(h)
-          .position({ x, y })
-          .fillColor("#0a0505")
-          .strokeColor("#0a0505")
-          .strokeWidth(0)
-          .attachedTo(id).layer("ATTACHMENT")
-          .locked(true).disableHit(true)
-          .zIndex(12)
-          .metadata({ [META]: { type: "crack", role, tokenId: id } })
-          .build();
-        shapes.push(s);
-        st.ids[role] = s.id;
-      };
-      // Зигзаг: три смещённых сегмента — простой и аккуратный намёк на трещину
-      mk("crack1", cx - 1, by, 1.5, bh * 0.5);
-      mk("crack2", cx + 1.5, by + bh * 0.3, 1.5, bh * 0.45);
-      mk("crack3", cx - 2.5, by + bh * 0.55, 1.5, bh * 0.45);
-      await OBR.scene.items.addItems(shapes);
-    } catch (e) {
-      console.error("[Bars] Death FX error:", e);
     }
   }
 
