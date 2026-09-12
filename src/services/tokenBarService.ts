@@ -41,6 +41,7 @@ interface Layout {
   hpY: number;
   manaY: number;
   rageY: number;
+  tokenW: number;
 }
 
 interface Ids {
@@ -156,7 +157,7 @@ class TokenBarService {
     const manaY = useManaAsHp ? hpY : hpY + bh + gap;
     const rageY = hasRage ? (useManaAsHp ? hpY + bh + gap : manaY + bh + gap) : manaY;
 
-    return { barW: bw, barH: bh, barX, hpY, manaY, rageY };
+    return { barW: bw, barH: bh, barX, hpY, manaY, rageY, tokenW: wW };
   }
 
   async createBars(
@@ -223,17 +224,33 @@ class TokenBarService {
       };
 
       // Name label above HP bar
+      // 🔧 Шрифт адаптивный: подбирается так, чтобы имя вписывалось в ширину бара
+      // (потолок — от высоты бара). Раньше был жёсткий fontSize(10) — это ~6% клетки,
+      // и длинное имя становилось нечитаемым. Слишком длинное имя обрезается с «…».
       if (name && name.trim()) {
-        const labelY = lay.hpY - 14;
+        let clean = name.trim();
+        const charRatio = 0.58; // средняя ширина символа Arial от fontSize
+        const maxFont = Math.max(12, Math.round(lay.barH * 1.6));
+        let font = Math.floor(lay.barW / (clean.length * charRatio));
+        font = Math.max(9, Math.min(maxFont, font));
+        const maxChars = Math.max(3, Math.floor(lay.barW / (font * charRatio)));
+        if (clean.length > maxChars) {
+          clean = clean.slice(0, maxChars - 1).trimEnd() + "…";
+        }
+        const estW = clean.length * font * charRatio;
+        const labelY = Math.round(lay.hpY - font * 1.3 - 2);
         const label = buildText()
-          .position({ x: lay.barX, y: labelY })
-          .plainText(name)
-          .fontSize(10)
+          .position({ x: Math.round(tok.position.x - estW / 2), y: labelY })
+          .plainText(clean)
+          .fontSize(font)
           .fontFamily("Arial")
           .fillColor("#FFFFFF")
           .strokeColor("#000000")
-          .strokeWidth(0.5)
+          .strokeWidth(1)
+          .lineHeight(1.2)
           .textType("PLAIN")
+          .width("AUTO")
+          .height("AUTO")
           .layer("ATTACHMENT")
           .locked(true).disableHit(true)
           .visible(!dead)
