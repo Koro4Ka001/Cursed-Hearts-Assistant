@@ -35,9 +35,10 @@ function addToLocalQueue(msg: BroadcastMessage) {
 
 // Открытие popover
 // 🔧 disableClickAway: false — клик вне плашки закрывает её, и игрок сразу может
-// бросать кубики/кликать по карте (раньше плашка перехватывала все клики, пока
-// не приходило новое сообщение). Дополнительно — автозакрытие через 10 секунд.
-const POPOVER_AUTO_CLOSE_MS = 10_000;
+// бросать кубики/кликать по карте. Автозакрытие через 4 секунды (короткое окно
+// блокировки ЛКМ). Высота попапа подстраивается под контент из самого попапа
+// (OBR.popover.setHeight) — плашки висят компактно в левом нижнем углу.
+const POPOVER_AUTO_CLOSE_MS = 4_000;
 let popoverAutoCloseTimer: number | null = null;
 
 function schedulePopoverAutoClose() {
@@ -54,7 +55,9 @@ async function openNotificationPopover() {
       id: NOTIFICATION_POPOVER_ID,
       url: "/notification.html",
       width: 320,
-      height: 500,
+      // Начальная высота — под 1 карточку; дальше высоту уточняет сам попап
+      // через ResizeObserver + OBR.popover.setHeight (см. NotificationPopover.tsx)
+      height: 180,
       anchorOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
       transformOrigin: { horizontal: "LEFT", vertical: "BOTTOM" },
       disableClickAway: false,

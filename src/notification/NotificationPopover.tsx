@@ -33,9 +33,13 @@ interface QueuedNotification extends NotificationMessage {
 
 const BROADCAST_CHANNEL = "cursed-hearts/dice-roll";
 const LOCAL_STORAGE_KEY = "cursed-hearts-pending-notification";
+const POPOVER_ID = "cursed-hearts-notification";
 const MAX_VISIBLE = 4;
-const DISPLAY_TIME = 5000;
-const ANIMATION_TIME = 400;
+// Время показа карточки: обычная — 3с, крит — 3.5с. Короткое время = короткое
+// окно «съеденного» первого клика по сцене (попап перехватывает клики, пока открыт).
+const DISPLAY_TIME = 3000;
+const DISPLAY_TIME_CRIT = 3500;
+const ANIMATION_TIME = 300;
 
 const BORDER_COLORS: Record<string, string> = {
   gold: "#c9a227",
@@ -64,6 +68,7 @@ export function NotificationPopover() {
   const timeoutsRef = useRef<Map<string, number>>(new Map());
   const processedIdsRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   // Удаление уведомления
   const removeNotification = useCallback((id: string) => {
@@ -115,7 +120,7 @@ export function NotificationPopover() {
     const timeout = window.setTimeout(() => {
       removeNotification(msg.id);
       timeoutsRef.current.delete(msg.id);
-    }, DISPLAY_TIME);
+    }, msg.isCrit ? DISPLAY_TIME_CRIT : DISPLAY_TIME);
     
     timeoutsRef.current.set(msg.id, timeout);
   }, [removeNotification]);
@@ -148,12 +153,24 @@ export function NotificationPopover() {
       processQueue();
     }, 50);
   }, [processQueue]);
+
+  // 🔧 Мгновенная доставка: storage-событие при записи очереди из основного
+  // приложения (тот же origin) + polling как fallback.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_KEY || e.key === null) {
+        processQueue();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [processQueue]);
   
   // Polling localStorage
   useEffect(() => {
     const interval = setInterval(() => {
       processQueue();
-    }, 150);
+    }, 500);
     
     return () => clearInterval(interval);
   }, [processQueue]);
@@ -171,18 +188,36 @@ export function NotificationPopover() {
     };
   }, [addNotification]);
   
+  // 🔧 Высота попапа = высота карточек + нижний отступ. Пока попап открыт,
+  // его прямоугольник перехватывает клики мыши — поэтому сжимаем его ровно
+  // под контент через OBR.popover.setHeight + ResizeObserver.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const h = Math.min(430, Math.max(140, el.offsetHeight + 28));
+      OBR.popover.setHeight(POPOVER_ID, h).catch(() => {});
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Закрываем popover когда пусто
   useEffect(() => {
     if (notifications.length === 0) {
       const closeTimeout = setTimeout(() => {
-        OBR.popover.close("cursed-hearts-notification");
-      }, 800);
+        OBR.popover.close(POPOVER_ID);
+      }, 600);
       return () => clearTimeout(closeTimeout);
     }
   }, [notifications.length]);
   
   return (
-    <div className="notification-container">
+    <div className="notification-container" ref={containerRef}>
       {notifications.map((notif, index) => (
         <NotificationCard 
           key={notif.id} 
