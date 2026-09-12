@@ -66,6 +66,9 @@ interface State {
   useManaAsHp: boolean;
   tx: number;
   ty: number;
+  sx: number;
+  sy: number;
+  name?: string;
   bw: number;
   bh: number;
   dead: boolean;
@@ -110,6 +113,8 @@ class TokenBarService {
   dispose(): void {
     if (this.animId !== null) cancelAnimationFrame(this.animId);
     this.animId = null;
+    for (const t of this.rebuildTimers.values()) window.clearTimeout(t);
+    this.rebuildTimers.clear();
     this.unsubItems?.();
     this.unsubItems = null;
     this.unsubScene?.();
@@ -127,8 +132,38 @@ class TokenBarService {
         if (!tok || !isImage(tok)) continue;
         st.tx = tok.position.x;
         st.ty = tok.position.y;
+        // 🔧 Токен изменил масштаб (растянули/сжали на сцене) — пересобираем
+        // бары и лейбл под новый размер, чтобы шрифт не остался прежним
+        const sx = Math.abs(Number(tok.scale?.x) || 1);
+        const sy = Math.abs(Number(tok.scale?.y) || 1);
+        if (Math.abs(sx - st.sx) > 0.01 || Math.abs(sy - st.sy) > 0.01) {
+          st.sx = sx;
+          st.sy = sy;
+          this.scheduleRebuild(tokenId);
+        }
       }
     });
+  }
+
+  // 🔧 Отложенная пересборка после изменения размера токена (debounce от шторма onChange)
+  private rebuildTimers = new Map<string, number>();
+
+  private scheduleRebuild(tokenId: string): void {
+    const existing = this.rebuildTimers.get(tokenId);
+    if (existing !== undefined) window.clearTimeout(existing);
+    const t = window.setTimeout(() => {
+      this.rebuildTimers.delete(tokenId);
+      const st = this.states.get(tokenId);
+      if (!st) return;
+      void this.createBars(
+        tokenId,
+        st.hp, st.maxHp,
+        st.mana, st.maxMana, st.useManaAsHp,
+        st.name,
+        st.rage, st.maxRage, st.hasRage
+      );
+    }, 250);
+    this.rebuildTimers.set(tokenId, t);
   }
 
   private calcLayout(tok: Image, useManaAsHp: boolean, hasRage: boolean): Layout {
@@ -171,6 +206,10 @@ class TokenBarService {
     if (!tokenId) return;
     try {
       if (!(await OBR.scene.isReady())) return;
+
+      // 🔧 Захватываем прежний state ДО removeBars: имя и параметры переживают пересборку
+      const prev = this.states.get(tokenId);
+      const resolvedName = name ?? prev?.name;
 
       const hp = Number(hpIn) || 0;
       const maxHp = Number(maxHpIn) || 1;
@@ -224,21 +263,22 @@ class TokenBarService {
       };
 
       // Name label above HP bar
-      // 🔧 Шрифт адаптивный: подбирается так, чтобы имя вписывалось в ширину бара
-      // (потолок — от высоты бара). Раньше был жёсткий fontSize(10) — это ~6% клетки,
-      // и длинное имя становилось нечитаемым. Слишком длинное имя обрезается с «…».
-      if (name && name.trim()) {
-        let clean = name.trim();
+      // 🔧 Размер шрифта привязан к МИРОВОЙ ширине токена (lay.tokenW), а НЕ к высоте
+      // бара: бар всегда тонкий (~6–8 юнитов независимо от размера токена), поэтому
+      // потолок от barH давал микроскопический текст на больших токенах.
+      // Шрифт масштабируется вместе с токеном; слишком длинное имя обрезается с «…».
+      if (resolvedName && resolvedName.trim()) {
+        let clean = resolvedName.trim();
         const charRatio = 0.58; // средняя ширина символа Arial от fontSize
-        const maxFont = Math.max(12, Math.round(lay.barH * 1.6));
+        const maxFont = Math.max(14, Math.round(lay.tokenW * 0.06));
         let font = Math.floor(lay.barW / (clean.length * charRatio));
-        font = Math.max(9, Math.min(maxFont, font));
+        font = Math.max(11, Math.min(maxFont, font));
         const maxChars = Math.max(3, Math.floor(lay.barW / (font * charRatio)));
         if (clean.length > maxChars) {
           clean = clean.slice(0, maxChars - 1).trimEnd() + "…";
         }
         const estW = clean.length * font * charRatio;
-        const labelY = Math.round(lay.hpY - font * 1.3 - 2);
+        const labelY = Math.round(lay.hpY - font * 1.2 - 4);
         const label = buildText()
           .position({ x: Math.round(tok.position.x - estW / 2), y: labelY })
           .plainText(clean)
@@ -305,6 +345,9 @@ class TokenBarService {
         hp, maxHp, mana, maxMana, useManaAsHp,
         rage, maxRage, hasRage,
         tx: tok.position.x, ty: tok.position.y,
+        sx: Math.abs(Number(tok.scale?.x) || 1),
+        sy: Math.abs(Number(tok.scale?.y) || 1),
+        name: resolvedName,
         bw: lay.barW, bh: lay.barH,
         dead, ids,
       });
