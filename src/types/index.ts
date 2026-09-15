@@ -226,6 +226,10 @@ export interface SpellAction {
   diceFormula?: string;
   bonuses?: RollBonus[];
   successThreshold?: number;
+  /** Доп. бонус к d20-броскам шага: произвольное число */
+  rollBonus?: number;
+  /** Доп. бонус к d20-броскам шага: характеристика персонажа */
+  rollBonusStat?: string;
   useThresholdFromContext?: string;
   
   resultTable?: TableResultEntry[];

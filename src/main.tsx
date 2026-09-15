@@ -6,8 +6,17 @@ import "./index.css";
 import { App } from "./App";
 import { diceService, DICE_BROADCAST_CHANNEL, onLocalDiceMessage, LOCAL_STORAGE_KEY } from "./services/diceService";
 import type { BroadcastMessage } from "./services/diceService";
+import { loadAssistantSettings } from "./utils/assistantSettings";
 
 const NOTIFICATION_POPOVER_ID = "cursed-hearts-notification";
+
+// Персональные фильтры уведомлений этого игрока
+function shouldShowNotification(msg: BroadcastMessage): boolean {
+  const ui = loadAssistantSettings();
+  if (!ui.showNotifications) return false;
+  if (msg.type === "rok-card" && !ui.visibleTabs.rok) return false;
+  return true;
+}
 
 // Добавляем сообщение в очередь localStorage
 function addToLocalQueue(msg: BroadcastMessage) {
@@ -79,6 +88,7 @@ OBR.onReady(async () => {
 
     // СЛУШАЕМ ЛОКАЛЬНЫЕ СОБЫТИЯ (когда Я бросаю кубик)
     onLocalDiceMessage((msg) => {
+      if (!shouldShowNotification(msg)) return;
       addToLocalQueue(msg);
       openNotificationPopover();
     });
@@ -86,6 +96,7 @@ OBR.onReady(async () => {
     // СЛУШАЕМ BROADCAST (когда ДРУГОЙ игрок бросает кубик)
     OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, async (event) => {
       const msg = event.data as BroadcastMessage;
+      if (!shouldShowNotification(msg)) return;
       addToLocalQueue(msg);
       openNotificationPopover();
     });

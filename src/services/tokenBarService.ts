@@ -69,6 +69,7 @@ interface State {
   sx: number;
   sy: number;
   name?: string;
+  tokenVisible: boolean;
   bw: number;
   bh: number;
   dead: boolean;
@@ -140,6 +141,24 @@ class TokenBarService {
           st.sx = sx;
           st.sy = sy;
           this.scheduleRebuild(tokenId);
+        }
+        // Скрытие токена: бары и лейбл обязаны исчезать вместе с ним,
+        // иначе спрятанный монстр палится висящей на сцене полоской HP
+        const vis = tok.visible !== false;
+        if (vis !== st.tokenVisible) {
+          st.tokenVisible = vis;
+          if (!vis) {
+            const all = Object.values(st.ids).filter(Boolean) as string[];
+            if (all.length > 0) {
+              OBR.scene.items
+                .updateItems(all, (it) => {
+                  for (const i of it) i.visible = false;
+                })
+                .catch(() => {});
+            }
+          } else {
+            this.scheduleRebuild(tokenId);
+          }
         }
       }
     });
@@ -224,6 +243,8 @@ class TokenBarService {
       if (!items.length) return;
       const tok = items[0];
       if (!isImage(tok)) return;
+      // Скрытый токен — бары создаются невидимыми
+      const tokenVisible = tok.visible !== false;
 
       const lay = this.calcLayout(tok as Image, useManaAsHp, hasRage);
       const dead = hp <= 0;
@@ -251,7 +272,7 @@ class TokenBarService {
           .attachedTo(tokenId)
           .layer("ATTACHMENT")
           .locked(true).disableHit(true)
-          .visible(vis)
+          .visible(vis && tokenVisible)
           .fillColor(color)
           .strokeColor(CFG.STROKE)
           .strokeWidth(noStroke ? 0 : 1)
@@ -277,10 +298,10 @@ class TokenBarService {
         if (clean.length > maxChars) {
           clean = clean.slice(0, maxChars - 1).trimEnd() + "…";
         }
-        const estW = clean.length * font * charRatio;
-        const labelY = Math.round(lay.hpY - font * 1.2 - 4);
+        // Левый угол над HP-баром, вплотную к нему (без наезда на токен)
+        const labelY = Math.round(lay.hpY - font * 1.15 - 2);
         const label = buildText()
-          .position({ x: Math.round(tok.position.x - estW / 2), y: labelY })
+          .position({ x: lay.barX, y: labelY })
           .plainText(clean)
           .fontSize(font)
           .fontFamily("Arial")
@@ -293,7 +314,7 @@ class TokenBarService {
           .height("AUTO")
           .layer("ATTACHMENT")
           .locked(true).disableHit(true)
-          .visible(!dead)
+          .visible(!dead && tokenVisible)
           .attachedTo(tokenId)
           .metadata({ [META]: { type: "label", role: "nameLabel", tokenId } })
           .build();
@@ -348,6 +369,7 @@ class TokenBarService {
         sx: Math.abs(Number(tok.scale?.x) || 1),
         sy: Math.abs(Number(tok.scale?.y) || 1),
         name: resolvedName,
+        tokenVisible,
         bw: lay.barW, bh: lay.barH,
         dead, ids,
       });
@@ -412,6 +434,7 @@ class TokenBarService {
     if (toUpdate.length === 0) return;
 
     const bw = st.bw;
+    const barVis = st.tokenVisible;
     try {
       await OBR.scene.items.updateItems(toUpdate, (sceneItems) => {
         for (const item of sceneItems) {
@@ -423,20 +446,20 @@ class TokenBarService {
             const barColor = isManaAsHpBar ? CFG.MANA : this.hpColor(hp, maxHp);
             item.width = Math.round(Math.max(0, bw * pct));
             item.style.fillColor = barColor;
-            item.visible = !dead && pct > 0;
+            item.visible = barVis && !dead && pct > 0;
           } else if (item.id === ids.hpBg) {
-            item.visible = true;
+            item.visible = barVis;
           } else if (item.id === ids.manaFill) {
             item.width = Math.round(Math.max(0, bw * manaPct));
-            item.visible = !dead && !useManaAsHp && manaPct > 0;
+            item.visible = barVis && !dead && !useManaAsHp && manaPct > 0;
           } else if (item.id === ids.manaBg) {
-            item.visible = !dead && !useManaAsHp;
+            item.visible = barVis && !dead && !useManaAsHp;
           } else if (item.id === ids.rageFill) {
             item.width = Math.round(Math.max(0, bw * ragePct));
             item.style.fillColor = ragePct > 0.5 ? CFG.RAGE_BRIGHT : CFG.RAGE;
-            item.visible = !dead && ragePct > 0;
+            item.visible = barVis && !dead && ragePct > 0;
           } else if (item.id === ids.rageBg) {
-            item.visible = !dead;
+            item.visible = barVis && !dead;
           }
         }
       });
@@ -457,7 +480,10 @@ class TokenBarService {
         try { await OBR.scene.items.deleteItems(knownIds); } catch { /* some may not exist */ }
       }
       // Fallback: remove any ATTACHMENT item with our metadata attached to this token
-      const items = await OBR.scene.items.getItems();
+      
+      const items = await OBR.scene.items.getItems(
+        (i) => i.attachedTo === tokenId && i.layer === "ATTACHMENT"
+      );
       const toDel = items.filter((i) => {
         if (i.attachedTo !== tokenId || i.layer !== "ATTACHMENT") return false;
         if (knownIds.includes(i.id)) return false;
@@ -525,7 +551,7 @@ class TokenBarService {
   }
 
   private tickPulse(): void {
-    if (this.frame % 3 !== 0) return;
+    if (this.frame % 20 !== 0) return;
     for (const [, st] of this.states) {
       if (!st.ids.hpFill || st.dead) continue;
       const pct = st.maxHp > 0 ? st.hp / st.maxHp : 0;

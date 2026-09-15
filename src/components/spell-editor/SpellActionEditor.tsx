@@ -251,6 +251,39 @@ function RollCheckFields({ action, update }: { action: SpellAction; update: (u: 
         bonuses={action.bonuses ?? []}
         onChange={(bonuses) => update({ bonuses })}
       />
+
+      {/* Доп. бонус к d20-броску: число или характеристика персонажа */}
+      <div className="border-t border-edge-bone/40 pt-2 space-y-2">
+        <Select
+          label="Доп. бонус к броску"
+          value={action.rollBonusStat ? action.rollBonusStat : ((action.rollBonus ?? 0) !== 0 ? '__num' : '')}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === '__num') update({ rollBonusStat: '', rollBonus: (action.rollBonus ?? 0) !== 0 ? action.rollBonus : 1 });
+            else if (v === '') update({ rollBonusStat: '', rollBonus: 0 });
+            else update({ rollBonusStat: v, rollBonus: 0 });
+          }}
+          options={[
+            { value: '', label: '— Нет —' },
+            { value: '__num', label: '🔢 Произвольное число' },
+            { value: 'physicalPower', label: '⚔ Физ. сила' },
+            { value: 'dexterity', label: '💨 Ловкость' },
+            { value: 'vitality', label: '❤ Живучесть' },
+            { value: 'intelligence', label: '🧠 Интеллект' },
+            { value: 'charisma', label: '👑 Харизма' },
+            { value: 'initiative', label: '⚡ Инициатива' },
+          ]}
+        />
+        {!action.rollBonusStat && (action.rollBonus ?? 0) !== 0 && (
+          <NumberStepper
+            label="Значение бонуса"
+            value={action.rollBonus ?? 0}
+            onChange={(v) => update({ rollBonus: v })}
+            min={-30}
+            max={50}
+          />
+        )}
+      </div>
     </div>
   );
 }

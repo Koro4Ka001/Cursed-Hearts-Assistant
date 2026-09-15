@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
-import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState, ProgressBar } from '../ui';
+import { Button, Section, Select, NumberStepper, Checkbox, DiceResultDisplay, EmptyState, ProgressBar, ModifierToggle } from '../ui';
 import { isHit } from '../../utils/dice';
 import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
 import { executeWeaponEffects } from '../../utils/weaponEffects';
-import type { DiceRollResult, DamageType, DamageCategory } from '../../types';
+import { BonusDamageField } from '../BonusDamageField';
+import type { DiceRollResult, DamageType, DamageCategory, RollModifier } from '../../types';
 import { DAMAGE_TYPE_NAMES, PHYSICAL_DAMAGE_TYPES, MAGICAL_DAMAGE_TYPES } from '../../types';
 
 export function CombatTab() {
@@ -19,6 +20,8 @@ export function CombatTab() {
   
   const [selectedMeleeWeaponId, setSelectedMeleeWeaponId] = useState<string>('');
   const [meleeTargetCount, setMeleeTargetCount] = useState(1);
+  // Модификатор броска попадания (одноразовый): Помеха/Преимущество
+  const [meleeModifier, setMeleeModifier] = useState<RollModifier>('normal');
   const [meleeAttackResults, setMeleeAttackResults] = useState<DiceRollResult[]>([]);
   const [meleeDamageResults, setMeleeDamageResults] = useState<DiceRollResult[]>([]);
   const [isMeleeAttacking, setIsMeleeAttacking] = useState(false);
@@ -27,6 +30,7 @@ export function CombatTab() {
   const [selectedRangedWeaponId, setSelectedRangedWeaponId] = useState<string>('');
   const [selectedAmmoId, setSelectedAmmoId] = useState<string>('');
   const [rangedShotCount, setRangedShotCount] = useState(1);
+  const [rangedModifier, setRangedModifier] = useState<RollModifier>('normal');
   const [rangedDamageResults, setRangedDamageResults] = useState<DiceRollResult[]>([]);
   const [isRangedAttacking, setIsRangedAttacking] = useState(false);
   const [rangedLog, setRangedLog] = useState<string[]>([]);
@@ -80,22 +84,29 @@ export function CombatTab() {
     // Берём свежие данные юнита (могли измениться от rage effects)
     const freshUnit = useGameStore.getState().units.find(u => u.id === unit.id) ?? unit;
     console.log('[Combat] Fresh unit stats:', JSON.stringify(freshUnit.stats), 'proficiencies:', JSON.stringify(freshUnit.proficiencies));
+    let meleeBonusDmg = 0;
     try {
+      const meleeMod = meleeModifier;
+      setMeleeModifier('normal');
       for (let t = 0; t < meleeTargetCount; t++) {
         if (meleeTargetCount > 1) log.push(`--- Цель ${t + 1} ---`);
         
         const profBonus = proficiencies[selectedMeleeWeapon.proficiencyType] ?? 0;
         const hitBonus = profBonus + (selectedMeleeWeapon.hitBonus ?? 0);
         const hitFormula = hitBonus >= 0 ? `d20+${hitBonus}` : `d20${hitBonus}`;
-        const hitResult = await diceService.roll(hitFormula, `Попадание ${selectedMeleeWeapon.name}`, freshUnit.shortName ?? freshUnit.name, 'normal');
+        // Заряд сгорает на первой попытке — даже при промахе
+        const pendingBonus = t === 0 ? useGameStore.getState().consumePendingBonusDamage() : null;
+        const hitResult = await diceService.roll(hitFormula, `Попадание ${selectedMeleeWeapon.name}`, freshUnit.shortName ?? freshUnit.name, t === 0 ? meleeMod : 'normal');
         atkRes.push(hitResult);
         
         if (hitResult.isCritFail) {
           log.push(`💀 [${hitResult.rawD20}] = КРИТ ПРОМАХ!`);
+          if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (промах)`);
           continue;
         }
         if (!isHit(hitResult)) {
           log.push(`❌ [${hitResult.rawD20}]+${hitBonus}=${hitResult.total} — Промах`);
+          if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (промах)`);
           continue;
         }
         
@@ -117,6 +128,17 @@ export function CombatTab() {
           dmgRes.push(extra);
           log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? ''}`);
         }
+
+        // Заряженный доп. урон — списан на первой попытке
+        if (pendingBonus) {
+          const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
+          const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, freshUnit.shortName ?? freshUnit.name, isCrit);
+          dmgRes.push(bDmg);
+          meleeBonusDmg += bDmg.total;
+          log.push(`    💠 +${bDmg.total} ${bLabel} (заряженный урон)`);
+          addCombatLog(freshUnit.shortName ?? freshUnit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+          await diceService.broadcastWeaponEffect(freshUnit.shortName ?? freshUnit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+        }
         
         if (selectedMeleeWeapon.onHitActions?.length) {
           console.log('[WeaponFX] Melee onHitActions:', JSON.stringify(selectedMeleeWeapon.onHitActions, null, 2));
@@ -130,9 +152,10 @@ export function CombatTab() {
               hitTotal: hitResult.total,
               isCrit: !!isCrit,
               isCritFail: false,
-              damage: dmg.total,
+              damage: dmg.total + meleeBonusDmg,
               weaponName: selectedMeleeWeapon.name,
               unitName: freshUnit.shortName ?? freshUnit.name,
+              unitId: freshUnit.id,
               targetIndex: t,
               shotIndex: 0,
               values: {},
@@ -170,15 +193,20 @@ export function CombatTab() {
     if (ammoCur < totalNeeded) { await diceService.showNotification(`❌ Недостаточно ${selectedAmmo.name}!`); return; }
     setIsRangedAttacking(true); setRangedDamageResults([]); setRangedLog([]);
     const dmgRes: DiceRollResult[] = []; const log: string[] = [];
+    const rangedMod = rangedModifier;
+    setRangedModifier('normal');
     try {
       for (let s = 0; s < rangedShotCount; s++) {
         if (rangedShotCount > 1) log.push(`--- Выстрел ${s + 1} ---`);
         for (let a = 0; a < arrowsFlying; a++) {
           const hitBonus = (proficiencies.bows ?? 0) + (selectedRangedWeapon.hitBonus ?? 0);
           const hitFormula = hitBonus >= 0 ? `d20+${hitBonus}` : `d20${hitBonus}`;
-          const hit = await diceService.roll(hitFormula, `Стрела ${a + 1}`, unit.shortName ?? unit.name, 'normal');
-          if (hit.isCritFail) { log.push(`💀 Стрела ${a + 1}: [${hit.rawD20}] = КРИТ ПРОМАХ!`); continue; }
-          if (!isHit(hit)) { log.push(`❌ Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Промах`); continue; }
+          // Заряд сгорает на первой стреле — даже при промахе
+          const pendingBonus = (s === 0 && a === 0) ? useGameStore.getState().consumePendingBonusDamage() : null;
+          const burnLine = `    💠 Заряженный урон сгорел (промах)`;
+          const hit = await diceService.roll(hitFormula, `Стрела ${a + 1}`, unit.shortName ?? unit.name, s === 0 && a === 0 ? rangedMod : 'normal');
+          if (hit.isCritFail) { log.push(`💀 Стрела ${a + 1}: [${hit.rawD20}] = КРИТ ПРОМАХ!`); if (pendingBonus) log.push(burnLine); continue; }
+          if (!isHit(hit)) { log.push(`❌ Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Промах`); if (pendingBonus) log.push(burnLine); continue; }
           
           let shotDamage = 0;
           
@@ -197,7 +225,17 @@ export function CombatTab() {
               const extra = await diceService.rollDamage(selectedAmmo.extraDamageFormula, `Доп. урон`, unit.shortName ?? unit.name, hit.isCrit);
               dmgRes.push(extra); log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? ''}`);
             }
-          } else { log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); }
+
+            // Заряженный доп. урон — списан на первой стреле
+            if (pendingBonus) {
+              const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
+              const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, unit.shortName ?? unit.name, hit.isCrit);
+              dmgRes.push(bDmg); shotDamage += bDmg.total;
+              log.push(`    💠 +${bDmg.total} ${bLabel} (заряженный урон)`);
+              addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+              await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+            }
+          } else { log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (попадание без урона)`); }
           
           if (selectedRangedWeapon.onHitActions?.length) {
             console.log('[WeaponFX] Ranged weapon onHitActions:', selectedRangedWeapon.onHitActions.length, 'hitTotal:', hit.total);
@@ -212,6 +250,7 @@ export function CombatTab() {
                 damage: shotDamage,
                 weaponName: selectedRangedWeapon.name,
                 unitName: unit.shortName ?? unit.name,
+                unitId: unit.id,
                 targetIndex: 0,
                 shotIndex: s,
                 values: {},
@@ -238,6 +277,7 @@ export function CombatTab() {
                 damage: shotDamage,
                 weaponName: selectedAmmo.name,
                 unitName: unit.shortName ?? unit.name,
+                unitId: unit.id,
                 targetIndex: 0,
                 shotIndex: s,
                 values: {},
@@ -350,6 +390,9 @@ export function CombatTab() {
         </Section>
       )}
       
+      {/* Заряженный доп. урон к следующей атаке/касту с уроном */}
+      <BonusDamageField />
+
       <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true}>
         {meleeWeapons.length === 0 ? <p className="text-faded text-sm">Добавьте оружие ближнего боя в настройках</p> : (
           <div className="space-y-3">
@@ -363,6 +406,7 @@ export function CombatTab() {
               </div>
             )}
             <NumberStepper label="Количество целей" value={meleeTargetCount} onChange={setMeleeTargetCount} min={1} max={10} />
+            <ModifierToggle value={meleeModifier} onChange={setMeleeModifier} />
             <Button variant="danger" onClick={handleMeleeAttack} loading={isMeleeAttacking} disabled={!selectedMeleeWeapon} className="w-full text-sm py-3">⚔️ АТАКОВАТЬ</Button>
             
             {meleeLog.length > 0 && (
@@ -384,6 +428,7 @@ export function CombatTab() {
             <Select label="Боеприпасы" value={selectedAmmo?.id ?? ''} onChange={e => setSelectedAmmoId(e.target.value)} options={ammoResources.map(r => ({ value: r.id, label: `${r.icon ?? '🏹'} ${r.name} (${r.current ?? 0}/${r.max ?? 0}) — ${r.damageFormula ?? 'нет урона'}${(r.onHitActions?.length ?? 0) > 0 ? ' ⚡' : ''}` }))} />
             {selectedRangedWeapon && selectedAmmo && <div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone"><div>🏹 {selectedRangedWeapon.name}: +{(selectedRangedWeapon.hitBonus ?? 0) + (proficiencies.bows ?? 0)} к попаданию</div>{(selectedRangedWeapon.multishot ?? 1) > 1 && <div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел</div>}<div className="mt-1">🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType && (DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? selectedAmmo.damageType)}</div>{((selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)) > 0 && <div className="text-purple-400 mt-1">⚡ Эффекты: {(selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)} шагов</div>}</div>}
             <NumberStepper label="Количество выстрелов" value={rangedShotCount} onChange={setRangedShotCount} min={1} max={10} />
+            <ModifierToggle value={rangedModifier} onChange={setRangedModifier} />
             <Button variant="danger" onClick={handleRangedAttack} loading={isRangedAttacking} disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)} className="w-full text-sm py-3">🏹 ВЫСТРЕЛИТЬ</Button>
             {rangedLog.length > 0 && <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">{rangedLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}</div>}
             {rangedDamageResults.length > 0 && <div className="space-y-2"><div className="text-xs text-faded uppercase">Урон:</div><DiceResultDisplay results={rangedDamageResults} /></div>}

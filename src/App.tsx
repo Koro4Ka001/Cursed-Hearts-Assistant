@@ -19,6 +19,7 @@ import { NotesTab } from './components/tabs/NotesTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner, UndoButton } from './components/ui';
 import { cn } from './utils/cn';
+import { loadAssistantSettings, ASSISTANT_UI_EVENT, type AssistantUISettings } from './utils/assistantSettings';
 
 // ═══════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -65,6 +66,12 @@ const VIEW_SIZES: Record<ViewMode, { width: number; height: number }> = {
   medium: { width: 400, height: 700 },
   large: { width: 800, height: 900 }
 };
+
+// Вкладки, включённые этим игроком в «Настройки ассистента» (персонально)
+function getVisibleTabs(): typeof TABS {
+  const ui = loadAssistantSettings();
+  return TABS.filter(t => t.id === 'settings' || ui.visibleTabs[t.id]);
+}
 
 // ═══════════════════════════════════════════════════════════════
 // TAB CONTENT
@@ -181,6 +188,9 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
   const combatLog = useGameStore(s => s.combatLog);
   const undo = useGameStore(s => s.undo);
   const undoHistory = useGameStore(s => s.undoHistory);
+  // Персональный набор вкладок: активная вкладка не может быть выключенной
+  const visibleTabs = getVisibleTabs();
+  const effectiveTab = visibleTabs.some(t => t.id === activeTab) ? activeTab : (visibleTabs[0]?.id ?? 'combat');
 
   return (
     <div className="large-frame">
@@ -226,16 +236,16 @@ function LargeView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
 
         <div className="large-main">
           <div className="large-tabs">
-            {TABS.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={cn('large-tab', activeTab === tab.id ? 'large-tab-active' : 'large-tab-inactive')}>
+            {visibleTabs.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={cn('large-tab', effectiveTab === tab.id ? 'large-tab-active' : 'large-tab-inactive')}>
                 <span className="text-lg">{tab.icon}</span>
                 <span className="text-[10px] font-cinzel uppercase tracking-wider">{tab.label}</span>
               </button>
             ))}
           </div>
-          <div className="large-tab-content" key={activeTab}>
+          <div className="large-tab-content" key={effectiveTab}>
             <div className="tab-content-enter h-full">
-              <TabContent activeTab={activeTab} />
+              <TabContent activeTab={effectiveTab} />
             </div>
           </div>
         </div>
@@ -254,6 +264,9 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
   const connections = useGameStore(s => s.connections);
   const googleDocsUrl = useGameStore(s => s.settings.googleDocsUrl);
   const activeEffect = useGameStore(s => s.activeEffect);
+  // Персональный набор вкладок: активная вкладка не может быть выключенной
+  const visibleTabs = getVisibleTabs();
+  const effectiveTab = visibleTabs.some(t => t.id === activeTab) ? activeTab : (visibleTabs[0]?.id ?? 'combat');
   const undo = useGameStore(s => s.undo);
   const undoHistory = useGameStore(s => s.undoHistory);
 
@@ -305,13 +318,13 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
         <StatBars />
 
         <div className="flex border-b border-gold-dark/30 bg-obsidian/80 shrink-0 backdrop-blur-sm">
-          {TABS.map(tab => (
+          {visibleTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
                 'flex-1 py-2.5 transition-all min-w-0 flex flex-col items-center justify-center gap-0.5 tab-rune relative',
-                activeTab === tab.id ? 'tab-active' : 'tab-inactive'
+                effectiveTab === tab.id ? 'tab-active' : 'tab-inactive'
               )}
               title={tab.label}
             >
@@ -321,9 +334,9 @@ function MediumView({ onChangeMode }: { onChangeMode: (m: ViewMode) => void }) {
           ))}
         </div>
 
-        <div className="flex-1 overflow-hidden" key={activeTab}>
+        <div className="flex-1 overflow-hidden" key={effectiveTab}>
           <div className="tab-content-enter h-full">
-            <TabContent activeTab={activeTab} />
+            <TabContent activeTab={effectiveTab} />
           </div>
         </div>
 
@@ -350,6 +363,27 @@ export function App() {
   const initRef = useRef(false);
   const rawIsGM = useIsGM();
   const [isGM, setIsGM] = useState<boolean | null>(null);
+  // Персональные настройки интерфейса (вкладки/бары/уведомления)
+  const [uiSettings, setUiSettings] = useState<AssistantUISettings>(() => loadAssistantSettings());
+
+  // Персональные бары: при выключении — убрать бары этого клиента
+  useEffect(() => {
+    if (isLoading) return;
+    try {
+      if (!uiSettings.showTokenBars) tokenBarService.removeAllBars();
+      else {
+        const state = useGameStore.getState();
+        if (state.settings.showTokenBars ?? true) void tokenBarService.syncAllBars(state.units);
+      }
+    } catch { /* ignore */ }
+  }, [uiSettings.showTokenBars, isLoading]);
+
+  // Синхронизация вкладок при изменении настроек
+  useEffect(() => {
+    const handler = () => setUiSettings(loadAssistantSettings());
+    window.addEventListener(ASSISTANT_UI_EVENT, handler);
+    return () => window.removeEventListener(ASSISTANT_UI_EVENT, handler);
+  }, []);
 
   // Sync from hook, with safety timeout
   useEffect(() => {
@@ -394,7 +428,7 @@ export function App() {
         try {
           await tokenBarService.initialize();
           const state = useGameStore.getState();
-          if (state.settings.showTokenBars ?? true) {
+          if ((state.settings.showTokenBars ?? true) && loadAssistantSettings().showTokenBars) {
             await tokenBarService.syncAllBars(state.units);
           }
         } catch (e) {
@@ -413,7 +447,7 @@ export function App() {
               await useGameStore.getState().pullAllFromDocs();
               
               const freshState = useGameStore.getState();
-              if (freshState.settings.showTokenBars ?? true) {
+              if ((freshState.settings.showTokenBars ?? true) && loadAssistantSettings().showTokenBars) {
                 await tokenBarService.syncAllBars(freshState.units);
               }
             }

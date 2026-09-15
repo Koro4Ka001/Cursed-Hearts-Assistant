@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { 
   Button, Section, Select, Input, NumberStepper, 
-  EmptyState, DiceResultDisplay 
+  EmptyState, DiceResultDisplay, ModifierToggle 
 } from '../ui';
 import { ActionEditorModal } from '../action-editor';
 import { spellExecutor, interpolateMessage } from '../../services/spellExecutor';
@@ -15,7 +15,8 @@ import type {
   CustomActionV2, 
   DiceRollResult, 
   CastContext,
-  ActionCost
+  ActionCost,
+  RollModifier
 } from '../../types';
 import { 
   isCustomActionV2, 
@@ -79,6 +80,9 @@ export function ActionsTab() {
   const [actionResults, setActionResults] = useState<DiceRollResult[]>([]);
   const [actionLog, setActionLog] = useState<string[]>([]);
   const [lastContext, setLastContext] = useState<CastContext | null>(null);
+  // Модификатор следующего броска (Помеха/Преимущество) — одноразовый
+  const [pendingModifier, setPendingModifier] = useState<RollModifier>('normal');
+  // Модификатор следующего броска (Помеха/Преимущество) — одноразовый
   
   const [showEditor, setShowEditor] = useState(false);
   const [editingAction, setEditingAction] = useState<CustomAction | CustomActionV2 | null>(null);
@@ -191,8 +195,10 @@ export function ActionsTab() {
       }
     }
     
-    // Используем модификатор из самого действия
-    const useModifier = action.defaultRollModifier;
+    // Кнопки Помеха/Преимущество важнее дефолта действия и сбрасываются после броска
+    const pending = pendingModifier;
+    const useModifier = pending !== 'normal' ? pending : action.defaultRollModifier;
+    if (pending !== 'normal') setPendingModifier('normal');
     
     try {
       // Создаём фейковый SpellV2 для исполнителя
@@ -396,51 +402,15 @@ export function ActionsTab() {
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       
-      {/* Быстрые броски */}
-      <Section title="Быстрые броски" icon="🎲">
-        <div className="grid grid-cols-3 gap-2">
-          <Button
-            variant="secondary"
-            onClick={async () => {
-              setIsExecuting(true);
-              const result = await diceService.roll('d20', 'd20', unit.shortName ?? unit.name, 'normal');
-              setActionResults([result]);
-              setActionLog([`🎲 d20: [${result.rawD20}] = ${result.total}`]);
-              setIsExecuting(false);
-            }}
-            loading={isExecuting}
-          >
-            d20
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={async () => {
-              setIsExecuting(true);
-              const result = await diceService.roll('d12', 'd12', unit.shortName ?? unit.name);
-              setActionResults([result]);
-              setActionLog([`🎲 d12: [${result.rolls.join(', ')}] = ${result.total}`]);
-              setIsExecuting(false);
-            }}
-            loading={isExecuting}
-          >
-            d12
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={async () => {
-              setIsExecuting(true);
-              const result = await diceService.roll('d6', 'd6', unit.shortName ?? unit.name);
-              setActionResults([result]);
-              setActionLog([`🎲 d6: [${result.rolls.join(', ')}] = ${result.total}`]);
-              setIsExecuting(false);
-            }}
-            loading={isExecuting}
-          >
-            d6
-          </Button>
+      {/* Модификатор броска: одноразовый, снимается после первого броска */}
+      <Section title="Модификатор броска" icon="🎯">
+        <ModifierToggle value={pendingModifier} onChange={setPendingModifier} />
+        <div className="text-[10px] text-ancient italic mt-1.5">
+          {pendingModifier === 'normal'
+            ? 'Применится к первому броску действия'
+            : 'Сработает на первый бросок и снимется сам'}
         </div>
       </Section>
-      
       {/* Кастомные действия */}
       <Section title="Действия" icon="⚡">
         {customActions.length === 0 ? (

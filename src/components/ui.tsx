@@ -2,7 +2,7 @@
 import React, { useState, useCallback, Component, type ReactNode, type ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../utils/cn';
-import type { DiceRollResult } from '../types';
+import type { DiceRollResult, RollModifier } from '../types';
 
 // ════════════════════════════════════════════════════════════
 // ERROR BOUNDARY
@@ -940,5 +940,52 @@ export function UndoButton({ onClick, description, count = 0, disabled = false, 
       ↩️
       {count > 0 && <span>({count})</span>}
     </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// MODIFIER TOGGLE — Помеха / Преимущество (на бросок)
+// ════════════════════════════════════════════════════════════
+
+interface ModifierToggleProps {
+  value: RollModifier;
+  onChange: (m: RollModifier) => void;
+  caption?: string;
+  className?: string;
+}
+
+export function ModifierToggle({ value, onChange, caption, className }: ModifierToggleProps) {
+  return (
+    <div className={cn('space-y-1', className)}>
+      {caption && (
+        <div className="font-cinzel text-[10px] text-faded uppercase tracking-widest truncate">{caption}</div>
+      )}
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(value === 'disadvantage' ? 'normal' : 'disadvantage')}
+          className={cn(
+            'flex-1 py-1.5 px-2 rounded-md border text-[11px] font-cinzel uppercase tracking-wider transition-all',
+            value === 'disadvantage'
+              ? 'bg-blood/25 border-blood text-blood-bright'
+              : 'bg-obsidian border-edge-bone text-faded hover:text-bone'
+          )}
+        >
+          💨 Помеха
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(value === 'advantage' ? 'normal' : 'advantage')}
+          className={cn(
+            'flex-1 py-1.5 px-2 rounded-md border text-[11px] font-cinzel uppercase tracking-wider transition-all',
+            value === 'advantage'
+              ? 'bg-gold-dark/20 border-gold text-gold'
+              : 'bg-obsidian border-edge-bone text-faded hover:text-bone'
+          )}
+        >
+          🎯 Преимущество
+        </button>
+      </div>
+    </div>
   );
 }

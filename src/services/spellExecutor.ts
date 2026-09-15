@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { ELEMENT_ICONS } from '../constants/elements';
 import { DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../types';
+import { rebalance } from '../utils/entropy';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
@@ -18,6 +19,9 @@ export interface ExecuteSpellOptions {
   caster: Unit;
   targetCount?: number;
   rollModifier?: RollModifier;
+  // Раздельные модификаторы: на бросок каста и на бросок попадания
+  castModifier?: RollModifier;
+  hitModifier?: RollModifier;
   onStepComplete?: (stepId: string, context: CastContext) => void;
   onLog?: (message: string) => void;
 }
@@ -74,7 +78,8 @@ function rollDice(formula: string): { formula: string; rolls: number[]; bonus: n
 
   for (const { count, sides, sign } of dice) {
     for (let i = 0; i < count; i++) {
-      rolls.push((Math.floor(Math.random() * sides) + 1) * sign);
+      const raw = Math.floor(Math.random() * sides) + 1;
+      rolls.push((sides === 20 ? rebalance(raw) : raw) * sign);
     }
   }
 
@@ -117,8 +122,8 @@ function rollWithModifier(formula: string, modifier: RollModifier = 'normal'): {
   }
 
   // Advantage/disadvantage: roll d20 separately, then roll remaining dice normally
-  const roll1 = Math.floor(Math.random() * 20) + 1;
-  const roll2 = Math.floor(Math.random() * 20) + 1;
+  const roll1 = rebalance(Math.floor(Math.random() * 20) + 1);
+  const roll2 = rebalance(Math.floor(Math.random() * 20) + 1);
   const chosen = modifier === 'advantage' ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
 
   const parsed = parseFormula(formula);
@@ -180,6 +185,16 @@ function calculateBonus(unit: Unit, bonuses: SpellAction['bonuses'], spellElemen
   return total;
 }
 
+// Дополнительный бонус шага к d20-броскам (число и/или характеристика персонажа)
+function resolveRollBonus(caster: Unit, action: SpellAction): number {
+  let extra = action.rollBonus ?? 0;
+  if (action.rollBonusStat) {
+    const key = action.rollBonusStat as keyof Unit['stats'];
+    extra += caster.stats?.[key] ?? 0;
+  }
+  return extra;
+}
+
 export function interpolateMessage(template: string, context: CastContext): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => {
     const value = context.values[key];
@@ -224,7 +239,7 @@ const stepExecutors: Record<string, StepExecutor> = {
   
   // ⚔️ roll_attack: Попадание (Крит = удвоение кубов)
   roll_attack: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
+    const bonus = calculateBonus(caster, action.bonuses, spell.elements) + resolveRollBonus(caster, action);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
     const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     
@@ -256,7 +271,7 @@ const stepExecutors: Record<string, StepExecutor> = {
 
   // ✨ roll_cast: Каст (Крит = половина маны)
   roll_cast: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
+    const bonus = calculateBonus(caster, action.bonuses, spell.elements) + resolveRollBonus(caster, action);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
     const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     
@@ -288,7 +303,7 @@ const stepExecutors: Record<string, StepExecutor> = {
 
   // 🎯 roll_check (Старая)
   roll_check: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
+    const bonus = calculateBonus(caster, action.bonuses, spell.elements) + resolveRollBonus(caster, action);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
     const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     
@@ -580,7 +595,7 @@ function checkStepCondition(condition: any, context: CastContext): boolean {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function executeSpell(options: ExecuteSpellOptions): Promise<ExecuteSpellResult> {
-  const { spell, caster, targetCount = 1, rollModifier = 'normal', onStepComplete, onLog } = options;
+  const { spell, caster, targetCount = 1, rollModifier = 'normal', castModifier, hitModifier, onStepComplete, onLog } = options;
   const context = createInitialContext(spell, caster, targetCount);
   const sortedActions = [...spell.actions].sort((a, b) => a.order - b.order);
   const actionMap = new Map<string, number>();
@@ -621,6 +636,8 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
   let currentIndex = 0;
   let iterations = 0;
   let d20ModifierUsed = false;
+  let castModifierUsed = false;
+  let hitModifierUsed = false;
   const MAX_ITERATIONS = 100;
   
   while (currentIndex < sortedActions.length && !context.stopped && iterations < MAX_ITERATIONS) {
@@ -638,11 +655,22 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
     const executor = stepExecutors[action.type];
     let nextStepId: string | null = null;
     if (executor) {
-      // Преимущество/помеха применяем к первому d20-броску цепочки,
-      // а не просто к первому шагу (который может быть не броском d20)
-      const isD20Roll = action.type === 'roll_attack' || action.type === 'roll_cast' || action.type === 'roll_check';
-      const useModifier = !d20ModifierUsed && isD20Roll ? rollModifier : 'normal';
-      if (isD20Roll) d20ModifierUsed = true;
+      // Модификаторы: каст и попадание — раздельно (каждый срабатывает один раз),
+      // общий rollModifier — на первый d20-бросок цепочки
+      const isCastRoll = action.type === 'roll_cast';
+      const isAttackRoll = action.type === 'roll_attack';
+      const isCheckRoll = action.type === 'roll_check';
+      let useModifier: RollModifier = 'normal';
+      if (isCastRoll && !castModifierUsed && castModifier && castModifier !== 'normal') {
+        useModifier = castModifier;
+        castModifierUsed = true;
+      } else if (isAttackRoll && !hitModifierUsed && hitModifier && hitModifier !== 'normal') {
+        useModifier = hitModifier;
+        hitModifierUsed = true;
+      } else if (isCheckRoll && !d20ModifierUsed && rollModifier !== 'normal') {
+        useModifier = rollModifier;
+        d20ModifierUsed = true;
+      }
       nextStepId = executor(action, context, spell, caster, useModifier);
     } else {
       context.log.push(`⚠️ Неизвестный тип шага: ${action.type}`);

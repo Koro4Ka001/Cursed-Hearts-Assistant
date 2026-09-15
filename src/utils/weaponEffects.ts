@@ -1,5 +1,7 @@
 // src/utils/weaponEffects.ts
 import type { SpellAction } from '../types';
+import { rollFormula } from '../services/diceService';
+import { useGameStore } from '../stores/useGameStore';
 
 /**
  * Контекст для выполнения оружейных эффектов.
@@ -14,6 +16,8 @@ export interface WeaponEffectContext {
   damage: number;
   weaponName: string;
   unitName: string;
+  /** id юнита-владельца оружия (для шагов modify_resource) */
+  unitId?: string;
   targetIndex: number;
   shotIndex: number;
   values: Record<string, unknown>;
@@ -76,6 +80,81 @@ export function executeWeaponEffects(
           } else {
             ctx.values[action.setKey] = action.setValue;
           }
+        }
+        currentIndex++;
+        break;
+      }
+
+      case 'roll_dice':
+      case 'roll_damage': {
+        const total = rollFormula(action.diceFormula ?? 'd6');
+        const key = action.saveResultAs ?? 'lastRoll';
+        ctx.values[key] = total;
+        ctx.values['lastRoll'] = total;
+        const msg = `🎲 ${action.label || 'Бросок'}: ${total}`;
+        ctx.log.push(msg);
+        addCombatLog(ctx.unitName, ctx.weaponName, msg);
+        currentIndex++;
+        break;
+      }
+
+      case 'damage_tiers': {
+        const roll = Number(ctx.values['lastRoll'] ?? ctx.hitRoll ?? 0);
+        const tier = (action.damageTiers ?? []).find(t => roll >= t.minRoll && roll <= t.maxRoll);
+        if (tier) {
+          const total = rollFormula(tier.formula);
+          const key = action.saveResultAs ?? 'tierDamage';
+          ctx.values[key] = total;
+          ctx.values['lastDamage'] = total;
+          const msg = `🎯 ${action.label || 'Ступень'}: прокидка ${roll} → ${total}`;
+          ctx.log.push(msg);
+          addCombatLog(ctx.unitName, ctx.weaponName, msg);
+        }
+        currentIndex++;
+        break;
+      }
+
+      case 'apply_damage': {
+        const total = rollFormula(action.damageFormula ?? '0');
+        ctx.values['lastDamage'] = total;
+        const msg = `💥 ${action.label || 'Урон'}: ${total} — примените к цели вручную`;
+        ctx.log.push(msg);
+        addCombatLog(ctx.unitName, ctx.weaponName, msg);
+        currentIndex++;
+        break;
+      }
+
+      case 'modify_resource': {
+        const store = useGameStore.getState();
+        const unit = ctx.unitId ? store.units.find(u => u.id === ctx.unitId) : undefined;
+        if (!unit) { currentIndex++; break; }
+
+        const amount = action.resourceAmountFormula
+          ? rollFormula(action.resourceAmountFormula)
+          : Number(action.resourceAmount ?? 0);
+        const spend = action.resourceOperation !== 'restore';
+
+        try {
+          if (action.resourceType === 'mana') {
+            if (spend) void store.spendMana(unit.id, amount);
+            else void store.setMana(unit.id, unit.mana.current + amount);
+          } else if (action.resourceType === 'health') {
+            if (spend) void store.takeDamage(unit.id, amount); else void store.heal(unit.id, amount);
+          } else if (action.resourceType === 'rage') {
+            if (spend) void store.spendRage(unit.id, amount); else void store.addRage(unit.id, amount);
+          } else if (action.resourceType === 'resource' && action.resourceId) {
+            if (spend) void store.spendResource(unit.id, action.resourceId, amount);
+            else {
+              const res = unit.resources.find(r => r.id === action.resourceId);
+              if (res) void store.setResource(unit.id, action.resourceId, res.current + amount);
+            }
+          }
+          const sign = spend ? '−' : '+';
+          const msg = `${spend ? '🔻' : '🔺'} ${action.label || 'Ресурс'}: ${sign}${amount}`;
+          ctx.log.push(msg);
+          addCombatLog(ctx.unitName, ctx.weaponName, msg);
+        } catch {
+          // ресурс недоступен — шаг пропускается без падения цепочки
         }
         currentIndex++;
         break;

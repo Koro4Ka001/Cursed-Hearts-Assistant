@@ -2,9 +2,16 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Unit, AppSettings, RollModifier, ElementModifier, RageEffect } from '../types';
+import type { Unit, AppSettings, RollModifier, ElementModifier, RageEffect, DamageType } from '../types';
 import { tokenBarService } from '../services/tokenBarService';
 import { docsService } from '../services/docsService';
+import { loadAssistantSettings } from '../utils/assistantSettings';
+
+/** Заряженный урон к следующей атаке/касту с уроном */
+export interface PendingBonusDamage {
+  formula: string;
+  damageType: DamageType;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ГЕНЕРАТОР ID
@@ -163,6 +170,12 @@ interface GameState {
   nextRollModifier: RollModifier;
   undoHistory: UndoEntry[];
   connections: Connections;
+
+  /** Заряженный доп. урон к следующей атаке (формула/число + тип) */
+  pendingBonusDamage: PendingBonusDamage | null;
+  setPendingBonusDamage: (b: PendingBonusDamage | null) => void;
+  /** Возвращает заряженный урон и очищает поле (одноразовое использование) */
+  consumePendingBonusDamage: () => PendingBonusDamage | null;
   
   addUnit: () => void;
   updateUnit: (id: string, updates: Partial<Unit>) => void;
@@ -210,7 +223,8 @@ interface GameState {
 // ═══════════════════════════════════════════════════════════════
 
 async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
-  if (!(settings.showTokenBars ?? true) || !unit.owlbearTokenId) return;
+  // Общий флаг (Google Docs) + персональный флаг этого игрока (localStorage)
+  if (!(settings.showTokenBars ?? true) || !loadAssistantSettings().showTokenBars || !unit.owlbearTokenId) return;
 
   // 🔧 Бары обновляются для всех юнитов (игроков и зарегистрированных сущностей).
   // Прежний фильтр isMonster блокировал ВСЕХ: id юнитов игроков никогда не совпадают
@@ -312,6 +326,7 @@ export const useGameStore = create<GameState>()(
       activeEffect: null,
       nextRollModifier: 'normal',
       undoHistory: [],
+      pendingBonusDamage: null,
       connections: {
         docs: false,
         owlbear: false,
@@ -320,6 +335,14 @@ export const useGameStore = create<GameState>()(
       },
       
       setActiveTab: (tab) => set({ activeTab: tab }),
+
+      setPendingBonusDamage: (b) => set({ pendingBonusDamage: b }),
+
+      consumePendingBonusDamage: () => {
+        const b = get().pendingBonusDamage;
+        if (b) set({ pendingBonusDamage: null });
+        return b;
+      },
       
       addUnit: () => {
         const newUnit = createDefaultUnit();
@@ -353,7 +376,15 @@ export const useGameStore = create<GameState>()(
         }));
       },
       
-      selectUnit: (id) => set({ selectedUnitId: id }),
+      selectUnit: (id) => {
+        set({ selectedUnitId: id });
+        // При переключении юнита сразу подтягиваем актуальные HP/ману из Google Docs
+        if (id) {
+          get().pullStatsFromDocs(id).catch(() => {
+            // Docs недоступны — работаем с локальными значениями
+          });
+        }
+      },
       
       setHP: async (unitId, value) => {
         const { units, settings, connections } = get();
@@ -982,7 +1013,8 @@ export const useGameStore = create<GameState>()(
         
         if ('showTokenBars' in updates) {
           const { units } = get();
-          if (updates.showTokenBars) {
+          // Учитываем и персональный тумблер этого игрока
+          if (updates.showTokenBars && loadAssistantSettings().showTokenBars) {
             tokenBarService.syncAllBars(units);
           } else {
             tokenBarService.removeAllBars();
@@ -1088,6 +1120,16 @@ export const useGameStore = create<GameState>()(
       name: 'cursed-hearts-storage',
       version: 3,
       
+      // 🔧 Производительность: в localStorage пишем только значимое состояние.
+      // Без partialize каждый set() (каждый тик HP, уведомление, бросок)
+      // сериализовал весь стор с журналом и историей отмены.
+      partialize: (state) => ({
+        units: state.units,
+        selectedUnitId: state.selectedUnitId,
+        activeTab: state.activeTab,
+        settings: state.settings
+      }),
+
       migrate: (persistedState: unknown, version: number) => {
         console.log(`[STORE] Migrating from version ${version} to 3`);
         const state = persistedState as GameState;

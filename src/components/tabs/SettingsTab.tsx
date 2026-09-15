@@ -8,6 +8,8 @@ import { SpellEditorModal } from '../spell-editor';
 import { SpellChainEditor } from '../spell-editor';
 import { generateId } from '../../constants/spellActions';
 import { docsService } from '../../services/docsService';
+import { tokenBarService } from '../../services/tokenBarService';
+import { loadAssistantSettings, saveAssistantSettings, type AssistantUISettings, type AssistantTabId } from '../../utils/assistantSettings';
 import { selectToken } from '../../services/hpTrackerService';
 import { GAME_ELEMENTS } from '../../constants/elements';
 import type { 
@@ -147,7 +149,8 @@ export function SettingsTab() {
     { id: 'units', label: 'Юниты', icon: '👤' },
     { id: 'logs', label: 'Логи', icon: '📜' },
     { id: 'docs', label: 'Google Docs', icon: '📄' },
-    { id: 'debug', label: 'Debug', icon: '🔧' }
+    { id: 'debug', label: 'Debug', icon: '🔧' },
+    { id: 'assistant', label: 'Ассистент', icon: '🧩' }
   ];
   
   return (
@@ -239,8 +242,7 @@ export function SettingsTab() {
                 <Checkbox checked={settings.syncRage ?? true} onChange={(v) => updateSettings({ syncRage: v })} label="🔥 Синхронизировать Rage" />
                 <Checkbox checked={settings.syncResources ?? true} onChange={(v) => updateSettings({ syncResources: v })} label="Синхронизировать ресурсы" />
                 <Checkbox checked={settings.writeLogs ?? true} onChange={(v) => updateSettings({ writeLogs: v })} label="Логировать действия" />
-                <Checkbox checked={settings.showTokenBars ?? true} onChange={(v) => updateSettings({ showTokenBars: v })} label="🗺️ HP/Mana бары на токенах" />
-                <Checkbox checked={settings.showRokCards ?? false} onChange={(v) => updateSettings({ showRokCards: v })} label="🃏 Показывать карты Рока" />
+                <Checkbox checked={settings.showTokenBars ?? true} onChange={(v) => updateSettings({ showTokenBars: v })} label="🗺️ HP/Mana бары на токенах (для всех)" />
               </div>
               <NumberStepper label="Авто-синхронизация (мин)" value={settings.autoSyncInterval ?? 5} onChange={(v) => updateSettings({ autoSyncInterval: v })} min={1} max={60} />
             </div>
@@ -248,6 +250,10 @@ export function SettingsTab() {
         </div>
       )}
       
+      {subTab === 'assistant' && (
+        <AssistantSettingsSection units={units} />
+      )}
+
       {subTab === 'debug' && (
         <div className="space-y-3">
           <Section title="Отладка" icon="🔧">
@@ -274,6 +280,65 @@ export function SettingsTab() {
         )}
       </Modal>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// НАСТРОЙКИ АССИСТЕНТА (персональные — хранятся в этом браузере)
+// ═══════════════════════════════════════════════════════════════
+
+function AssistantSettingsSection({ units }: { units: Unit[] }) {
+  const [ui, setUi] = useState<AssistantUISettings>(() => loadAssistantSettings());
+
+  const update = (patch: Partial<AssistantUISettings>) => {
+    const next: AssistantUISettings = { ...ui, ...patch, visibleTabs: { ...ui.visibleTabs, ...(patch.visibleTabs ?? {}) } };
+    setUi(next);
+    saveAssistantSettings(next);
+  };
+
+  const updateTab = (id: AssistantTabId, v: boolean) => {
+    update({ visibleTabs: { ...ui.visibleTabs, [id]: v } });
+  };
+
+  return (
+    <Section title="Настройки ассистента" icon="🧩">
+      <div className="space-y-2.5">
+        <p className="text-[11px] text-faded">
+          Эти настройки — только для вашего клиента: у каждого игрока свои.
+        </p>
+
+        <div className="pt-1 space-y-2.5">
+          <Checkbox
+            checked={ui.showTokenBars}
+            onChange={(v) => {
+              update({ showTokenBars: v });
+              try {
+                if (v) void tokenBarService.syncAllBars(useGameStore.getState().units);
+                else tokenBarService.removeAllBars();
+              } catch { /* ignore */ }
+            }}
+            label="🗺️ Отображение баров на токенах"
+          />
+          <Checkbox
+            checked={ui.showNotifications}
+            onChange={(v) => update({ showNotifications: v })}
+            label="🔔 Показывать уведомления о бросках"
+          />
+        </div>
+
+        <div className="pt-2 border-t border-edge-bone">
+          <div className="text-[10px] text-ancient font-cinzel uppercase tracking-wider mb-2">Вкладки панели</div>
+          <div className="space-y-2">
+            <Checkbox checked={ui.visibleTabs.combat} onChange={(v) => updateTab('combat', v)} label="⚔️ Бой" />
+            <Checkbox checked={ui.visibleTabs.magic} onChange={(v) => updateTab('magic', v)} label="✨ Магия" />
+            <Checkbox checked={ui.visibleTabs.actions} onChange={(v) => updateTab('actions', v)} label="⚡ Действия" />
+            <Checkbox checked={ui.visibleTabs.rage} onChange={(v) => updateTab('rage', v)} label="🔥 Rage" />
+            <Checkbox checked={ui.visibleTabs.notes} onChange={(v) => updateTab('notes', v)} label="📝 Заметки" />
+            <Checkbox checked={ui.visibleTabs.rok} onChange={(v) => updateTab('rok', v)} label="🃏 Карты Рока" />
+          </div>
+        </div>
+      </div>
+    </Section>
   );
 }
 

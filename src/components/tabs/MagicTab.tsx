@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { useGameStore } from '../../stores/useGameStore';
 import { 
   Button, Section, Select, NumberStepper, 
-  DiceResultDisplay, EmptyState 
+  DiceResultDisplay, EmptyState, ModifierToggle 
 } from '../ui';
 import { spellExecutor } from '../../services/spellExecutor';
 import { diceService } from '../../services/diceService';
 import { evaluateElementEffects, formatElementEffectLog } from '../../utils/elementEffects';
-import type { DiceRollResult, Spell, SpellV2, CastContext } from '../../types';
+import type { DiceRollResult, Spell, SpellV2, CastContext, RollModifier } from '../../types';
 import { isSpellV2, DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../../types';
 import { ELEMENT_ICONS, SPELL_TYPES } from '../../constants/elements';
+import { BonusDamageField } from '../BonusDamageField';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // КОМПОНЕНТ
@@ -34,6 +35,9 @@ export function MagicTab() {
   const [castResults, setCastResults] = useState<DiceRollResult[]>([]);
   const [lastContext, setLastContext] = useState<CastContext | null>(null);
   const [lastElementEffects, setLastElementEffects] = useState<ReturnType<typeof evaluateElementEffects> | null>(null);
+  // Раздельные модификаторы: на каст и на попадание (одноразовые)
+  const [castModifier, setCastModifier] = useState<RollModifier>('normal');
+  const [hitModifier, setHitModifier] = useState<RollModifier>('normal');
   
   // Сворачивание групп заклинаний по типу
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
@@ -177,6 +181,9 @@ export function MagicTab() {
       }
     }
     
+    // Заряд бонусного урона сгорает на первой попытке каста — даже если каст провалился
+    const pendingBonus = useGameStore.getState().consumePendingBonusDamage();
+
     setIsCasting(true);
     setCastLog([]);
     setCastResults([]);
@@ -200,8 +207,13 @@ export function MagicTab() {
           caster: unit,
           targetCount,
           rollModifier: 'normal',
+          castModifier,
+          hitModifier,
           onLog: (msg) => console.log('[Spell]', msg),
         });
+        // одноразовые модификаторы снимаются после каста
+        if (castModifier !== 'normal') setCastModifier('normal');
+        if (hitModifier !== 'normal') setHitModifier('normal');
         
         // Применяем ресурсные изменения из modify_resource шагов
         const resourceChanges = result.context.values._resourceChanges as Array<{type: string; amount: number; resourceId?: string}> | undefined;
@@ -299,8 +311,24 @@ export function MagicTab() {
             result.context.isCrit
           );
           addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${cleanDamage} ${result.damageType ?? ''}`);
+
+          // Заряженный доп. урон (списан при старте каста)
+          if (pendingBonus) {
+            const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
+            const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, unit.shortName ?? unit.name, result.context.isCrit);
+            const bonusLine = `💠 Заряженный урон: +${bDmg.total} ${bLabel}`;
+            result.log.push(bonusLine);
+            setCastLog(prev => [...prev, bonusLine]);
+            addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+            await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+          }
         } else {
           addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, 'скастовано');
+          if (pendingBonus) {
+            const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
+            setCastLog(prev => [...prev, `💠 Заряженный урон сгорел (каст без урона)`]);
+            addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `сгорел (${bLabel})`);
+          }
         }
         
         // Логируем элементные эффекты в боевой журнал
@@ -321,7 +349,7 @@ export function MagicTab() {
           }
         }
       } else {
-        await handleLegacyCast(selectedSpell);
+        await handleLegacyCast(selectedSpell, pendingBonus);
       }
     } catch (err) {
       console.error('[MagicTab] Cast error:', err);
@@ -332,7 +360,7 @@ export function MagicTab() {
   };
   
   // Старая логика для совместимости
-  const handleLegacyCast = async (spell: Spell) => {
+  const handleLegacyCast = async (spell: Spell, pendingBonus: import('../../stores/useGameStore').PendingBonusDamage | null) => {
     const log: string[] = [];
     log.push(`═══ ${spell.name} ═══`);
     triggerEffect('cast');
@@ -355,6 +383,7 @@ export function MagicTab() {
     
     if (castResult.isCritFail) {
       log.push(`💀 Каст: [${castResult.rawD20}] = КРИТ ПРОВАЛ!`);
+      if (pendingBonus) log.push(`💠 Заряженный урон сгорел (крит провал каста)`);
       triggerEffect('crit-fail');
       setCastLog(log);
       return;
@@ -391,8 +420,19 @@ export function MagicTab() {
       log.push(`💥 ${dmgResult.total}${critText} ${typeText}`);
       
       addCombatLog(unit.shortName ?? unit.name, spell.name, `${dmgResult.total} урона`);
+
+      // Заряженный доп. урон (списан при старте каста)
+      if (pendingBonus) {
+        const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
+        const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, unit.shortName ?? unit.name, castResult.isCrit);
+        setCastResults(prev => [...prev, bDmg]);
+        log.push(`💠 +${bDmg.total} ${bLabel} (заряженный урон)`);
+        addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+        await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+      }
     } else {
       addCombatLog(unit.shortName ?? unit.name, spell.name, 'скастовано');
+      if (pendingBonus) log.push(`💠 Заряженный урон сгорел (каст без урона)`);
     }
     
     setCastLog(log);
@@ -569,6 +609,13 @@ export function MagicTab() {
               min={1}
               max={10}
             />
+
+            {/* Модификаторы: каст и попадание (одноразовые) */}
+            <ModifierToggle caption="Модификатор каста" value={castModifier} onChange={setCastModifier} />
+            <ModifierToggle caption="Модификатор попадания" value={hitModifier} onChange={setHitModifier} />
+
+            {/* Заряженный доп. урон к следующей уронной атаке/касту */}
+            <BonusDamageField />
             
             {/* Кнопка каста */}
             <Button

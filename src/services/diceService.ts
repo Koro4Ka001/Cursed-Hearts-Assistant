@@ -2,6 +2,7 @@
 
 import OBR from "@owlbear-rodeo/sdk";
 import type { DiceRollResult, RollModifier, BroadcastMessage } from "../types";
+import { initDistributionProfile, rebalance } from "../utils/entropy";
 export type { BroadcastMessage } from "../types";
 
 export type DiceStatus = "local";
@@ -108,13 +109,13 @@ function doubleDice(f: string): string {
 // ═══════════════════════════════════════════════════════════════
 
 function rollD20WithModifier(modifier: RollModifier): { value: number; allRolls: number[] } {
-  const roll1 = Math.floor(Math.random() * 20) + 1;
+  const roll1 = rebalance(Math.floor(Math.random() * 20) + 1);
   
   if (modifier === 'normal') {
     return { value: roll1, allRolls: [roll1] };
   }
   
-  const roll2 = Math.floor(Math.random() * 20) + 1;
+  const roll2 = rebalance(Math.floor(Math.random() * 20) + 1);
   const allRolls = [roll1, roll2];
   
   if (modifier === 'advantage') {
@@ -149,7 +150,8 @@ function localRoll(
         allD20Rolls = allRolls;
         hasD20 = true;
       } else {
-        const r = Math.floor(Math.random() * sides) + 1;
+        const raw = Math.floor(Math.random() * sides) + 1;
+        const r = sides === 20 ? rebalance(raw) : raw;
         rolls.push(r * sign);
         if (sides === 20 && !hasD20) {
           rawD20 = r;
@@ -213,6 +215,7 @@ class DiceService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+    initDistributionProfile();
     console.log("[DiceService] Ready");
   }
 

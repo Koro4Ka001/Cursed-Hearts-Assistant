@@ -3022,3 +3022,14 @@ input[type="number"]::-webkit-outer-spin-button { opacity: 0.3; }
   text-shadow: 0 0 3px #000, 0 0 5px #ff4500;
   z-index: 1;
 }
+
+/* Числовые поля: нативные стрелки браузера скрыты (налезали на значение) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
