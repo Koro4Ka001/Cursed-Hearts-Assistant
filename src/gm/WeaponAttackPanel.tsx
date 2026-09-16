@@ -159,17 +159,19 @@ export function WeaponAttackPanel({ attacker, weapon, onClose }: Props) {
     }
   }, [activeSpell, attacker, isCasting, pushLog]);
 
-  // 🎲 Быстрая прокидка на характеристику: d20 + очки характеристики
-  const quickRoll = useCallback((key: keyof Monster['stats'], label: string, icon: string) => {
+  // 🎲 Быстрая прокидка на характеристику: d20 + очки характеристики.
+  // Через diceService.roll — корректные плашки («Прокидка», крит-подсветка,
+  // помеха/преимущество в бродкасте), без «атака (попадание)».
+  const quickRoll = useCallback(async (key: keyof Monster['stats'], label: string, icon: string) => {
     const value = attacker.stats[key] || 0;
-    const r = rollDice(`d20+${value}`, label, 'normal');
+    const r = await diceService.roll(`d20+${value}`, label, attacker.name, 'normal');
     const isCrit = r.rawD20 === 20;
     const isCritFail = r.rawD20 === 1;
     const lines = [`🎲 [${r.rolls.join(', ')}] + ${value} = ${r.total}`];
+    if (r.allD20Rolls && r.allD20Rolls.length > 1) lines.push(`(${r.allD20Rolls.join(', ')})`);
     if (isCrit) lines.push('✨ Естественная 20!');
     if (isCritFail) lines.push('💀 Естественная 1!');
     pushLog(`${icon} ${label}`, lines);
-    diceService.broadcastAction(label, attacker.name, r.total >= HIT_THRESHOLD, isCrit, `${label}: ${r.total}`).catch(() => {});
   }, [attacker, pushLog]);
 
   return (

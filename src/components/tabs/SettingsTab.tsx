@@ -242,7 +242,6 @@ export function SettingsTab() {
                 <Checkbox checked={settings.syncRage ?? true} onChange={(v) => updateSettings({ syncRage: v })} label="🔥 Синхронизировать Rage" />
                 <Checkbox checked={settings.syncResources ?? true} onChange={(v) => updateSettings({ syncResources: v })} label="Синхронизировать ресурсы" />
                 <Checkbox checked={settings.writeLogs ?? true} onChange={(v) => updateSettings({ writeLogs: v })} label="Логировать действия" />
-                <Checkbox checked={settings.showTokenBars ?? true} onChange={(v) => updateSettings({ showTokenBars: v })} label="🗺️ HP/Mana бары на токенах (для всех)" />
               </div>
               <NumberStepper label="Авто-синхронизация (мин)" value={settings.autoSyncInterval ?? 5} onChange={(v) => updateSettings({ autoSyncInterval: v })} min={1} max={60} />
             </div>

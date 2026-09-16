@@ -84,12 +84,16 @@ export function CombatTab() {
     // Берём свежие данные юнита (могли измениться от rage effects)
     const freshUnit = useGameStore.getState().units.find(u => u.id === unit.id) ?? unit;
     console.log('[Combat] Fresh unit stats:', JSON.stringify(freshUnit.stats), 'proficiencies:', JSON.stringify(freshUnit.proficiencies));
-    let meleeBonusDmg = 0;
     try {
       const meleeMod = meleeModifier;
       setMeleeModifier('normal');
       for (let t = 0; t < meleeTargetCount; t++) {
         if (meleeTargetCount > 1) log.push(`--- Цель ${t + 1} ---`);
+
+        // Накопители урона текущей цели
+        let meleeBonusDmg = 0;
+        let extraTotal = 0;
+        let extraLabel = '';
         
         const profBonus = proficiencies[selectedMeleeWeapon.proficiencyType] ?? 0;
         const hitBonus = profBonus + (selectedMeleeWeapon.hitBonus ?? 0);
@@ -115,7 +119,8 @@ export function CombatTab() {
         console.log('[Combat] statBonus:', statBonus, 'from stat:', freshUnit.stats[selectedMeleeWeapon.statBonus === 'physicalPower' ? 'physicalPower' : 'dexterity'], 'profType:', selectedMeleeWeapon.proficiencyType, 'profVal:', freshUnit.proficiencies[selectedMeleeWeapon.proficiencyType]);
         const base = selectedMeleeWeapon.damageFormula ?? 'd6';
         const formula = statBonus > 0 ? `${base}+${statBonus}` : base;
-        const dmg = await diceService.rollDamage(formula, `Урон ${selectedMeleeWeapon.name}`, freshUnit.shortName ?? freshUnit.name, isCrit);
+        // 🔧 Тихий бросок: один общий broadcast после всех компонент урона
+        const dmg = await diceService.rollDamage(formula, undefined, undefined, isCrit, true);
         dmgRes.push(dmg);
         
         await handleAddRageOnDealDamage(dmg.total);
@@ -124,20 +129,42 @@ export function CombatTab() {
         addCombatLog(freshUnit.shortName ?? freshUnit.name, selectedMeleeWeapon.name, `${isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
         
         if (selectedMeleeWeapon.extraDamageFormula && selectedMeleeWeapon.extraDamageType) {
-          const extra = await diceService.rollDamage(selectedMeleeWeapon.extraDamageFormula, `Доп. урон (${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? 'доп'})`, freshUnit.shortName ?? freshUnit.name, isCrit);
+          extraLabel = DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? 'доп';
+          const extra = await diceService.rollDamage(selectedMeleeWeapon.extraDamageFormula, undefined, undefined, isCrit, true);
           dmgRes.push(extra);
-          log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.extraDamageType] ?? ''}`);
+          extraTotal = extra.total;
+          log.push(`    + ${extra.total} ${extraLabel}`);
         }
 
         // Заряженный доп. урон — списан на первой попытке
         if (pendingBonus) {
           const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
-          const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, freshUnit.shortName ?? freshUnit.name, isCrit);
+          const bDmg = await diceService.rollDamage(pendingBonus.formula, undefined, undefined, isCrit, true);
           dmgRes.push(bDmg);
           meleeBonusDmg += bDmg.total;
           log.push(`    💠 +${bDmg.total} ${bLabel} (заряженный урон)`);
           addCombatLog(freshUnit.shortName ?? freshUnit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
-          await diceService.broadcastWeaponEffect(freshUnit.shortName ?? freshUnit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+        }
+
+        // Один объединённый broadcast на все компоненты урона (вместо 3-4 плашек)
+        {
+          const parts: string[] = [`${dmg.total} (${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? selectedMeleeWeapon.damageType})`];
+          if (extraTotal > 0) parts.push(`+${extraTotal} ${extraLabel}`);
+          if (meleeBonusDmg > 0) parts.push(`+${meleeBonusDmg} заряженный`);
+          const totalSum = dmg.total + extraTotal + meleeBonusDmg;
+          await diceService.broadcastMessage({
+            id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'damage',
+            unitName: freshUnit.shortName ?? freshUnit.name,
+            title: `Урон ${selectedMeleeWeapon.name}`,
+            subtitle: `${parts.join(' + ')} = ${totalSum}`,
+            icon: '💥',
+            rolls: dmg.rolls,
+            total: totalSum,
+            isCrit,
+            color: isCrit ? 'gold' : 'blood',
+            timestamp: Date.now(),
+          });
         }
         
         if (selectedMeleeWeapon.onHitActions?.length) {
@@ -152,7 +179,7 @@ export function CombatTab() {
               hitTotal: hitResult.total,
               isCrit: !!isCrit,
               isCritFail: false,
-              damage: dmg.total + meleeBonusDmg,
+              damage: dmg.total + extraTotal + meleeBonusDmg,
               weaponName: selectedMeleeWeapon.name,
               unitName: freshUnit.shortName ?? freshUnit.name,
               unitId: freshUnit.id,
@@ -213,7 +240,8 @@ export function CombatTab() {
           if (selectedAmmo.damageFormula && selectedAmmo.damageType) {
             const dexB = getStatDamageBonus(unit, 'dexterity', 'bows');
             const f = dexB > 0 ? `${selectedAmmo.damageFormula}+${dexB}` : selectedAmmo.damageFormula;
-            const dmg = await diceService.rollDamage(f, `Урон ${selectedAmmo.name}`, unit.shortName ?? unit.name, hit.isCrit);
+            // 🔧 Тихие броски: один общий broadcast после всех компонент урона
+            const dmg = await diceService.rollDamage(f, undefined, undefined, hit.isCrit, true);
             dmgRes.push(dmg);
             shotDamage = dmg.total;
             log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} ${hit.isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
@@ -221,19 +249,44 @@ export function CombatTab() {
             
             await handleAddRageOnDealDamage(dmg.total);
             
+            let extraTotal = 0;
+            let extraLabel = '';
+            let bonusTotal = 0;
             if (selectedAmmo.extraDamageFormula && selectedAmmo.extraDamageType) {
-              const extra = await diceService.rollDamage(selectedAmmo.extraDamageFormula, `Доп. урон`, unit.shortName ?? unit.name, hit.isCrit);
-              dmgRes.push(extra); log.push(`    + ${extra.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? ''}`);
+              extraLabel = DAMAGE_TYPE_NAMES[selectedAmmo.extraDamageType] ?? 'доп';
+              const extra = await diceService.rollDamage(selectedAmmo.extraDamageFormula, undefined, undefined, hit.isCrit, true);
+              dmgRes.push(extra);
+              extraTotal = extra.total; shotDamage += extra.total;
+              log.push(`    + ${extra.total} ${extraLabel}`);
             }
 
             // Заряженный доп. урон — списан на первой стреле
             if (pendingBonus) {
               const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
-              const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, unit.shortName ?? unit.name, hit.isCrit);
-              dmgRes.push(bDmg); shotDamage += bDmg.total;
+              const bDmg = await diceService.rollDamage(pendingBonus.formula, undefined, undefined, hit.isCrit, true);
+              dmgRes.push(bDmg); bonusTotal = bDmg.total; shotDamage += bDmg.total;
               log.push(`    💠 +${bDmg.total} ${bLabel} (заряженный урон)`);
               addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
-              await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+            }
+
+            // Один объединённый broadcast на все компоненты урона (вместо 3-4 плашек)
+            {
+              const parts: string[] = [`${dmg.total} (${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? selectedAmmo.damageType})`];
+              if (extraTotal > 0) parts.push(`+${extraTotal} ${extraLabel}`);
+              if (bonusTotal > 0) parts.push(`+${bonusTotal} заряженный`);
+              await diceService.broadcastMessage({
+                id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                type: 'damage',
+                unitName: unit.shortName ?? unit.name,
+                title: `Урон ${selectedAmmo.name}`,
+                subtitle: `${parts.join(' + ')} = ${shotDamage}`,
+                icon: '💥',
+                rolls: dmg.rolls,
+                total: shotDamage,
+                isCrit: !!hit.isCrit,
+                color: hit.isCrit ? 'gold' : 'blood',
+                timestamp: Date.now(),
+              });
             }
           } else { log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (попадание без урона)`); }
           
@@ -390,9 +443,6 @@ export function CombatTab() {
         </Section>
       )}
       
-      {/* Заряженный доп. урон к следующей атаке/касту с уроном */}
-      <BonusDamageField />
-
       <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true}>
         {meleeWeapons.length === 0 ? <p className="text-faded text-sm">Добавьте оружие ближнего боя в настройках</p> : (
           <div className="space-y-3">
@@ -429,6 +479,9 @@ export function CombatTab() {
             {selectedRangedWeapon && selectedAmmo && <div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone"><div>🏹 {selectedRangedWeapon.name}: +{(selectedRangedWeapon.hitBonus ?? 0) + (proficiencies.bows ?? 0)} к попаданию</div>{(selectedRangedWeapon.multishot ?? 1) > 1 && <div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел</div>}<div className="mt-1">🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType && (DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? selectedAmmo.damageType)}</div>{((selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)) > 0 && <div className="text-purple-400 mt-1">⚡ Эффекты: {(selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)} шагов</div>}</div>}
             <NumberStepper label="Количество выстрелов" value={rangedShotCount} onChange={setRangedShotCount} min={1} max={10} />
             <ModifierToggle value={rangedModifier} onChange={setRangedModifier} />
+
+            {/* Заряженный доп. урон к следующей атаке/касту */}
+            <BonusDamageField />
             <Button variant="danger" onClick={handleRangedAttack} loading={isRangedAttacking} disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)} className="w-full text-sm py-3">🏹 ВЫСТРЕЛИТЬ</Button>
             {rangedLog.length > 0 && <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">{rangedLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}</div>}
             {rangedDamageResults.length > 0 && <div className="space-y-2"><div className="text-xs text-faded uppercase">Урон:</div><DiceResultDisplay results={rangedDamageResults} /></div>}

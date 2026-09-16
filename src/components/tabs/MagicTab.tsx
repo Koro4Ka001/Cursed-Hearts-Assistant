@@ -191,12 +191,14 @@ export function MagicTab() {
     setLastElementEffects(null);
     
     try {
-      // Тратим ресурс
+      // Тратим ресурс.
+      // 🔧 Без блокировки: стор обновляется синхронно, а запись в Google Docs и
+      // перерисовка баров идут в фоне — каст раньше «висел» на 2-4 секунды.
       if (costResource === 'health') {
-        await setHP(unit.id, unit.health.current - spellCost);
+        setHP(unit.id, unit.health.current - spellCost).catch(() => {});
         addCombatLog(unit.shortName ?? unit.name, 'Кровавая магия', `-${spellCost} HP`);
       } else {
-        await spendMana(unit.id, spellCost);
+        spendMana(unit.id, spellCost).catch(() => {});
       }
       
       // Если V2 — spellExecutor
@@ -257,7 +259,7 @@ export function MagicTab() {
         }
 
         // Элементный бонус — показываем отдельно как напоминание, НЕ суммируем в итог автоматически
-        const cleanDamage = result.totalDamage;
+        let cleanDamage = result.totalDamage;
         if (elementEffects && elementEffects.totalBonusDamage > 0) {
           result.log.push(`📈 Элемент. бонус: +${elementEffects.totalBonusDamage} (${elementEffects.effects.filter(e => e.triggered && e.bonusDamage).map(e => e.icon).join('')}) — по соответствующим существам`);
         }
@@ -303,25 +305,31 @@ export function MagicTab() {
         }
 
         if (cleanDamage > 0) {
+          // Заряженный доп. урон (списан при старте каста) — бросаем и добавляем
+          // ОДНОЙ строкой в тот же broadcast, отдельной плашки больше нет
+          let bonusLine: string | undefined;
+          if (pendingBonus) {
+            const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
+            const bDmg = await diceService.rollDamage(pendingBonus.formula, undefined, undefined, result.context.isCrit, true);
+            result.totalDamage += bDmg.total;
+            cleanDamage += bDmg.total;
+            bonusLine = `+${bDmg.total} ${bLabel} заряженный`;
+            const logLine = `💠 Заряженный урон: +${bDmg.total} ${bLabel}`;
+            result.log.push(logLine);
+            setCastLog(prev => [...prev, logLine]);
+            addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+          }
+
           await diceService.broadcastSpell(
             selectedSpell.name,
             unit.shortName ?? unit.name,
             cleanDamage,
             result.damageType,
-            result.context.isCrit
+            result.context.isCrit,
+            undefined,
+            bonusLine
           );
           addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, `${cleanDamage} ${result.damageType ?? ''}`);
-
-          // Заряженный доп. урон (списан при старте каста)
-          if (pendingBonus) {
-            const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
-            const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, unit.shortName ?? unit.name, result.context.isCrit);
-            const bonusLine = `💠 Заряженный урон: +${bDmg.total} ${bLabel}`;
-            result.log.push(bonusLine);
-            setCastLog(prev => [...prev, bonusLine]);
-            addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
-            await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
-          }
         } else {
           addCombatLog(unit.shortName ?? unit.name, selectedSpell.name, 'скастовано');
           if (pendingBonus) {
@@ -408,9 +416,10 @@ export function MagicTab() {
       
       const dmgResult = await diceService.rollDamage(
         formula,
-        `Урон ${spell.name}`,
-        unit.shortName ?? unit.name,
-        castResult.isCrit
+        pendingBonus ? undefined : `Урон ${spell.name}`,
+        pendingBonus ? undefined : unit.shortName ?? unit.name,
+        castResult.isCrit,
+        !!pendingBonus
       );
       
       setCastResults(prev => [...prev, dmgResult]);
@@ -421,14 +430,22 @@ export function MagicTab() {
       
       addCombatLog(unit.shortName ?? unit.name, spell.name, `${dmgResult.total} урона`);
 
-      // Заряженный доп. урон (списан при старте каста)
+      // Заряженный доп. урон (списан при старте каста) — в общий broadcast заклинания
       if (pendingBonus) {
         const bLabel = DAMAGE_TYPE_NAMES[pendingBonus.damageType] ?? pendingBonus.damageType;
-        const bDmg = await diceService.rollDamage(pendingBonus.formula, `Заряженный урон (${bLabel})`, unit.shortName ?? unit.name, castResult.isCrit);
+        const bDmg = await diceService.rollDamage(pendingBonus.formula, undefined, undefined, castResult.isCrit, true);
         setCastResults(prev => [...prev, bDmg]);
         log.push(`💠 +${bDmg.total} ${bLabel} (заряженный урон)`);
         addCombatLog(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
-        await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, 'Заряженный урон', `+${bDmg.total} ${bLabel}`);
+        await diceService.broadcastSpell(
+          spell.name,
+          unit.shortName ?? unit.name,
+          dmgResult.total + bDmg.total,
+          spell.damageType,
+          castResult.isCrit,
+          undefined,
+          `+${bDmg.total} ${bLabel} заряженный`
+        );
       }
     } else {
       addCombatLog(unit.shortName ?? unit.name, spell.name, 'скастовано');

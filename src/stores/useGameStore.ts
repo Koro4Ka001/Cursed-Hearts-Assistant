@@ -134,7 +134,7 @@ function migrateUnit(unit: Unit): Unit {
 // ТИПЫ
 // ═══════════════════════════════════════════════════════════════
 
-type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'settings';
+type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok' | 'settings';
 
 interface Notification {
   id: string;

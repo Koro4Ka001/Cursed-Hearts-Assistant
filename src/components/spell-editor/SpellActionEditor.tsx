@@ -251,8 +251,51 @@ function RollCheckFields({ action, update }: { action: SpellAction; update: (u: 
         bonuses={action.bonuses ?? []}
         onChange={(bonuses) => update({ bonuses })}
       />
+    </div>
+  );
+}
 
-      {/* Доп. бонус к d20-броску: число или характеристика персонажа */}
+// ═══════════════════════════════════════════════════════════════════════════
+// ПОЛЯ: roll_dice
+// ═══════════════════════════════════════════════════════════════════════════
+
+function RollDiceFields({ action, update }: { action: SpellAction; update: (u: Partial<SpellAction>) => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="font-cinzel text-[10px] text-faded uppercase tracking-widest">
+            Формула
+          </label>
+          <div className="flex gap-1 mt-1">
+            <Input
+              value={action.diceFormula ?? 'd12'}
+              onChange={(e) => update({ diceFormula: e.target.value })}
+              placeholder="d12"
+              className="flex-1"
+            />
+            <Select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) update({ diceFormula: e.target.value });
+              }}
+              options={[
+                { value: '', label: '...' },
+                ...COMMON_DICE_FORMULAS.map(f => ({ value: f, label: f }))
+              ]}
+              className="w-20"
+            />
+          </div>
+        </div>
+        <Input
+          label="Сохранить как"
+          value={action.saveResultAs ?? ''}
+          onChange={(e) => update({ saveResultAs: e.target.value })}
+          placeholder="lastRoll"
+        />
+      </div>
+
+      {/* Доп. бонус к броску: произвольное число или характеристика персонажа */}
       <div className="border-t border-edge-bone/40 pt-2 space-y-2">
         <Select
           label="Доп. бонус к броску"
@@ -284,47 +327,6 @@ function RollCheckFields({ action, update }: { action: SpellAction; update: (u: 
           />
         )}
       </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ПОЛЯ: roll_dice
-// ═══════════════════════════════════════════════════════════════════════════
-
-function RollDiceFields({ action, update }: { action: SpellAction; update: (u: Partial<SpellAction>) => void }) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <div>
-        <label className="font-cinzel text-[10px] text-faded uppercase tracking-widest">
-          Формула
-        </label>
-        <div className="flex gap-1 mt-1">
-          <Input
-            value={action.diceFormula ?? 'd12'}
-            onChange={(e) => update({ diceFormula: e.target.value })}
-            placeholder="d12"
-            className="flex-1"
-          />
-          <Select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) update({ diceFormula: e.target.value });
-            }}
-            options={[
-              { value: '', label: '...' },
-              ...COMMON_DICE_FORMULAS.map(f => ({ value: f, label: f }))
-            ]}
-            className="w-20"
-          />
-        </div>
-      </div>
-      <Input
-        label="Сохранить как"
-        value={action.saveResultAs ?? ''}
-        onChange={(e) => update({ saveResultAs: e.target.value })}
-        placeholder="lastRoll"
-      />
     </div>
   );
 }

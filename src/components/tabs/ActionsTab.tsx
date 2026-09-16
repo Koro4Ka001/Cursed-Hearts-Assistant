@@ -177,29 +177,32 @@ export function ActionsTab() {
     }
     setActionLog(costLog);
     
-    // Тратим ресурсы (уже вычисленные числа)
+    // Тратим ресурсы (уже вычисленные числа).
+    // 🔧 Без блокировки: стор обновляется синхронно, а запись в Google Docs и
+    // перерисовка баров идут в фоне — иначе действие «висит» на 2-4 секунды.
+    const resourceWrites: Promise<void>[] = [];
     for (const { cost, value } of costResults) {
       if (cost.type === 'mana') {
-        await spendMana(unit.id, value);
+        resourceWrites.push(spendMana(unit.id, value));
       } else if (cost.type === 'health') {
         const freshUnit = useGameStore.getState().units.find(u => u.id === unit.id);
-        if (freshUnit) await setHP(unit.id, freshUnit.health.current - value);
+        if (freshUnit) resourceWrites.push(setHP(unit.id, freshUnit.health.current - value));
       } else if (cost.type === 'rage' && unit.hasRage) {
-        await spendRage(unit.id, value);
+        resourceWrites.push(spendRage(unit.id, value));
       } else if (cost.type === 'resource' && cost.resourceId) {
         const freshUnit = useGameStore.getState().units.find(u => u.id === unit.id);
         const resource = freshUnit?.resources.find(r => r.id === cost.resourceId);
         if (resource) {
-          await useGameStore.getState().setResource(unit.id, cost.resourceId, resource.current - value);
+          resourceWrites.push(useGameStore.getState().setResource(unit.id, cost.resourceId, resource.current - value));
         }
       }
     }
+    resourceWrites.forEach(p => p.catch(() => {}));
     
     // Кнопки Помеха/Преимущество важнее дефолта действия и сбрасываются после броска
     const pending = pendingModifier;
     const useModifier = pending !== 'normal' ? pending : action.defaultRollModifier;
-    if (pending !== 'normal') setPendingModifier('normal');
-    
+    if (pending !== 'normal') setPendingModifier('normal');    
     try {
       // Создаём фейковый SpellV2 для исполнителя
       const fakeSpell = {

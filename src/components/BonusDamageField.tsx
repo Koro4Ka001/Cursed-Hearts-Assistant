@@ -2,7 +2,7 @@
 // «Заряженный урон»: доп. урон к СЛЕДУЮЩЕЙ атаке/касту с уроном.
 // Формула — как кубы (2d6), так и просто число (5). Поле очищается само.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../stores/useGameStore';
 import { Input, Select } from './ui';
 import { PHYSICAL_DAMAGE_TYPES, MAGICAL_DAMAGE_TYPES, DAMAGE_TYPE_NAMES } from '../types';
@@ -27,6 +27,18 @@ export function BonusDamageField() {
   const [subType, setSubType] = useState<DamageType>(
     pending && pending.damageType !== 'pure' ? pending.damageType : 'slashing'
   );
+
+  // 🔧 Очищаем поле, когда заряд списан атакой/кастом (store → null)
+  const hadPendingRef = useRef(false);
+  useEffect(() => {
+    if (pending) {
+      hadPendingRef.current = true;
+    } else if (hadPendingRef.current) {
+      hadPendingRef.current = false;
+      setFormula('');
+      setCategory('pure');
+    }
+  }, [pending]);
 
   const commit = (f: string, cat: Category, sub: DamageType) => {
     const type: DamageType = cat === 'pure' ? 'pure' : sub;
@@ -88,7 +100,7 @@ export function BonusDamageField() {
       )}
       {pending && (
         <div className="text-[11px] text-purple-400">
-          ⚡ Заряжено: <strong>{pending.formula}</strong> ({typeLabel(pending.damageType)}) — спадёт после первой атаки с уроном
+          ⚡ Заряжено: <strong>{pending.formula}</strong> ({typeLabel(pending.damageType)}) — сгорит на первой попытке атаки/каста, даже при промахе
         </div>
       )}
     </div>

@@ -270,12 +270,13 @@ class DiceService {
     formula: string,
     label?: string,
     unitName?: string,
-    isCritHit: boolean = false
+    isCritHit: boolean = false,
+    silent: boolean = false
   ): Promise<DiceRollResult> {
     const f = isCritHit ? doubleDice(formula) : formula;
     const r = localRoll(f, label, 'normal', false);
     
-    if (label && unitName) {
+    if (label && unitName && !silent) {
       await broadcast({
         id: msgId(),
         type: 'damage',
@@ -506,15 +507,18 @@ class DiceService {
     damage: number,
     damageType?: string,
     isCrit?: boolean,
-    manaCost?: { formula?: string; value: number }
+    manaCost?: { formula?: string; value: number },
+    extraLine?: string
   ): Promise<void> {
     const subtitle = damageType 
       ? `${damage} ${damageType}` 
       : `${damage} урона`;
     
+    const withExtra = extraLine ? `${subtitle} | 💠 ${extraLine}` : subtitle;
+    
     const fullSubtitle = manaCost 
-      ? `${subtitle} | 💠${manaCost.formula ? ` ${manaCost.formula}=` : ''}${manaCost.value}`
-      : subtitle;
+      ? `${withExtra} | 💠${manaCost.formula ? ` ${manaCost.formula}=` : ''}${manaCost.value}`
+      : withExtra;
     
     await broadcast({
       id: msgId(),

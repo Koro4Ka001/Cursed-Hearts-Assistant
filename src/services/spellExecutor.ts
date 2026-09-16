@@ -239,7 +239,7 @@ const stepExecutors: Record<string, StepExecutor> = {
   
   // ⚔️ roll_attack: Попадание (Крит = удвоение кубов)
   roll_attack: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements) + resolveRollBonus(caster, action);
+    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
     const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     
@@ -271,7 +271,7 @@ const stepExecutors: Record<string, StepExecutor> = {
 
   // ✨ roll_cast: Каст (Крит = половина маны)
   roll_cast: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements) + resolveRollBonus(caster, action);
+    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
     const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     
@@ -303,7 +303,7 @@ const stepExecutors: Record<string, StepExecutor> = {
 
   // 🎯 roll_check (Старая)
   roll_check: (action, context, spell, caster, rollModifier) => {
-    const bonus = calculateBonus(caster, action.bonuses, spell.elements) + resolveRollBonus(caster, action);
+    const bonus = calculateBonus(caster, action.bonuses, spell.elements);
     const formula = bonus >= 0 ? `d20+${bonus}` : `d20${bonus}`;
     const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     
@@ -329,17 +329,21 @@ const stepExecutors: Record<string, StepExecutor> = {
   },
 
   // 🎲 roll_dice
-  roll_dice: (action, context) => {
-    const formula = action.diceFormula ?? 'd6';
-    const result = rollDice(formula);
-    context.rolls.push({ stepId: action.id, formula, rolls: result.rolls, total: result.total });
+    roll_dice: (action, context, spell, caster, rollModifier) => {
+    // Доп. бонус к броску (число/характеристика) применяется именно здесь
+    const rb = resolveRollBonus(caster, action);
+    let formula = action.diceFormula ?? 'd6';
+    if (rb !== 0) formula = `${formula}${rb > 0 ? '+' : ''}${rb}`;
+    const { result, rawD20, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
+    context.rolls.push({ stepId: action.id, formula, rolls: result.rolls, total: result.total, rawD20, isCrit, isCritFail });
     context.lastRoll = result.total;
     context.values['lastRoll'] = result.total;
     if (action.saveResultAs) context.values[action.saveResultAs] = result.total;
-    
+
     const rollsStr = `[${result.rolls.join(', ')}]`;
-    context.log.push(`🎲 ${action.label}: ${formula} = ${rollsStr} = ${result.total}`);
-    
+    const modMark = rawD20 !== undefined && isCrit ? ' ✨' : rawD20 !== undefined && isCritFail ? ' 💀' : '';
+    context.log.push(`🎲 ${action.label}: ${formula} = ${rollsStr} = ${result.total}${modMark}`);
+
     return evaluateTransitions(action, context);
   },
   
@@ -660,6 +664,7 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
       const isCastRoll = action.type === 'roll_cast';
       const isAttackRoll = action.type === 'roll_attack';
       const isCheckRoll = action.type === 'roll_check';
+      const isDiceRoll = action.type === 'roll_dice';
       let useModifier: RollModifier = 'normal';
       if (isCastRoll && !castModifierUsed && castModifier && castModifier !== 'normal') {
         useModifier = castModifier;
@@ -667,7 +672,7 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
       } else if (isAttackRoll && !hitModifierUsed && hitModifier && hitModifier !== 'normal') {
         useModifier = hitModifier;
         hitModifierUsed = true;
-      } else if (isCheckRoll && !d20ModifierUsed && rollModifier !== 'normal') {
+      } else if ((isCheckRoll || isDiceRoll) && !d20ModifierUsed && rollModifier !== 'normal') {
         useModifier = rollModifier;
         d20ModifierUsed = true;
       }
