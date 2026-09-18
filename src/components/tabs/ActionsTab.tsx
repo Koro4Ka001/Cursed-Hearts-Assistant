@@ -9,6 +9,7 @@ import {
 import { ActionEditorModal } from '../action-editor';
 import { spellExecutor, interpolateMessage } from '../../services/spellExecutor';
 import { diceService } from '../../services/diceService';
+import { SortableTab } from '../SortableTab';
 import { evaluateElementEffects, formatElementEffectLog } from '../../utils/elementEffects';
 import type { 
   CustomAction, 
@@ -405,8 +406,9 @@ export function ActionsTab() {
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       
+      <SortableTab tabId="actions">
       {/* Модификатор броска: одноразовый, снимается после первого броска */}
-      <Section title="Модификатор броска" icon="🎯">
+      <Section title="Модификатор броска" icon="🎯" sortableId="actions.modifier">
         <ModifierToggle value={pendingModifier} onChange={setPendingModifier} />
         <div className="text-[10px] text-ancient italic mt-1.5">
           {pendingModifier === 'normal'
@@ -415,7 +417,7 @@ export function ActionsTab() {
         </div>
       </Section>
       {/* Кастомные действия */}
-      <Section title="Действия" icon="⚡">
+      <Section title="Действия" icon="⚡" sortableId="actions.list">
         {customActions.length === 0 ? (
           <div className="text-center py-4">
             <p className="text-faded text-sm mb-3">Нет настроенных действий</p>
@@ -489,7 +491,7 @@ export function ActionsTab() {
       
       {/* Результаты */}
       {actionLog.length > 0 && (
-        <Section title="Результат" icon="📜">
+        <Section title="Результат" icon="📜" sortableId="actions.result">
           <div className="p-3 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">
             {actionLog.map((line, idx) => (
               <div 
@@ -518,7 +520,7 @@ export function ActionsTab() {
       )}
       
       {/* Управление */}
-      <Section title="Управление" icon="⚙️" collapsible defaultOpen={false}>
+      <Section title="Управление" icon="⚙️" collapsible defaultOpen={false} sortableId="actions.manage">
         <div className="space-y-2">
           {customActions.map(action => {
             const isV2 = isCustomActionV2(action);
@@ -559,6 +561,7 @@ export function ActionsTab() {
         resources={resources}
         onSave={saveAction}
       />
+      </SortableTab>
     </div>
   );
 }

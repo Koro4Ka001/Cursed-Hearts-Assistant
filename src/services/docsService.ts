@@ -2,9 +2,10 @@
 
 interface DocsStatsResponse {
   success: boolean;
-  health?: { current: number; max: number };
-  mana?: { current: number; max: number };
-  rage?: { current: number; max: number };
+  health?: { current: number; max: number; notFound?: boolean };
+  mana?: { current: number; max: number; notFound?: boolean };
+  rage?: { current: number; max: number; notFound?: boolean };
+  hunger?: { current: number; max: number; notFound?: boolean };
   resources?: Record<string, { current: number; max: number }>;
   characterName?: string;
   error?: string;
@@ -125,6 +126,13 @@ class DocsService {
   
   async setRage(character: string, current: number, max?: number): Promise<DocsActionResponse> {
     const data: Record<string, unknown> = { action: 'setRage', character, current };
+    if (max !== undefined) data['max'] = max;
+    return this.post(data);
+  }
+
+  /** 🍖 Голод: в Docs пишется в «манере существа»: Голод: [19x50+40]/20x50 */
+  async setHunger(character: string, current: number, max?: number): Promise<DocsActionResponse> {
+    const data: Record<string, unknown> = { action: 'setHunger', character, current };
     if (max !== undefined) data['max'] = max;
     return this.post(data);
   }

@@ -13,6 +13,7 @@ import type { DiceRollResult, Spell, SpellV2, CastContext, RollModifier } from '
 import { isSpellV2, DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../../types';
 import { ELEMENT_ICONS, SPELL_TYPES } from '../../constants/elements';
 import { BonusDamageField } from '../BonusDamageField';
+import { SortableTab } from '../SortableTab';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // КОМПОНЕНТ
@@ -462,8 +463,9 @@ export function MagicTab() {
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
       
+      <SortableTab tabId="magic">
       {/* ═══ 🔥 УПРАВЛЕНИЕ МАНОЙ ═══ */}
-      <Section title="Управление маной" icon="💠">
+      <Section title="Управление маной" icon="💠" sortableId="magic.mana">
         <div className="space-y-3">
           {/* Текущая мана */}
           <div className="flex items-center justify-between p-2 bg-obsidian rounded border border-edge-bone">
@@ -505,7 +507,7 @@ export function MagicTab() {
       </Section>
       
       {/* ═══ ЗАКЛИНАНИЯ ═══ */}
-      <Section title="Заклинания" icon="✨">
+      <Section title="Заклинания" icon="✨" sortableId="magic.spells">
         {spells.length === 0 ? (
           <div className="text-center py-6">
             <div className="text-4xl mb-2">📜</div>
@@ -733,6 +735,7 @@ export function MagicTab() {
           </div>
         )}
       </Section>
+      </SortableTab>
     </div>
   );
 }

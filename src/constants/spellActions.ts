@@ -88,7 +88,7 @@ export const STAT_BONUS_OPTIONS: {
   { value: 'intelligence', label: 'Интеллект', multiplier: 1 },
   { value: 'charisma', label: 'Харизма', multiplier: 1 },
   { value: 'dexterity', label: 'Ловкость', multiplier: 1 },
-  { value: 'physicalPower', label: 'Физ. сила (×5)', multiplier: 5 },
+  { value: 'physicalPower', label: 'Физ. сила', multiplier: 1 },
   { value: 'vitality', label: 'Живучесть', multiplier: 1 },
   { value: 'initiative', label: 'Инициатива', multiplier: 1 },
 ];

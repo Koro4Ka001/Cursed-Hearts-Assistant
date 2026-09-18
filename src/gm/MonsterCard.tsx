@@ -5,6 +5,7 @@ import { getGroupColor } from './RegistrationModal';
 import { ELEMENT_NAMES_MAP } from '../constants/elements';
 import { SpellEditorModal } from '../components/spell-editor';
 import type { DamageType, SpellV2 } from '../types';
+import { formatResist, parseResistInput } from '../utils/damage';
 
 interface Props {
   monster: Monster;
@@ -448,6 +449,51 @@ export function MonsterCard({ monster, selected, onToggle, onUpdate, onRemove, o
                   />
                 </div>
               ))}
+
+              {/* 🛡 Резисты брони: x0.5 — коэффициент, число — плоский минус */}
+              <div className="pt-1.5 mt-1.5 border-t border-[#2a2a3a] space-y-1">
+                <div className="text-[9px] text-faded uppercase tracking-wider">🛡 Резисты</div>
+                {Object.entries(monster.armorResists ?? {}).map(([dt, r]) => (
+                  <div key={dt} className="flex items-center gap-2">
+                    <span className="text-[9px] text-faded w-24 truncate">{ELEMENT_NAMES_MAP[dt as DamageType] ?? dt}</span>
+                    <input
+                      type="text"
+                      defaultValue={formatResist(r)}
+                      placeholder="x0.5"
+                      className="flex-1 bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1 text-bone text-xs text-center focus:border-gold-dark outline-none"
+                      onBlur={(e) => {
+                        const next = { ...(monster.armorResists ?? {}) };
+                        const parsed = parseResistInput(e.target.value);
+                        if (parsed) next[dt] = parsed; else delete next[dt];
+                        useMonsterStore.getState().setArmorResists(tokenId, next);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    />
+                    <button
+                      onClick={() => {
+                        const next = { ...(monster.armorResists ?? {}) };
+                        delete next[dt];
+                        useMonsterStore.getState().setArmorResists(tokenId, next);
+                      }}
+                      className="text-[10px] text-faded hover:text-blood px-1"
+                    >×</button>
+                  </div>
+                ))}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const dt = e.target.value;
+                    if (!dt) return;
+                    useMonsterStore.getState().setArmorResists(tokenId, { ...(monster.armorResists ?? {}), [dt]: { mult: 0.5 } });
+                  }}
+                  className="w-full bg-[#1a1a2a] border border-[#2a2a3a] rounded px-2 py-1 text-faded text-xs focus:border-gold-dark outline-none"
+                >
+                  <option value="">+ Добавить резист</option>
+                  {ALL_DAMAGE_TYPES.filter(dt => !(monster.armorResists ?? {})[dt]).map(dt => (
+                    <option key={dt} value={dt}>{ELEMENT_NAMES_MAP[dt] ?? dt}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

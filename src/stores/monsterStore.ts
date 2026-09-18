@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { DamageType, SpellV2 } from '../types';
+import type { DamageType, SpellV2, ArmorResist } from '../types';
 
 export interface MonsterWeapon {
   id: string;
@@ -26,6 +26,8 @@ export interface Monster {
   notes: string;
   armor: number;
   armorByType: Partial<Record<DamageType, number>>;
+  /** Резисты брони: тип урона → коэффициент/плоский минус (включая 'pure') */
+  armorResists?: Record<string, ArmorResist>;
   stats: {
     physicalPower: number;
     dexterity: number;
@@ -55,6 +57,7 @@ function migrateMonster(raw: Record<string, unknown>): Monster {
     notes: (raw.notes as string) || '',
     armor: (raw.armor as number) || 0,
     armorByType: (raw.armorByType as Partial<Record<DamageType, number>>) || {},
+    armorResists: (raw.armorResists as Record<string, ArmorResist>) || {},
     stats: raw.stats ? { ...defaultStats(), ...(raw.stats as Record<string, number>) } : defaultStats(),
     weapons: (raw.weapons as MonsterWeapon[]) || [],
     spells: (raw.spells as SpellV2[]) || [],
@@ -72,6 +75,7 @@ interface MonsterStore {
   setMaxHp: (tokenId: string, maxHp: number) => void;
   updateFields: (tokenId: string, fields: Partial<Pick<Monster, 'name' | 'hp' | 'maxHp' | 'group' | 'armor' | 'notes'>>) => void;
   setArmorByType: (tokenId: string, type: DamageType, value: number) => void;
+  setArmorResists: (tokenId: string, resists: Record<string, ArmorResist>) => void;
   setStats: (tokenId: string, stats: Partial<Monster['stats']>) => void;
   addWeapon: (tokenId: string, weapon: MonsterWeapon) => void;
   removeWeapon: (tokenId: string, weaponId: string) => void;
@@ -154,6 +158,17 @@ export const useMonsterStore = create<MonsterStore>()(
               ...m,
               armorByType: { ...m.armorByType, [type]: Math.max(0, value) },
             },
+          },
+        };
+      }),
+
+      setArmorResists: (tokenId, resists) => set((s) => {
+        const m = s.monsters[tokenId];
+        if (!m) return s;
+        return {
+          monsters: {
+            ...s.monsters,
+            [tokenId]: { ...m, armorResists: resists },
           },
         };
       }),

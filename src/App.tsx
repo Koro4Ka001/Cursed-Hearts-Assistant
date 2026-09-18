@@ -17,6 +17,7 @@ import { ActionsTab } from './components/tabs/ActionsTab';
 import { RageTab } from './components/tabs/RageTab';
 import { NotesTab } from './components/tabs/NotesTab';
 import { RokTab } from './components/tabs/RokTab';
+import { HungerTab } from './components/tabs/HungerTab';
 import { SettingsTab } from './components/tabs/SettingsTab';
 import { NotificationToast, LoadingSpinner, UndoButton } from './components/ui';
 import { cn } from './utils/cn';
@@ -51,13 +52,14 @@ class ErrorBoundary extends Component<EBProps, EBState> {
 // ═══════════════════════════════════════════════════════════════
 
 type ViewMode = 'compact' | 'medium' | 'large';
-type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok' | 'settings';
+type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok' | 'hunger' | 'settings';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'combat', icon: '⚔️', label: 'Бой' },
   { id: 'magic', icon: '✨', label: 'Магия' },
   { id: 'actions', icon: '⚡', label: 'Действия' },
   { id: 'rage', icon: '🔥', label: 'Rage' },
+  { id: 'hunger', icon: '🍖', label: 'Голод' },
   { id: 'notes', icon: '📝', label: 'Заметки' },
   { id: 'rok', icon: '🃏', label: 'Рок' },
   { id: 'settings', icon: '⚙️', label: 'Настройки' }
@@ -86,6 +88,7 @@ function TabContent({ activeTab }: { activeTab: string }) {
       {activeTab === 'magic' && <ErrorBoundary tabName="Магия"><MagicTab /></ErrorBoundary>}
       {activeTab === 'actions' && <ErrorBoundary tabName="Действия"><ActionsTab /></ErrorBoundary>}
       {activeTab === 'rage' && <ErrorBoundary tabName="Rage"><RageTab /></ErrorBoundary>}
+      {activeTab === 'hunger' && <ErrorBoundary tabName="Голод"><HungerTab /></ErrorBoundary>}
       {activeTab === 'notes' && <ErrorBoundary tabName="Заметки"><NotesTab /></ErrorBoundary>}
       {activeTab === 'rok' && <ErrorBoundary tabName="Карты Рока"><RokTab /></ErrorBoundary>}
       {activeTab === 'settings' && <ErrorBoundary tabName="Настройки"><SettingsTab /></ErrorBoundary>}

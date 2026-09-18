@@ -8,9 +8,17 @@ import { calculateDamage, getStatDamageBonus } from '../../utils/damage';
 import { diceService } from '../../services/diceService';
 import { executeWeaponEffects } from '../../utils/weaponEffects';
 import { BonusDamageField } from '../BonusDamageField';
+import { SortableTab } from '../SortableTab';
 import type { DiceRollResult, DamageType, DamageCategory, RollModifier } from '../../types';
 import { DAMAGE_TYPE_NAMES, PHYSICAL_DAMAGE_TYPES, MAGICAL_DAMAGE_TYPES } from '../../types';
 
+// Оба куба при помехе/преимуществе: [17|4→17], иначе [12]
+const d20Txt = (r: DiceRollResult): string =>
+  r.allD20Rolls && r.allD20Rolls.length > 1
+    ? `[${r.allD20Rolls.join('|')}→${r.rawD20}]`
+    : `[${r.rawD20}]`;
+
+// ═══════════════════════════════════════════════════════════════
 export function CombatTab() {
   const {
     units, selectedUnitId, takeDamage, heal: healUnit, addRage,
@@ -104,12 +112,12 @@ export function CombatTab() {
         atkRes.push(hitResult);
         
         if (hitResult.isCritFail) {
-          log.push(`💀 [${hitResult.rawD20}] = КРИТ ПРОМАХ!`);
+          log.push(`💀 ${d20Txt(hitResult)} = КРИТ ПРОМАХ!`);
           if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (промах)`);
           continue;
         }
         if (!isHit(hitResult)) {
-          log.push(`❌ [${hitResult.rawD20}]+${hitBonus}=${hitResult.total} — Промах`);
+          log.push(`❌ ${d20Txt(hitResult)}+${hitBonus}=${hitResult.total} — Промах`);
           if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (промах)`);
           continue;
         }
@@ -125,7 +133,7 @@ export function CombatTab() {
         
         await handleAddRageOnDealDamage(dmg.total);
         
-        log.push(`🎯 [${hitResult.rawD20}]+${hitBonus}=${hitResult.total} ${isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
+        log.push(`🎯 ${d20Txt(hitResult)}+${hitBonus}=${hitResult.total} ${isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
         addCombatLog(freshUnit.shortName ?? freshUnit.name, selectedMeleeWeapon.name, `${isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedMeleeWeapon.damageType] ?? ''}`);
         
         if (selectedMeleeWeapon.extraDamageFormula && selectedMeleeWeapon.extraDamageType) {
@@ -232,8 +240,8 @@ export function CombatTab() {
           const pendingBonus = (s === 0 && a === 0) ? useGameStore.getState().consumePendingBonusDamage() : null;
           const burnLine = `    💠 Заряженный урон сгорел (промах)`;
           const hit = await diceService.roll(hitFormula, `Стрела ${a + 1}`, unit.shortName ?? unit.name, s === 0 && a === 0 ? rangedMod : 'normal');
-          if (hit.isCritFail) { log.push(`💀 Стрела ${a + 1}: [${hit.rawD20}] = КРИТ ПРОМАХ!`); if (pendingBonus) log.push(burnLine); continue; }
-          if (!isHit(hit)) { log.push(`❌ Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Промах`); if (pendingBonus) log.push(burnLine); continue; }
+          if (hit.isCritFail) { log.push(`💀 Стрела ${a + 1}: ${d20Txt(hit)} = КРИТ ПРОМАХ!`); if (pendingBonus) log.push(burnLine); continue; }
+          if (!isHit(hit)) { log.push(`❌ Стрела ${a + 1}: ${d20Txt(hit)}+${hitBonus}=${hit.total} — Промах`); if (pendingBonus) log.push(burnLine); continue; }
           
           let shotDamage = 0;
           
@@ -244,7 +252,7 @@ export function CombatTab() {
             const dmg = await diceService.rollDamage(f, undefined, undefined, hit.isCrit, true);
             dmgRes.push(dmg);
             shotDamage = dmg.total;
-            log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} ${hit.isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
+            log.push(`🎯 Стрела ${a + 1}: ${d20Txt(hit)}+${hitBonus}=${hit.total} ${hit.isCrit ? '✨КРИТ ' : ''}→ 💥${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
             addCombatLog(unit.shortName ?? unit.name, `${selectedRangedWeapon.name} (${selectedAmmo.name})`, `${hit.isCrit ? '✨КРИТ ' : ''}${dmg.total} ${DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? ''}`);
             
             await handleAddRageOnDealDamage(dmg.total);
@@ -288,7 +296,7 @@ export function CombatTab() {
                 timestamp: Date.now(),
               });
             }
-          } else { log.push(`🎯 Стрела ${a + 1}: [${hit.rawD20}]+${hitBonus}=${hit.total} — Попадание!`); if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (попадание без урона)`); }
+          } else { log.push(`🎯 Стрела ${a + 1}: ${d20Txt(hit)}+${hitBonus}=${hit.total} — Попадание!`); if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (попадание без урона)`); }
           
           if (selectedRangedWeapon.onHitActions?.length) {
             console.log('[WeaponFX] Ranged weapon onHitActions:', selectedRangedWeapon.onHitActions.length, 'hitTotal:', hit.total);
@@ -410,8 +418,9 @@ export function CombatTab() {
   
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
+      <SortableTab tabId="combat">
       {unit.hasRage && (
-        <Section title="🔥 Ярость" icon="🔥">
+        <Section title="🔥 Ярость" icon="🔥" sortableId="combat.rage">
           <div className="space-y-2">
             <ProgressBar 
               type="rage" 
@@ -443,7 +452,7 @@ export function CombatTab() {
         </Section>
       )}
       
-      <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true}>
+      <Section title="Ближний бой" icon="⚔️" collapsible defaultOpen={true} sortableId="combat.melee">
         {meleeWeapons.length === 0 ? <p className="text-faded text-sm">Добавьте оружие ближнего боя в настройках</p> : (
           <div className="space-y-3">
             <Select label="Оружие" value={selectedMeleeWeapon?.id ?? ''} onChange={e => setSelectedMeleeWeaponId(e.target.value)} options={meleeWeapons.map(w => ({ value: w.id, label: `${w.name}${(w.onHitActions?.length ?? 0) > 0 ? ' ⚡' : ''}` }))} />
@@ -471,7 +480,7 @@ export function CombatTab() {
         )}
       </Section>
       
-      <Section title="Дальний бой" icon="🏹" collapsible defaultOpen={true}>
+      <Section title="Дальний бой" icon="🏹" collapsible defaultOpen={true} sortableId="combat.ranged">
         {rangedWeapons.length === 0 ? <p className="text-faded text-sm">Добавьте оружие дальнего боя в настройках</p> : ammoResources.length === 0 ? <p className="text-faded text-sm">Добавьте боеприпасы в ресурсах</p> : (
           <div className="space-y-3">
             <Select label="Оружие" value={selectedRangedWeapon?.id ?? ''} onChange={e => setSelectedRangedWeaponId(e.target.value)} options={rangedWeapons.map(w => ({ value: w.id, label: `${w.name}${(w.multishot ?? 1) > 1 ? ` (×${w.multishot})` : ''}${(w.onHitActions?.length ?? 0) > 0 ? ' ⚡' : ''}` }))} />
@@ -489,7 +498,7 @@ export function CombatTab() {
         )}
       </Section>
       
-      <Section title="Получение урона" icon="💀" collapsible defaultOpen={true}>
+      <Section title="Получение урона" icon="💀" collapsible defaultOpen={true} sortableId="combat.takeDamage">
         <div className="space-y-3">
           <NumberStepper label="Входящий урон" value={incomingDamage} onChange={setIncomingDamage} min={0} max={9999} />
           <Checkbox checked={isUndeadAttacker} onChange={setIsUndeadAttacker} label="☠️ Атакует нежить" />
@@ -500,12 +509,13 @@ export function CombatTab() {
         </div>
       </Section>
       
-      <Section title="Исцеление" icon="💚" collapsible defaultOpen={true}>
+      <Section title="Исцеление" icon="💚" collapsible defaultOpen={true} sortableId="combat.heal">
         <div className="space-y-3">
           <NumberStepper label="Количество HP" value={healAmount} onChange={setHealAmount} min={0} max={9999} />
           <Button variant="success" onClick={handleHeal} disabled={healAmount <= 0} className="w-full text-sm py-3">💚 Исцелить</Button>
         </div>
       </Section>
+      </SortableTab>
     </div>
   );
 }

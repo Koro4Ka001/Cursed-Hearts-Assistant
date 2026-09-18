@@ -7,6 +7,7 @@ import { useGameStore } from '../../stores/useGameStore';
 import { diceService } from '../../services/diceService';
 import { ROK_EFFECTS, type RokEffect } from '../../constants/rokEffects';
 import { Button, Section, EmptyState } from '../ui';
+import { SortableTab } from '../SortableTab';
 
 interface DrawResult {
   effect: RokEffect;
@@ -84,7 +85,8 @@ export function RokTab() {
 
   return (
     <div className="space-y-3 p-3 overflow-y-auto h-full">
-      <Section title="Карты Рока" icon="🃏">
+      <SortableTab tabId="rok">
+      <Section title="Карты Рока" icon="🃏" sortableId="rok.deck">
         <div className="text-xs text-faded">
           {deckResource
             ? <>Колода: {deckResource.icon ?? '🃏'} <strong className="text-bone">{deckResource.name}</strong> — осталось {deckResource.current ?? 0}/{deckResource.max ?? 0}</>
@@ -137,6 +139,7 @@ export function RokTab() {
           </div>
         </Section>
       )}
+      </SortableTab>
     </div>
   );
 }

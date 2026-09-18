@@ -25,6 +25,22 @@ export type StatKey = 'physicalPower' | 'dexterity' | 'vitality' | 'intelligence
 // 🔥 RAGE ТИПЫ
 // ═══════════════════════════════════════════════════════════════
 
+/** Резист брони: коэффициент (x0.5 — урон делится) и/или плоский минус */
+export interface ArmorResist {
+  mult?: number;
+  flat?: number;
+}
+
+/** Конфигурация «Голода» (существо умеет считать только до 50) */
+export interface HungerConfig {
+  /** Ступень сытости: за каждые N единиц — бонус брони (по умолчанию 45) */
+  step: number;
+  /** Броня за ступень: физическая / магическая */
+  armorPerStep: { physical: number; magical: number };
+  /** Пассивная регенерация: +hp HP за hungerCost сытости */
+  regen: { hp: number; hungerCost: number };
+}
+
 export interface RageConfig {
   onTakeDamage: number;
   onArmorBlock: number;
@@ -507,6 +523,11 @@ export interface Unit {
   rageConfig?: RageConfig;
   rageEffects?: RageEffect[];
   activeRageEffects?: RageEffect[];
+
+  /** 🍖 Голод (сытость): чем больше — тем выше броня */
+  hasHunger?: boolean;
+  hunger?: { current: number; max: number };
+  hungerConfig?: HungerConfig;
   
   notes?: string;
   
@@ -528,6 +549,8 @@ export interface Unit {
     chopping: number;
     magicBase: number;
     undead: number;
+    /** Резисты: тип урона → коэффициент/плоский минус (включая 'pure') */
+    resists?: Record<string, ArmorResist>;
   };
   
   elementModifiers: ElementModifier[];
@@ -617,6 +640,7 @@ export interface AppSettings {
   syncHP?: boolean;
   syncMana?: boolean;
   syncRage?: boolean;
+  syncHunger?: boolean;
   syncResources?: boolean;
   writeLogs?: boolean;
   showTokenBars?: boolean;

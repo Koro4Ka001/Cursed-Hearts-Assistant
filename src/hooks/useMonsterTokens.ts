@@ -13,26 +13,47 @@ export function useMonsterTokens() {
   // Sync deleted tokens from OBR map to monster store
   useEffect(() => {
     let unsubItems: (() => void) | null = null;
+    let unsubScene: (() => void) | null = null;
     let mounted = true;
+    // 🔧 КРИТИЧНО: при смене сцены Owlbear отдаёт items НОВОЙ сцены — токены
+    // предыдущей «исчезают», и прежняя логика стирала ВСЕХ зарегистрированных
+    // монстров. Теперь удаляем монстра только если его токен был виден
+    // в текущем потоке items (т.е. реально существует в ЭТОЙ сцене) и пропал.
+    // При смене сцены поток сбрасывается — старые токены не «увидены» заново.
+    const seenTokens = new Set<string>();
     // OBR.onReady не возвращает функцию отписки, поэтому используем флаг:
     // если колбэк сработает после размонтирования — подписка не создаётся
     OBR.onReady(() => {
       if (!mounted) return;
+      // Смена сцены проходит через not-ready: сбрасываем «увиденное»,
+      // чтобы токены прошлой сцены не считались существующими
+      unsubScene = OBR.scene.onReadyChange((ready) => {
+        if (!ready) seenTokens.clear();
+      });
       unsubItems = OBR.scene.items.onChange(async (items) => {
-        const trackedIds = Object.keys(useMonsterStore.getState().monsters);
-        if (trackedIds.length === 0) return;
-        const itemIds = new Set(items.map(i => i.id));
-        for (const id of trackedIds) {
-          if (!itemIds.has(id)) {
-            useMonsterStore.getState().remove(id);
-            await tokenBarService.removeBars(id);
+        try {
+          for (const item of items) seenTokens.add(item.id);
+
+          const trackedIds = Object.keys(useMonsterStore.getState().monsters);
+          if (trackedIds.length === 0) return;
+          const itemIds = new Set(items.map(i => i.id));
+          for (const id of trackedIds) {
+            // Токен существовал в текущей сцене (был в потоке items) и удалён
+            if (!itemIds.has(id) && seenTokens.has(id)) {
+              seenTokens.delete(id);
+              useMonsterStore.getState().remove(id);
+              await tokenBarService.removeBars(id);
+            }
           }
+        } catch (e) {
+          console.warn('[MonsterTokens] sync deleted tokens failed:', e);
         }
       });
     });
     return () => {
       mounted = false;
       unsubItems?.();
+      unsubScene?.();
     };
   }, []);
 

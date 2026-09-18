@@ -1,5 +1,6 @@
 // src/utils/damage.ts
-import type { Unit, DamageType, DamageCategory, ProficiencyType } from '../types';
+import type { Unit, DamageType, DamageCategory, ProficiencyType, ArmorResist } from '../types';
+import { getHungerArmorBonus } from './hunger';
 
 export type { DamageCategory };
 
@@ -97,14 +98,23 @@ export function calculateDamage(
   unit: Unit,
   isUndeadAttacker: boolean = false
 ): DamageResult {
-  // Чистый урон игнорирует всё
+  // Чистый урон игнорирует броню, НО резист брони к «чистому» работает
   if (damageType === 'pure') {
+    const resist = unit.armor?.resists?.['pure'];
+    const resistMult = resist?.mult ?? 1;
+    const resistFlat = resist?.flat ?? 0;
+    const finalDamage = Math.max(0, Math.round(rawDamage * resistMult) - resistFlat);
+
+    let breakdown = `${rawDamage} чистого урона`;
+    if (resistMult !== 1) breakdown = `${rawDamage} × ${resistMult} резист = ${Math.round(rawDamage * resistMult)}`;
+    if (resistFlat !== 0) breakdown += ` − ${resistFlat} резист`;
+
     return {
-      finalDamage: rawDamage,
-      armorApplied: 0,
-      multiplier: 1,
+      finalDamage,
+      armorApplied: resistFlat,
+      multiplier: resistMult,
       undeadBonus: 0,
-      breakdown: `${rawDamage} чистого урона`
+      breakdown
     };
   }
   
@@ -125,14 +135,23 @@ export function calculateDamage(
   }
   
   // Броня
-  const armorApplied = getArmorValue(unit, category, damageType);
+  let armorApplied = getArmorValue(unit, category, damageType);
+
+  // 🍖 Бонус брони от «Голода» (ступенями, добавляется к обычной броне)
+  const hungerBonus = getHungerArmorBonus(unit, category);
+  armorApplied += hungerBonus;
   
   // Бонус от нежити
   const undeadBonus = isUndeadAttacker ? (unit.armor.undead ?? 0) : 0;
-  
+
+  // Резист брони: сначала коэффициент (урон делится), потом вычеты
+  const resist = unit.armor?.resists?.[damageType];
+  const resistMult = resist?.mult ?? 1;
+  const resistFlat = resist?.flat ?? 0;
+
   // Итоговый урон
-  const damageAfterMultiplier = rawDamage * multiplier;
-  const finalDamage = Math.max(0, Math.round(damageAfterMultiplier - armorApplied - undeadBonus));
+  const afterResist = rawDamage * multiplier * resistMult;
+  const finalDamage = Math.max(0, Math.round(afterResist - armorApplied - undeadBonus - resistFlat));
   
   // Формируем строку разбивки
   const parts: string[] = [];
@@ -142,9 +161,21 @@ export function calculateDamage(
   } else {
     parts.push(`${rawDamage}`);
   }
+
+  if (resistMult !== 1) {
+    parts.push(`× ${resistMult} резист`);
+  }
   
   if (armorApplied > 0) {
     parts.push(`− ${armorApplied} броня`);
+  }
+
+  if (hungerBonus > 0) {
+    parts.push(`(в т.ч. ${hungerBonus} 🍖 голод)`);
+  }
+
+  if (resistFlat !== 0) {
+    parts.push(`− ${resistFlat} резист`);
   }
   
   if (undeadBonus > 0) {
@@ -199,6 +230,29 @@ export function getStatDamageBonus(
  */
 export function applyDamage(currentHP: number, damage: number): number {
   return currentHP - damage;
+}
+
+/**
+ * Парс ввода резиста: «x0.5»/«×0.5» → коэффициент, «5»/«-5» → плоский минус
+ */
+export function parseResistInput(input: string): ArmorResist | null {
+  const s = input.trim().replace(',', '.');
+  if (!s) return null;
+  const multMatch = s.match(/^[x×]\s*(-?\d*\.?\d+)$/i);
+  if (multMatch) {
+    const v = parseFloat(multMatch[1]!);
+    return isNaN(v) ? null : { mult: v };
+  }
+  const v = parseFloat(s);
+  return isNaN(v) ? null : { flat: v };
+}
+
+/**
+ * Форматирует резист обратно в строку ввода: {mult:0.5} → «x0.5»
+ */
+export function formatResist(resist: ArmorResist): string {
+  if (resist.mult !== undefined) return `x${resist.mult}`;
+  return String(resist.flat ?? 0);
 }
 
 /**

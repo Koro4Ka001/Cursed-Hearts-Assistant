@@ -1,5 +1,5 @@
 import type { Monster } from '../stores/monsterStore';
-import type { DamageType } from '../types';
+import type { DamageType, ArmorResist } from '../types';
 import { getDamageCategory } from './damage';
 
 export interface MonsterDamageResult {
@@ -17,9 +17,16 @@ export function calculateMonsterDamage(
   damageType: DamageType,
   target: Monster
 ): MonsterDamageResult {
-  // Pure damage ignores everything
+  // Pure damage ignores armor, but the armor resist to 'pure' still applies
   if (damageType === 'pure') {
-    return { finalDamage: rawDamage, armorApplied: 0, multiplier: 1, breakdown: `${rawDamage} чистого` };
+    const resist = target.armorResists?.['pure'];
+    const resistMult = resist?.mult ?? 1;
+    const resistFlat = resist?.flat ?? 0;
+    const finalDamage = Math.max(0, Math.round(rawDamage * resistMult) - resistFlat);
+    let breakdown = `${rawDamage} чистого`;
+    if (resistMult !== 1) breakdown = `${rawDamage} ×${resistMult} резист = ${Math.round(rawDamage * resistMult)}`;
+    if (resistFlat !== 0) breakdown += ` −${resistFlat} резист`;
+    return { finalDamage, armorApplied: resistFlat, multiplier: resistMult, breakdown };
   }
 
   const category = getDamageCategory(damageType);
@@ -48,12 +55,22 @@ export function calculateMonsterDamage(
   }
 
   const afterMultiplier = Math.round(rawDamage * multiplier);
-  const finalDamage = Math.max(0, afterMultiplier - armorApplied);
+
+  // Резист брони: сначала коэффициент (урон делится), потом вычеты
+  const resist = target.armorResists?.[damageType];
+  const resistMult = resist?.mult ?? 1;
+  const resistFlat = resist?.flat ?? 0;
+
+  const finalDamage = Math.max(0, Math.round(afterMultiplier * resistMult - armorApplied - resistFlat));
+
+  const resistParts: string[] = [];
+  if (resistMult !== 1) resistParts.push(`×${resistMult} резист`);
+  if (resistFlat !== 0) resistParts.push(`−${resistFlat} резист`);
 
   return {
     finalDamage,
     armorApplied,
     multiplier,
-    breakdown: `${rawDamage} ×${multiplier} −${armorApplied} = ${finalDamage}`,
+    breakdown: `${rawDamage} ×${multiplier}${resistParts.length ? ' ' + resistParts.join(' ') : ''} −${armorApplied} = ${finalDamage}`,
   };
 }

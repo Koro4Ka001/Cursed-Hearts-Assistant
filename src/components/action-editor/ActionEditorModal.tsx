@@ -121,11 +121,11 @@ const ACTION_TEMPLATES: {
       actions: [
         {
           id: generateId(),
-          type: 'roll_check',
+          type: 'roll_dice',
           label: 'Проверка',
           order: 0,
           diceFormula: 'd20',
-          bonuses: [{ type: 'stat', statKey: 'dexterity', multiplier: 1 }],
+          rollBonusStat: 'dexterity',
           successThreshold: 15,
           transitions: [
             { id: generateId(), condition: 'crit_fail', targetStepId: 'stop', priority: 0 },

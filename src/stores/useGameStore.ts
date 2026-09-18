@@ -6,6 +6,7 @@ import type { Unit, AppSettings, RollModifier, ElementModifier, RageEffect, Dama
 import { tokenBarService } from '../services/tokenBarService';
 import { docsService } from '../services/docsService';
 import { loadAssistantSettings } from '../utils/assistantSettings';
+import { formatHungerValue } from '../utils/hunger';
 
 /** Заряженный урон к следующей атаке/касту с уроном */
 export interface PendingBonusDamage {
@@ -29,7 +30,7 @@ interface UndoEntry {
   id: string;
   timestamp: number;
   description: string;
-  type: 'hp' | 'mana' | 'resource' | 'rage';
+  type: 'hp' | 'mana' | 'resource' | 'rage' | 'hunger';
   unitId: string;
   unitName: string;
   resourceId?: string;
@@ -134,7 +135,7 @@ function migrateUnit(unit: Unit): Unit {
 // ТИПЫ
 // ═══════════════════════════════════════════════════════════════
 
-type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok' | 'settings';
+type TabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok' | 'hunger' | 'settings';
 
 interface Notification {
   id: string;
@@ -188,6 +189,11 @@ interface GameState {
   addRage: (unitId: string, amount: number) => Promise<void>;
   spendRage: (unitId: string, amount: number) => Promise<void>;
   resetRage: (unitId: string) => Promise<void>;
+  /** 🍖 Голод: сытость (чем больше — тем лучше броня) */
+  setHunger: (unitId: string, value: number) => Promise<void>;
+  addHunger: (unitId: string, amount: number) => Promise<void>;
+  /** Пассивная регенерация: −сытость → +HP. false — не получилось */
+  regenHunger: (unitId: string) => Promise<boolean>;
   spendMana: (unitId: string, amount: number) => Promise<void>;
   heal: (unitId: string, amount: number) => Promise<void>;
   takeDamage: (unitId: string, amount: number) => Promise<void>;
@@ -241,7 +247,10 @@ async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void>
       unit.useManaAsHp,
       hasRage ? (unit.rage?.current ?? 0) : 0,
       hasRage ? (unit.rage?.max ?? unit.rageConfig?.max ?? 100) : 100,
-      hasRage
+      hasRage,
+      unit.hasHunger ? (unit.hunger?.current ?? 0) : 0,
+      unit.hasHunger ? (unit.hunger?.max ?? 1000) : 1000,
+      unit.hasHunger ?? false
     );
   } catch (e) {
     console.warn('[Store] Failed to update token bars:', e);
@@ -553,6 +562,76 @@ export const useGameStore = create<GameState>()(
       resetRage: async (unitId) => {
         await get().setRage(unitId, 0);
       },
+
+      // ═══ 🍖 ГОЛОД (сытость) ═══
+      setHunger: async (unitId, value) => {
+        const { units, settings, connections } = get();
+        const unit = units.find(u => u.id === unitId);
+        if (!unit || !unit.hasHunger) return;
+
+        const previousValue = unit.hunger?.current ?? 0;
+        const max = unit.hunger?.max ?? 1000;
+        const newHunger = Math.max(0, Math.min(value, max));
+        if (newHunger === previousValue) return;
+
+        const undoEntry: UndoEntry = {
+          id: generateId(),
+          timestamp: Date.now(),
+          description: `${unit.shortName}: Голод ${formatHungerValue(previousValue)} → ${formatHungerValue(newHunger)}`,
+          type: 'hunger',
+          unitId,
+          unitName: unit.shortName ?? unit.name,
+          resourceId: 'hunger',
+          previousValue,
+          newValue: newHunger
+        };
+
+        set(state => ({
+          units: state.units.map(u =>
+            u.id === unitId
+              ? { ...u, hunger: { ...(u.hunger ?? { current: 0, max }), current: newHunger } }
+              : u
+          ),
+          undoHistory: [undoEntry, ...state.undoHistory].slice(0, MAX_UNDO_HISTORY),
+          connections: { ...state.connections, lastSyncTime: Date.now() }
+        }));
+
+        const freshUnit = get().units.find(u => u.id === unitId);
+        if (freshUnit) await updateTokenBars(freshUnit, settings);
+
+        // Docs-синк в фоне (формат существа собирает Apps Script)
+        if (connections.docs && settings.syncHunger && unit.googleDocsHeader) {
+          if (!ensureDocsUrl(settings)) return;
+          docsService.setHunger(unit.googleDocsHeader, newHunger, max).catch(() => {});
+        }
+      },
+
+      addHunger: async (unitId, amount) => {
+        const unit = get().units.find(u => u.id === unitId);
+        if (!unit || !unit.hasHunger) return;
+        await get().setHunger(unitId, (unit.hunger?.current ?? 0) + amount);
+      },
+
+      regenHunger: async (unitId) => {
+        // 🩸 Пассивная регенерация: −hungerCost сытости → +hp HP (при неполном здоровье)
+        const unit = get().units.find(u => u.id === unitId);
+        if (!unit || !unit.hasHunger || !unit.hungerConfig) return false;
+        const cost = unit.hungerConfig.regen.hungerCost;
+        const heal = unit.hungerConfig.regen.hp;
+        const cur = unit.hunger?.current ?? 0;
+        if (cur < cost) {
+          get().addNotification(`Недостаточно сытости! Нужно ${formatHungerValue(cost)}`, 'warning');
+          return false;
+        }
+        if (unit.health.current >= unit.health.max) {
+          get().addNotification('Здоровье уже полное', 'warning');
+          return false;
+        }
+        await get().setHunger(unitId, cur - cost);
+        await get().setHP(unitId, Math.min(unit.health.max, unit.health.current + heal));
+        get().addNotification(`🩸 Регенерация: +${heal} HP (−${cost} сытости)`, 'success');
+        return true;
+      },
       
       activateRageEffect: async (unitId, effect) => {
         const { units } = get();
@@ -821,6 +900,21 @@ export const useGameStore = create<GameState>()(
             }
             break;
           }
+          case 'hunger': {
+            set(state => ({
+              units: state.units.map(u =>
+                u.id === lastEntry.unitId
+                  ? { ...u, hunger: { ...(u.hunger ?? { current: 0, max: 1000 }), current: lastEntry.previousValue } } : u
+              ),
+              undoHistory: restHistory
+            }));
+            const fresh = get().units.find(u => u.id === lastEntry.unitId);
+            if (fresh) await updateTokenBars(fresh, settings);
+            if (get().connections.docs && settings.syncHunger && unit.googleDocsHeader) {
+              try { await docsService.setHunger(unit.googleDocsHeader, lastEntry.previousValue, unit.hunger?.max ?? 1000); } catch {}
+            }
+            break;
+          }
           case 'resource': {
             const resource = unit.resources.find(r => r.id === lastEntry.resourceId);
             set(state => ({
@@ -877,7 +971,7 @@ export const useGameStore = create<GameState>()(
           const updates: Partial<Unit> = {};
           let changed = false;
           
-          if (stats.health && settings.syncHP) {
+          if (stats.health && !stats.health.notFound && settings.syncHP) {
             if (stats.health.current !== unit.health.current || stats.health.max !== unit.health.max) {
               updates.health = { current: stats.health.current, max: stats.health.max };
               changed = true;
@@ -885,7 +979,7 @@ export const useGameStore = create<GameState>()(
             }
           }
           
-          if (stats.mana && settings.syncMana) {
+          if (stats.mana && !stats.mana.notFound && settings.syncMana) {
             if (stats.mana.current !== unit.mana.current || stats.mana.max !== unit.mana.max) {
               updates.mana = { current: stats.mana.current, max: stats.mana.max };
               changed = true;
@@ -893,12 +987,22 @@ export const useGameStore = create<GameState>()(
             }
           }
           
-          if (stats.rage && settings.syncRage && unit.hasRage) {
+          if (stats.rage && !stats.rage.notFound && settings.syncRage && unit.hasRage) {
             console.log('[Store] 📥 Rage from docs:', stats.rage);
             if (stats.rage.current !== (unit.rage?.current ?? 0) || stats.rage.max !== (unit.rage?.max ?? 100)) {
               updates.rage = { current: stats.rage.current, max: stats.rage.max };
               changed = true;
               console.log('[Store] 📥 Rage changed:', unit.rage?.current, '→', stats.rage.current);
+            }
+          }
+
+          // 🍖 Голод из Docs (формат существа «19x50+40» парсится в число)
+          if (stats.hunger && !stats.hunger.notFound && settings.syncHunger && unit.hasHunger) {
+            const docsHunger = stats.hunger;
+            if (docsHunger.current !== (unit.hunger?.current ?? 0) || docsHunger.max !== (unit.hunger?.max ?? 1000)) {
+              updates.hunger = { current: docsHunger.current, max: docsHunger.max };
+              changed = true;
+              console.log('[Store] 📥 Hunger changed:', unit.hunger?.current, '→', docsHunger.current);
             }
           }
           
@@ -983,6 +1087,9 @@ export const useGameStore = create<GameState>()(
           }
           if (settings.syncRage && unit.hasRage) {
             await docsService.setRage(unit.googleDocsHeader, unit.rage?.current ?? 0, unit.rage?.max ?? 100);
+          }
+          if (settings.syncHunger && unit.hasHunger) {
+            await docsService.setHunger(unit.googleDocsHeader, unit.hunger?.current ?? 0, unit.hunger?.max ?? 1000);
           }
           if (settings.syncResources) {
             for (const resource of unit.resources) {

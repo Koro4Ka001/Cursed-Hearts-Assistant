@@ -339,6 +339,13 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.lastRoll = result.total;
     context.values['lastRoll'] = result.total;
     if (action.saveResultAs) context.values[action.saveResultAs] = result.total;
+    // Порог успеха (если задан) — поведение проверки: работает контекст успеха
+    // и переходы «успех/провал/крит-провал» для шаблонных действий
+    if (action.successThreshold !== undefined) {
+      context.success = !isCritFail && (isCrit || result.total >= action.successThreshold);
+    }
+    context.isCrit = isCrit;
+    context.isCritFail = isCritFail;
 
     const rollsStr = `[${result.rolls.join(', ')}]`;
     const modMark = rawD20 !== undefined && isCrit ? ' ✨' : rawD20 !== undefined && isCritFail ? ' 💀' : '';

@@ -2,26 +2,36 @@
 // Персональные настройки интерфейса ассистента: хранятся в localStorage,
 // поэтому у каждого игрока (каждого браузера) — свои.
 
-export type AssistantTabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok';
+export type AssistantTabId = 'combat' | 'magic' | 'actions' | 'rage' | 'notes' | 'rok' | 'hunger';
 
 export interface AssistantUISettings {
   visibleTabs: Record<AssistantTabId, boolean>;
   showTokenBars: boolean;
   showNotifications: boolean;
+  /** Замок перетаскивания блоков: true (по умолчанию) — блоки закреплены */
+  layoutLocked: boolean;
+  /** Порядок секций по вкладкам: tabId → [sectionId, ...] (несортируемые вкладки отсутствуют) */
+  blockOrder: Record<string, string[]>;
 }
 
 const STORAGE_KEY = 'ch-assistant-ui-settings';
 export const ASSISTANT_UI_EVENT = 'ch-assistant-ui-changed';
 
 const DEFAULTS: AssistantUISettings = {
-  // Все вкладки включены по умолчанию, кроме «Карты Рока»
-  visibleTabs: { combat: true, magic: true, actions: true, rage: true, notes: true, rok: false },
+  // Все вкладки включены по умолчанию, кроме «Карты Рока» и «Голода»
+  visibleTabs: { combat: true, magic: true, actions: true, rage: true, notes: true, rok: false, hunger: false },
   showTokenBars: true,
   showNotifications: true,
+  layoutLocked: true,
+  blockOrder: {},
 };
 
 function defaults(): AssistantUISettings {
-  return { ...DEFAULTS, visibleTabs: { ...DEFAULTS.visibleTabs } };
+  return {
+    ...DEFAULTS,
+    visibleTabs: { ...DEFAULTS.visibleTabs },
+    blockOrder: { ...DEFAULTS.blockOrder },
+  };
 }
 
 export function loadAssistantSettings(): AssistantUISettings {
@@ -33,6 +43,8 @@ export function loadAssistantSettings(): AssistantUISettings {
       showTokenBars: parsed.showTokenBars ?? DEFAULTS.showTokenBars,
       showNotifications: parsed.showNotifications ?? DEFAULTS.showNotifications,
       visibleTabs: { ...DEFAULTS.visibleTabs, ...(parsed.visibleTabs ?? {}) },
+      layoutLocked: parsed.layoutLocked ?? DEFAULTS.layoutLocked,
+      blockOrder: parsed.blockOrder ?? {},
     };
   } catch {
     return defaults();

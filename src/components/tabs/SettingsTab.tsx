@@ -14,13 +14,15 @@ import { selectToken } from '../../services/hpTrackerService';
 import { GAME_ELEMENTS } from '../../constants/elements';
 import type { 
   Unit, Weapon, Spell, SpellV2, Resource, DamageType, ProficiencyType, WeaponType,
-  ElementModifier
+  ElementModifier, ArmorResist
 } from '../../types';
 import { 
   DAMAGE_TYPE_NAMES, PROFICIENCY_NAMES, STAT_NAMES, 
   ALL_DAMAGE_TYPES, MULTIPLIER_OPTIONS,
   ELEMENT_NAMES, isSpellV2, createEmptyElementModifier
 } from '../../types';
+import { parseResistInput, formatResist } from '../../utils/damage';
+import { defaultHungerConfig } from '../../utils/hunger';
 import { SPELL_TYPES } from '../../constants/elements';
 
 export function SettingsTab() {
@@ -240,6 +242,7 @@ export function SettingsTab() {
                 <Checkbox checked={settings.syncHP ?? true} onChange={(v) => updateSettings({ syncHP: v })} label="Синхронизировать HP" />
                 <Checkbox checked={settings.syncMana ?? true} onChange={(v) => updateSettings({ syncMana: v })} label="Синхронизировать ману" />
                 <Checkbox checked={settings.syncRage ?? true} onChange={(v) => updateSettings({ syncRage: v })} label="🔥 Синхронизировать Rage" />
+                <Checkbox checked={settings.syncHunger ?? false} onChange={(v) => updateSettings({ syncHunger: v })} label="🍖 Синхронизировать голод" />
                 <Checkbox checked={settings.syncResources ?? true} onChange={(v) => updateSettings({ syncResources: v })} label="Синхронизировать ресурсы" />
                 <Checkbox checked={settings.writeLogs ?? true} onChange={(v) => updateSettings({ writeLogs: v })} label="Логировать действия" />
               </div>
@@ -323,6 +326,11 @@ function AssistantSettingsSection({ units }: { units: Unit[] }) {
             onChange={(v) => update({ showNotifications: v })}
             label="🔔 Показывать уведомления о бросках"
           />
+          <Checkbox
+            checked={!ui.layoutLocked}
+            onChange={(v) => update({ layoutLocked: !v })}
+            label="🔓 Разрешить перетаскивание блоков во вкладках"
+          />
         </div>
 
         <div className="pt-2 border-t border-edge-bone">
@@ -334,6 +342,7 @@ function AssistantSettingsSection({ units }: { units: Unit[] }) {
             <Checkbox checked={ui.visibleTabs.rage} onChange={(v) => updateTab('rage', v)} label="🔥 Rage" />
             <Checkbox checked={ui.visibleTabs.notes} onChange={(v) => updateTab('notes', v)} label="📝 Заметки" />
             <Checkbox checked={ui.visibleTabs.rok} onChange={(v) => updateTab('rok', v)} label="🃏 Карты Рока" />
+            <Checkbox checked={ui.visibleTabs.hunger} onChange={(v) => updateTab('hunger', v)} label="🍖 Голод" />
           </div>
         </div>
       </div>
@@ -450,6 +459,14 @@ function BasicEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
         )}
       </div>
       
+      <div className="space-y-2 pt-2 border-t border-edge-bone">
+        <Checkbox checked={localUnit.hasHunger ?? false} onChange={(v) => update({
+          hasHunger: v,
+          hunger: v ? (localUnit.hunger ?? { current: 0, max: 1000 }) : undefined,
+          hungerConfig: localUnit.hungerConfig ?? defaultHungerConfig()
+        })} label="🍖 Имеет Голод (сытость)" />
+      </div>
+
       <div className="space-y-2 pt-2 border-t border-edge-bone">
         <Checkbox checked={localUnit.hasRokCards ?? false} onChange={(v) => update({ hasRokCards: v })} label="🃏 Имеет колоду Рока" />
         {localUnit.hasRokCards && (
@@ -606,6 +623,75 @@ function ArmorEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
         <div className="text-xs text-faded mt-1">💡 Защита от конкретных элементов настраивается во вкладке "Элементы"</div>
       </div>
       <NumberStepper label="Защита от нежити" value={localUnit.armor?.undead ?? 0} onChange={(v) => update({ armor: { ...(localUnit.armor ?? {} as any), undead: v } })} />
+
+      <ResistsEditor
+        resists={localUnit.armor?.resists}
+        onChange={(resists) => update({ armor: { ...(localUnit.armor ?? {} as any), resists } })}
+      />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// РЕЗИСТЫ БРОНИ (игроки и монстры)
+// ═══════════════════════════════════════════════════════════════
+
+function ResistsEditor({ resists, onChange }: { resists?: Record<string, ArmorResist>; onChange: (r: Record<string, ArmorResist>) => void }) {
+  const [newType, setNewType] = useState<DamageType | ''>('');
+  const map = resists ?? {};
+  const used = Object.keys(map);
+
+  // Доступные типы: все типы урона, ещё не занятые
+  const available = ALL_DAMAGE_TYPES.filter(t => !used.includes(t));
+
+  return (
+    <div className="space-y-2 pt-2 border-t border-edge-bone">
+      <div className="text-xs text-faded uppercase">Резисты (сначала коэффициент, потом вычет)</div>
+      <div className="text-[10px] text-faded">Например <code className="text-ancient">x0.5</code> — урон делится на 2, <code className="text-ancient">5</code> — минус 5. Входящий урон: × коэффициент → − броня → − резист.</div>
+
+      {used.length === 0 && <div className="text-xs text-faded py-1">Резистов нет.</div>}
+
+      {used.map(type => {
+        const r = map[type]!;
+        const label = DAMAGE_TYPE_NAMES[type] ?? type;
+        return (
+          <div key={type} className="flex items-center gap-2 p-2 bg-obsidian rounded border border-edge-bone">
+            <span className="flex-1 text-sm text-bone">{label}</span>
+            <input
+              type="text"
+              defaultValue={formatResist(r)}
+              placeholder="x0.5"
+              className="w-20 bg-obsidian border border-edge-bone text-bone rounded px-2 py-1 text-xs text-center focus:border-gold outline-none"
+              onBlur={(e) => {
+                const parsed = parseResistInput(e.target.value);
+                const next = { ...map };
+                if (parsed) next[type] = parsed; else delete next[type];
+                onChange(next);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            />
+            <Button variant="danger" size="sm" onClick={() => { const next = { ...map }; delete next[type]; onChange(next); }}>×</Button>
+          </div>
+        );
+      })}
+
+      {available.length > 0 && (
+        <div className="flex gap-2">
+          <Select
+            value={newType}
+            onChange={(e) => setNewType(e.target.value as DamageType | '')}
+            options={[{ value: '', label: '+ Добавить резист' }, ...available.map(t => ({ value: t, label: DAMAGE_TYPE_NAMES[t] ?? t }))]}
+            className="flex-1"
+          />
+          {newType && (
+            <Button variant="gold" onClick={() => {
+              const next = { ...map, [newType]: { mult: 0.5 } };
+              onChange(next);
+              setNewType('');
+            }}>+</Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

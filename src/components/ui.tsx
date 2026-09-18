@@ -441,7 +441,15 @@ interface SectionProps {
   defaultOpen?: boolean;
   children: ReactNode;
   className?: string;
+  /** 🧩 Идентификатор для перетаскивания (внутри SortableTab вкладки) */
+  sortableId?: string;
+  /** Перетаскивание разрешено (замок в настройках ассистента снят) */
+  unlocked?: boolean;
+  onDropSection?: (dragId: string, targetId: string, before: boolean) => void;
 }
+
+/** Какой блок сейчас тащат (module-level: работает между секциями) */
+let dragSectionId: string | null = null;
 
 export function Section({
   title,
@@ -450,19 +458,51 @@ export function Section({
   defaultOpen = true,
   children,
   className,
+  sortableId,
+  unlocked,
+  onDropSection,
 }: SectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [dropEdge, setDropEdge] = useState<'top' | 'bottom' | null>(null);
+
+  const sortable = !!sortableId && !!unlocked && !!onDropSection;
 
   const handleToggle = useCallback(() => {
     if (collapsible) setIsOpen((prev) => !prev);
   }, [collapsible]);
 
   return (
-    <div className={cn('panel', className)}>
+    <div
+      className={cn('panel', className)}
+      draggable={sortable}
+      title={sortable ? '⟺ Перетащить' : undefined}
+      style={dropEdge ? { boxShadow: `0 ${dropEdge === 'top' ? '-3px' : '3px'} 0 0 #c9a227` } : undefined}
+      onDragStart={sortable ? (e) => {
+        dragSectionId = sortableId!;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', sortableId!);
+      } : undefined}
+      onDragOver={sortable ? (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const rect = e.currentTarget.getBoundingClientRect();
+        const next: 'top' | 'bottom' = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom';
+        setDropEdge((prev) => (prev === next ? prev : next));
+      } : undefined}
+      onDragLeave={sortable ? () => setDropEdge(null) : undefined}
+      onDrop={sortable ? (e) => {
+        e.preventDefault();
+        if (dragSectionId && dragSectionId !== sortableId) onDropSection!(dragSectionId, sortableId!, dropEdge === 'top');
+        dragSectionId = null;
+        setDropEdge(null);
+      } : undefined}
+      onDragEnd={sortable ? () => { dragSectionId = null; setDropEdge(null); } : undefined}
+    >
       <div
         className={cn(
           'section-header',
-          collapsible && 'cursor-pointer select-none hover:bg-white/[0.02]'
+          collapsible && 'cursor-pointer select-none hover:bg-white/[0.02]',
+          sortable && 'cursor-grab'
         )}
         onClick={handleToggle}
       >

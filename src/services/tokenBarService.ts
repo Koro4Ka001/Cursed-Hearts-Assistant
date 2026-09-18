@@ -31,6 +31,11 @@ const CFG = {
   RAGE: "#ff3300",
   RAGE_BRIGHT: "#ffd700",
   RAGE_PULSE: "#fff050",
+  // 🍖 Голод (сытость): сытый — тёплый янтарь, средне — сухая кость,
+  // голодает — могильный пепел
+  HUNGER_FULL: "#d9a441",
+  HUNGER_MED: "#b0a080",
+  HUNGER_LOW: "#5a4a3a",
   DEAD: "#333333",
 } as const;
 
@@ -41,6 +46,7 @@ interface Layout {
   hpY: number;
   manaY: number;
   rageY: number;
+  hungerY: number;
   tokenW: number;
 }
 
@@ -51,6 +57,8 @@ interface Ids {
   manaFill?: string;
   rageBg?: string;
   rageFill?: string;
+  hungerBg?: string;
+  hungerFill?: string;
   nameLabel?: string;
 }
 
@@ -63,6 +71,9 @@ interface State {
   rage: number;
   maxRage: number;
   hasRage: boolean;
+  hunger: number;
+  maxHunger: number;
+  hasHunger: boolean;
   useManaAsHp: boolean;
   tx: number;
   ty: number;
@@ -179,13 +190,14 @@ class TokenBarService {
         st.hp, st.maxHp,
         st.mana, st.maxMana, st.useManaAsHp,
         st.name,
-        st.rage, st.maxRage, st.hasRage
+        st.rage, st.maxRage, st.hasRage,
+        st.hunger, st.maxHunger, st.hasHunger
       );
     }, 250);
     this.rebuildTimers.set(tokenId, t);
   }
 
-  private calcLayout(tok: Image, useManaAsHp: boolean, hasRage: boolean): Layout {
+  private calcLayout(tok: Image, useManaAsHp: boolean, hasRage: boolean, hasHunger: boolean): Layout {
     const sx = Math.abs(Number(tok.scale?.x) || 1);
     const sy = Math.abs(Number(tok.scale?.y) || 1);
     const imgW = Number(tok.image?.width) || 150;
@@ -210,8 +222,9 @@ class TokenBarService {
     const hpY = Math.round(tok.position.y + wH / 2 + offY);
     const manaY = useManaAsHp ? hpY : hpY + bh + gap;
     const rageY = hasRage ? (useManaAsHp ? hpY + bh + gap : manaY + bh + gap) : manaY;
+    const hungerY = hasHunger ? rageY + bh + gap : rageY;
 
-    return { barW: bw, barH: bh, barX, hpY, manaY, rageY, tokenW: wW };
+    return { barW: bw, barH: bh, barX, hpY, manaY, rageY, hungerY, tokenW: wW };
   }
 
   async createBars(
@@ -220,7 +233,8 @@ class TokenBarService {
     manaIn: number, maxManaIn: number,
     useManaAsHp = false,
     name?: string,
-    rageIn = 0, maxRageIn = 100, hasRage = false
+    rageIn = 0, maxRageIn = 100, hasRage = false,
+    hungerIn = 0, maxHungerIn = 1000, hasHunger = false
   ): Promise<void> {
     if (!tokenId) return;
     try {
@@ -236,6 +250,8 @@ class TokenBarService {
       const maxMana = Number(maxManaIn);
       const rage = Number(rageIn) || 0;
       const maxRage = Number(maxRageIn) || 100;
+      const hunger = Number(hungerIn) || 0;
+      const maxHunger = Number(maxHungerIn) || 1000;
 
       await this.removeBars(tokenId);
 
@@ -246,11 +262,12 @@ class TokenBarService {
       // Скрытый токен — бары создаются невидимыми
       const tokenVisible = tok.visible !== false;
 
-      const lay = this.calcLayout(tok as Image, useManaAsHp, hasRage);
+      const lay = this.calcLayout(tok as Image, useManaAsHp, hasRage, hasHunger);
       const dead = hp <= 0;
       const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
       const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
       const ragePct = maxRage > 0 ? Math.max(0, Math.min(1, rage / maxRage)) : 0;
+      const hungerPct = maxHunger > 0 ? Math.max(0, Math.min(1, hunger / maxHunger)) : 0;
       // 🔧 При useManaAsHp: мана-бар рисуется на позиции HP (это и есть жизнь)
       const showHp = !useManaAsHp || (manaIn > 0 || maxManaIn > 0);
 
@@ -359,12 +376,23 @@ class TokenBarService {
         }
       }
 
+      // 🍖 Бар голода (сытости): цвет от заполненности — янтарь/кость/пепел
+      if (!dead && hasHunger) {
+        rect("hungerBg", lay.barX, lay.hungerY, lay.barW, lay.barH, CFG.BG, 10, true);
+        if (hungerPct > 0) {
+          rect("hungerFill", lay.barX, lay.hungerY,
+            Math.round(Math.max(1, lay.barW * hungerPct)), lay.barH,
+            this.hungerColor(hunger, maxHunger), 11, true, true);
+        }
+      }
+
       if (shapes.length > 0) await OBR.scene.items.addItems(shapes);
 
       this.states.set(tokenId, {
         id: tokenId,
         hp, maxHp, mana, maxMana, useManaAsHp,
         rage, maxRage, hasRage,
+        hunger, maxHunger, hasHunger,
         tx: tok.position.x, ty: tok.position.y,
         sx: Math.abs(Number(tok.scale?.x) || 1),
         sy: Math.abs(Number(tok.scale?.y) || 1),
@@ -384,7 +412,8 @@ class TokenBarService {
     hpIn: number, maxHpIn: number,
     manaIn: number, maxManaIn: number,
     useManaAsHp = false,
-    rageIn = 0, maxRageIn = 100, hasRage = false
+    rageIn = 0, maxRageIn = 100, hasRage = false,
+    hungerIn = 0, maxHungerIn = 1000, hasHunger = false
   ): Promise<void> {
     const st = this.states.get(tokenId);
     const hp = Number(hpIn) || 0;
@@ -393,9 +422,11 @@ class TokenBarService {
     const maxMana = Number(maxManaIn);
     const rage = Number(rageIn) || 0;
     const maxRage = Number(maxRageIn) || 100;
+    const hunger = Number(hungerIn) || 0;
+    const maxHunger = Number(maxHungerIn) || 1000;
 
     if (!st) {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage, hunger, maxHunger, hasHunger);
       return;
     }
 
@@ -404,31 +435,36 @@ class TokenBarService {
     const hpPct = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
     const manaPct = maxMana > 0 ? Math.max(0, Math.min(1, mana / maxMana)) : 0;
     const ragePct = maxRage > 0 ? Math.max(0, Math.min(1, rage / maxRage)) : 0;
+    const hungerPct = maxHunger > 0 ? Math.max(0, Math.min(1, hunger / maxHunger)) : 0;
 
     const hasMana = (manaIn > 0 || maxManaIn > 0) && !useManaAsHp;
     const needRebuild =
       dead !== st.dead ||
       st.useManaAsHp !== useManaAsHp ||
       st.hasRage !== hasRage ||
+      st.hasHunger !== hasHunger ||
       // 🔧 useManaAsHp: hpFill существует (синий мана-бар), проверяем manaPct
       (!dead && !ids.hpFill && (useManaAsHp ? manaPct > 0 : hpPct > 0)) ||
       (hasMana && !ids.manaFill && manaPct > 0) ||
       (hasRage && !ids.rageFill && ragePct > 0) ||
+      (hasHunger && !ids.hungerFill && hungerPct > 0) ||
       (!dead && !ids.hpBg) ||
       (hasMana && !ids.manaBg) ||
-      (hasRage && !ids.rageBg);
+      (hasRage && !ids.rageBg) ||
+      (hasHunger && !ids.hungerBg);
 
     if (needRebuild) {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage, hunger, maxHunger, hasHunger);
       return;
     }
 
     st.hp = hp; st.maxHp = maxHp;
     st.mana = mana; st.maxMana = maxMana;
     st.rage = rage; st.maxRage = maxRage; st.hasRage = hasRage;
+    st.hunger = hunger; st.maxHunger = maxHunger; st.hasHunger = hasHunger;
     st.dead = dead; st.useManaAsHp = useManaAsHp;
 
-    const toUpdate = [ids.hpFill, ids.hpBg, ids.manaFill, ids.manaBg, ids.rageFill, ids.rageBg].filter(
+    const toUpdate = [ids.hpFill, ids.hpBg, ids.manaFill, ids.manaBg, ids.rageFill, ids.rageBg, ids.hungerFill, ids.hungerBg].filter(
       Boolean
     ) as string[];
     if (toUpdate.length === 0) return;
@@ -460,11 +496,17 @@ class TokenBarService {
             item.visible = barVis && !dead && ragePct > 0;
           } else if (item.id === ids.rageBg) {
             item.visible = barVis && !dead;
+          } else if (item.id === ids.hungerFill) {
+            item.width = Math.round(Math.max(0, bw * hungerPct));
+            item.style.fillColor = this.hungerColor(hunger, maxHunger);
+            item.visible = barVis && !dead && hungerPct > 0;
+          } else if (item.id === ids.hungerBg) {
+            item.visible = barVis && !dead && hasHunger;
           }
         }
       });
     } catch {
-      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage);
+      await this.createBars(tokenId, hp, maxHp, mana, maxMana, useManaAsHp, undefined, rage, maxRage, hasRage, hunger, maxHunger, hasHunger);
     }
   }
 
@@ -598,6 +640,15 @@ class TokenBarService {
     if (p < 0.25) return CFG.HP_LOW;
     if (p < 0.5) return CFG.HP_MED;
     return CFG.HP_HIGH;
+  }
+
+  /** 🍖 Цвет голода от заполненности: сыт — янтарь, средне — кость, голодает — пепел */
+  private hungerColor(cur: number, max: number): string {
+    const p = (Number(cur) || 0) / (Number(max) || 1);
+    if (p <= 0) return CFG.HUNGER_LOW;
+    if (p < 0.33) return CFG.HUNGER_LOW;
+    if (p < 0.66) return CFG.HUNGER_MED;
+    return CFG.HUNGER_FULL;
   }
 
   private lerp(a: string, b: string, t: number): string {
