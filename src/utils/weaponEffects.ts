@@ -1,5 +1,6 @@
 // src/utils/weaponEffects.ts
 import type { SpellAction } from '../types';
+import { DAMAGE_TYPE_NAMES } from '../types';
 import { rollFormula } from '../services/diceService';
 import { useGameStore } from '../stores/useGameStore';
 
@@ -85,13 +86,33 @@ export function executeWeaponEffects(
         break;
       }
 
-      case 'roll_dice':
-      case 'roll_damage': {
+      case 'roll_dice': {
         const total = rollFormula(action.diceFormula ?? 'd6');
         const key = action.saveResultAs ?? 'lastRoll';
         ctx.values[key] = total;
         ctx.values['lastRoll'] = total;
         const msg = `🎲 ${action.label || 'Бросок'}: ${total}`;
+        ctx.log.push(msg);
+        addCombatLog(ctx.unitName, ctx.weaponName, msg);
+        currentIndex++;
+        break;
+      }
+
+      case 'roll_damage': {
+        // 🔧 «Бросок урона» хранит формулу в damageFormula (поле «Формула урона»).
+        // Раньше читался diceFormula («Бросок кубиков») — из-за этого введённая
+        // формула/число игнорировалась и катился случайный d6.
+        // Формула может быть и просто числом: «45».
+        const formula = action.damageFormula ?? action.diceFormula ?? 'd6';
+        const total = rollFormula(formula);
+        const key = action.saveResultAs ?? 'lastRoll';
+        ctx.values[key] = total;
+        ctx.values['lastDamage'] = total;
+        ctx.values['lastRoll'] = total;
+        const typeLabel = action.damageType && action.damageType !== 'from_context'
+          ? (DAMAGE_TYPE_NAMES[action.damageType] ?? action.damageType)
+          : '';
+        const msg = `💥 ${action.label || 'Урон'}: ${formula} = ${total}${typeLabel ? ` ${typeLabel}` : ''}`;
         ctx.log.push(msg);
         addCombatLog(ctx.unitName, ctx.weaponName, msg);
         currentIndex++;

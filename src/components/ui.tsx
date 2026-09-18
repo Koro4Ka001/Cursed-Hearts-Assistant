@@ -451,6 +451,11 @@ interface SectionProps {
 /** Какой блок сейчас тащат (module-level: работает между секциями) */
 let dragSectionId: string | null = null;
 
+/** Активно ли перетаскивание секции (используется для скролла колесом в SortableTab) */
+export function isDraggingSection(): boolean {
+  return dragSectionId !== null;
+}
+
 export function Section({
   title,
   icon,

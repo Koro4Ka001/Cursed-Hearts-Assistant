@@ -3,12 +3,82 @@
 // рендерятся в порядке из персональных настроек (blockOrder). Перетаскивание
 // активно только когда в «Настройки → Ассистент» снят замок.
 
-import React, { isValidElement, type ReactElement, type ReactNode } from 'react';
+import React, { useEffect, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { loadAssistantSettings, saveAssistantSettings } from '../utils/assistantSettings';
+import { isDraggingSection } from './ui';
+
+/**
+ * 🔧 Скролл во время перетаскивания: браузер блокирует колесо при нативном
+ * drag&drop, поэтому крутим контейнер сами — колесом мыши и авто-прокруткой
+ * у верхнего/нижнего края видимой области.
+ */
+function useDragScrolling(enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled) return;
+
+    let dir = 0;
+    let container: HTMLElement | null = null;
+    let raf = 0;
+
+    const findScrollable = (x: number, y: number): HTMLElement | null => {
+      const el = document.elementFromPoint(x, y) as HTMLElement | null;
+      let node: HTMLElement | null = el;
+      while (node) {
+        const style = window.getComputedStyle(node);
+        const scrollable = /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 4;
+        if (scrollable) return node;
+        node = node.parentElement;
+      }
+      return null;
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (e.clientX === 0 && e.clientY === 0) return; // синтетическое событие
+      container = findScrollable(e.clientX, e.clientY);
+      if (!container) { dir = 0; return; }
+      const rect = container.getBoundingClientRect();
+      const EDGE = 64;
+      if (e.clientY - rect.top < EDGE) dir = -1;
+      else if (rect.bottom - e.clientY < EDGE) dir = 1;
+      else dir = 0;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (!isDraggingSection()) return;
+      const c = findScrollable(e.clientX, e.clientY);
+      if (c) {
+        e.preventDefault();
+        c.scrollTop += e.deltaY;
+      }
+    };
+
+    const tick = () => {
+      if (dir !== 0 && container) container.scrollTop += dir * 14;
+      raf = requestAnimationFrame(tick);
+    };
+
+    const onEnd = () => { dir = 0; container = null; };
+
+    document.addEventListener('dragover', onDragOver);
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      document.removeEventListener('dragover', onDragOver);
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+      window.removeEventListener('wheel', onWheel);
+      cancelAnimationFrame(raf);
+    };
+  }, [enabled]);
+}
 
 export function SortableTab({ tabId, children }: { tabId: string; children: ReactNode }) {
   const ui = loadAssistantSettings();
   const unlocked = !ui.layoutLocked;
+  useDragScrolling(unlocked);
   const order = ui.blockOrder[tabId] ?? [];
 
   const kids = React.Children.toArray(children).filter(isValidElement) as ReactElement<{ sortableId?: string }>[];

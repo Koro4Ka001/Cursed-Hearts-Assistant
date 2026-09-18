@@ -632,9 +632,6 @@ export function MagicTab() {
             {/* Модификаторы: каст и попадание (одноразовые) */}
             <ModifierToggle caption="Модификатор каста" value={castModifier} onChange={setCastModifier} />
             <ModifierToggle caption="Модификатор попадания" value={hitModifier} onChange={setHitModifier} />
-
-            {/* Заряженный доп. урон к следующей уронной атаке/касту */}
-            <BonusDamageField />
             
             {/* Кнопка каста */}
             <Button
@@ -734,6 +731,11 @@ export function MagicTab() {
             )}
           </div>
         )}
+      </Section>
+
+      {/* 💠 Заряженный урон — отдельный перетаскиваемый блок */}
+      <Section title="Заряженный урон" icon="💠" collapsible defaultOpen={true} sortableId="magic.bonusDamage">
+        <BonusDamageField />
       </Section>
       </SortableTab>
     </div>

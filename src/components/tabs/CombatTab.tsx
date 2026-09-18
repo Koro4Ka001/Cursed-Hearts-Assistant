@@ -488,9 +488,6 @@ export function CombatTab() {
             {selectedRangedWeapon && selectedAmmo && <div className="text-xs text-faded p-2 bg-obsidian rounded border border-edge-bone"><div>🏹 {selectedRangedWeapon.name}: +{(selectedRangedWeapon.hitBonus ?? 0) + (proficiencies.bows ?? 0)} к попаданию</div>{(selectedRangedWeapon.multishot ?? 1) > 1 && <div className="text-ancient">⚡ {selectedRangedWeapon.multishot} стрел</div>}<div className="mt-1">🎯 {selectedAmmo.name}: {selectedAmmo.damageFormula} {selectedAmmo.damageType && (DAMAGE_TYPE_NAMES[selectedAmmo.damageType] ?? selectedAmmo.damageType)}</div>{((selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)) > 0 && <div className="text-purple-400 mt-1">⚡ Эффекты: {(selectedRangedWeapon.onHitActions?.length ?? 0) + (selectedAmmo.onHitActions?.length ?? 0)} шагов</div>}</div>}
             <NumberStepper label="Количество выстрелов" value={rangedShotCount} onChange={setRangedShotCount} min={1} max={10} />
             <ModifierToggle value={rangedModifier} onChange={setRangedModifier} />
-
-            {/* Заряженный доп. урон к следующей атаке/касту */}
-            <BonusDamageField />
             <Button variant="danger" onClick={handleRangedAttack} loading={isRangedAttacking} disabled={!selectedRangedWeapon || !selectedAmmo || (selectedAmmo.current ?? 0) < (selectedRangedWeapon?.ammoPerShot ?? selectedRangedWeapon?.multishot ?? 1)} className="w-full text-sm py-3">🏹 ВЫСТРЕЛИТЬ</Button>
             {rangedLog.length > 0 && <div className="p-2 bg-obsidian rounded border border-edge-bone space-y-1 max-h-48 overflow-y-auto">{rangedLog.map((l, i) => <div key={i} className="text-sm font-garamond">{l}</div>)}</div>}
             {rangedDamageResults.length > 0 && <div className="space-y-2"><div className="text-xs text-faded uppercase">Урон:</div><DiceResultDisplay results={rangedDamageResults} /></div>}
@@ -498,6 +495,11 @@ export function CombatTab() {
         )}
       </Section>
       
+      {/* 💠 Заряженный урон — отдельный перетаскиваемый блок */}
+      <Section title="Заряженный урон" icon="💠" collapsible defaultOpen={true} sortableId="combat.bonusDamage">
+        <BonusDamageField />
+      </Section>
+
       <Section title="Получение урона" icon="💀" collapsible defaultOpen={true} sortableId="combat.takeDamage">
         <div className="space-y-3">
           <NumberStepper label="Входящий урон" value={incomingDamage} onChange={setIncomingDamage} min={0} max={9999} />

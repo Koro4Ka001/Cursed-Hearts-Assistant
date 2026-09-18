@@ -431,6 +431,7 @@ function RollDamageFields({ action, update }: { action: SpellAction; update: (u:
             <Input
               value={action.damageFormula ?? '2d6'}
               onChange={(e) => update({ damageFormula: e.target.value })}
+              placeholder="2d6 или просто число (5)"
               className="flex-1"
             />
             <Select
@@ -445,6 +446,7 @@ function RollDamageFields({ action, update }: { action: SpellAction; update: (u:
               className="w-20"
             />
           </div>
+          <div className="text-[10px] text-faded mt-1">💡 Можно формулу кубов (<code className="text-ancient">2d6+3</code>) или просто число (<code className="text-ancient">5</code>). На крите удваивается как формула.</div>
         </div>
         <Select
           label="Тип урона"
