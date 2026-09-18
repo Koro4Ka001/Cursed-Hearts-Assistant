@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "name": "Cursed Assistant",
+  "version": "2.7.0",
+  "action": {
+    "title": "☠️ Cursed Assistant",
+    "icon": "/icon.svg",
+    "popover": "/index.html",
+    "height": 700,
+    "width": 400
+  }
+}
