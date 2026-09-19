@@ -17,6 +17,7 @@ function useDragScrolling(enabled: boolean): void {
     if (!enabled) return;
 
     let dir = 0;
+    let speed = 0;
     let container: HTMLElement | null = null;
     let raf = 0;
 
@@ -32,15 +33,28 @@ function useDragScrolling(enabled: boolean): void {
       return null;
     };
 
+    // 🔧 Мягкая авто-прокрутка: узкая зона у края + скорость растёт плавно,
+    // чем глубже в зону (2 → 9 px/кадр) — без резких рывков и болтанки.
+    const EDGE = 36;
+    const MAX_SPEED = 9;
+
     const onDragOver = (e: DragEvent) => {
       if (e.clientX === 0 && e.clientY === 0) return; // синтетическое событие
       container = findScrollable(e.clientX, e.clientY);
-      if (!container) { dir = 0; return; }
+      if (!container) { dir = 0; speed = 0; return; }
       const rect = container.getBoundingClientRect();
-      const EDGE = 64;
-      if (e.clientY - rect.top < EDGE) dir = -1;
-      else if (rect.bottom - e.clientY < EDGE) dir = 1;
-      else dir = 0;
+      const topDist = e.clientY - rect.top;
+      const botDist = rect.bottom - e.clientY;
+      if (topDist < EDGE) {
+        dir = -1;
+        speed = 2 + (1 - Math.max(0, topDist) / EDGE) * (MAX_SPEED - 2);
+      } else if (botDist < EDGE) {
+        dir = 1;
+        speed = 2 + (1 - Math.max(0, botDist) / EDGE) * (MAX_SPEED - 2);
+      } else {
+        dir = 0;
+        speed = 0;
+      }
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -53,7 +67,7 @@ function useDragScrolling(enabled: boolean): void {
     };
 
     const tick = () => {
-      if (dir !== 0 && container) container.scrollTop += dir * 14;
+      if (dir !== 0 && container) container.scrollTop += dir * speed;
       raf = requestAnimationFrame(tick);
     };
 
