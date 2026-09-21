@@ -223,7 +223,6 @@ export function NotificationPopover() {
           key={notif.id} 
           notification={notif}
           index={index}
-          onDismiss={() => removeNotification(notif.id)}
         />
       ))}
     </div>
@@ -237,10 +236,9 @@ export function NotificationPopover() {
 interface CardProps {
   notification: QueuedNotification;
   index: number;
-  onDismiss: () => void;
 }
 
-function NotificationCard({ notification, index, onDismiss }: CardProps) {
+function NotificationCard({ notification, index }: CardProps) {
   const borderColor = BORDER_COLORS[notification.color ?? 'white'];
   const glowColor = GLOW_COLORS[notification.color ?? 'white'];
   
@@ -271,15 +269,15 @@ function NotificationCard({ notification, index, onDismiss }: CardProps) {
   };
   
   return (
-    <div 
+    <div
       className={cardClass}
       style={{ 
         '--border-color': borderColor,
         '--glow-color': glowColor,
         '--index': index
       } as React.CSSProperties}
-      onClick={onDismiss}
     >
+      {/* 🔧 Клик-прозрачно: закрытие только авто-таймером (клики уходят в карту) */}
       {/* Shine effect */}
       <div className="card-shine" />
       

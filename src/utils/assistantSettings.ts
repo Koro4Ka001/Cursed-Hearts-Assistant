@@ -8,6 +8,8 @@ export interface AssistantUISettings {
   visibleTabs: Record<AssistantTabId, boolean>;
   showTokenBars: boolean;
   showNotifications: boolean;
+  /** 📢 Уведомления через системные тосты Owlbear (гарантированно не перекрывают карту) */
+  useSystemToasts: boolean;
   /** Замок перетаскивания блоков: true (по умолчанию) — блоки закреплены */
   layoutLocked: boolean;
   /** Порядок секций по вкладкам: tabId → [sectionId, ...] (несортируемые вкладки отсутствуют) */
@@ -22,6 +24,7 @@ const DEFAULTS: AssistantUISettings = {
   visibleTabs: { combat: true, magic: true, actions: true, rage: true, notes: true, rok: false, hunger: false },
   showTokenBars: true,
   showNotifications: true,
+  useSystemToasts: false,
   layoutLocked: true,
   blockOrder: {},
 };
@@ -42,6 +45,7 @@ export function loadAssistantSettings(): AssistantUISettings {
     return {
       showTokenBars: parsed.showTokenBars ?? DEFAULTS.showTokenBars,
       showNotifications: parsed.showNotifications ?? DEFAULTS.showNotifications,
+      useSystemToasts: parsed.useSystemToasts ?? DEFAULTS.useSystemToasts,
       visibleTabs: { ...DEFAULTS.visibleTabs, ...(parsed.visibleTabs ?? {}) },
       layoutLocked: parsed.layoutLocked ?? DEFAULTS.layoutLocked,
       blockOrder: parsed.blockOrder ?? {},

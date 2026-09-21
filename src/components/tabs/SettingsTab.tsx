@@ -328,6 +328,11 @@ function AssistantSettingsSection({ units }: { units: Unit[] }) {
             label="🔔 Показывать уведомления о бросках"
           />
           <Checkbox
+            checked={ui.useSystemToasts}
+            onChange={(v) => update({ useSystemToasts: v })}
+            label="📢 Системные тосты Owlbear (не перекрывают карту)"
+          />
+          <Checkbox
             checked={!ui.layoutLocked}
             onChange={(v) => update({ layoutLocked: !v })}
             label="🔓 Разрешить перетаскивание блоков во вкладках"

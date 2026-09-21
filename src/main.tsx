@@ -18,6 +18,33 @@ function shouldShowNotification(msg: BroadcastMessage): boolean {
   return true;
 }
 
+// 📢 Системный тост Owlbear: однострочная сводка уведомления
+function systemToastText(msg: BroadcastMessage): string {
+  const parts: string[] = [`${msg.icon ?? "🎲"} ${msg.unitName}: ${msg.title}`];
+  if (msg.subtitle) parts.push(msg.subtitle);
+  if (msg.rolls && msg.rolls.length > 0) {
+    parts.push(`[${msg.rolls.slice(0, 8).join(", ")}]${msg.total !== undefined ? ` = ${msg.total}` : ""}`);
+  }
+  for (const d of msg.details ?? []) parts.push(d);
+  return parts.join(" — ");
+}
+
+async function handleIncomingNotification(msg: BroadcastMessage): Promise<void> {
+  if (!shouldShowNotification(msg)) return;
+
+  // 📢 Режим «системные тосты»: рендерит сам Owlbear, карта никогда не перекрывается
+  if (loadAssistantSettings().useSystemToasts) {
+    const variant = msg.isCrit ? "SUCCESS" : msg.isCritFail ? "ERROR" : "DEFAULT";
+    try {
+      await OBR.notification.show(systemToastText(msg), variant);
+    } catch { /* ignore */ }
+    return;
+  }
+
+  addToLocalQueue(msg);
+  openNotificationPopover();
+}
+
 // Добавляем сообщение в очередь localStorage
 function addToLocalQueue(msg: BroadcastMessage) {
   try {
@@ -88,17 +115,13 @@ OBR.onReady(async () => {
 
     // СЛУШАЕМ ЛОКАЛЬНЫЕ СОБЫТИЯ (когда Я бросаю кубик)
     onLocalDiceMessage((msg) => {
-      if (!shouldShowNotification(msg)) return;
-      addToLocalQueue(msg);
-      openNotificationPopover();
+      void handleIncomingNotification(msg);
     });
 
     // СЛУШАЕМ BROADCAST (когда ДРУГОЙ игрок бросает кубик)
     OBR.broadcast.onMessage(DICE_BROADCAST_CHANNEL, async (event) => {
       const msg = event.data as BroadcastMessage;
-      if (!shouldShowNotification(msg)) return;
-      addToLocalQueue(msg);
-      openNotificationPopover();
+      await handleIncomingNotification(msg);
     });
   } catch (error) {
     console.error("[Main] Notification listener init error:", error);

@@ -41,6 +41,18 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   CLICK-THROUGH
+   🔧 Всё содержимое попапа неинтерактивно (как у dice-расширения):
+   hit-тест проваливается сквозь iframe — клики уходят в карту.
+   Закрытие уведомлений — только авто-таймером.
+   ═══════════════════════════════════════════════════════════════ */
+
+html, body, #root {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    CARD BASE
    ═══════════════════════════════════════════════════════════════ */
 
@@ -49,8 +61,7 @@
   border: 2px solid var(--border-color, #8b7355);
   border-radius: 14px;
   padding: 14px 16px;
-  pointer-events: auto;
-  cursor: pointer;
+  pointer-events: none;
   position: relative;
   overflow: hidden;
 
