@@ -196,13 +196,19 @@ export function CombatTab() {
           );
           
           
-          for (const msg of effectLog) {
-            log.push(`    ⚡ ${msg}`);
-            await diceService.broadcastWeaponEffect(
-              freshUnit.shortName ?? freshUnit.name,
-              selectedMeleeWeapon.name,
-              msg
-            );
+          // 🔧 Все эффекты одним broadcast'ом (список в details одной плашки)
+          for (const msg of effectLog) log.push(`    ⚡ ${msg}`);
+          if (effectLog.length > 0) {
+            await diceService.broadcastMessage({
+              id: `fx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: 'custom',
+              unitName: freshUnit.shortName ?? freshUnit.name,
+              title: `⚡ Эффекты: ${selectedMeleeWeapon.name}`,
+              icon: '⚡',
+              color: 'purple',
+              details: effectLog,
+              timestamp: Date.now(),
+            });
           }
         }
       }
@@ -293,6 +299,7 @@ export function CombatTab() {
             }
           } else { log.push(`🎯 Стрела ${a + 1}: ${d20Txt(hit)}+${hitBonus}=${hit.total} — Попадание!`); if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (попадание без урона)`); }
           
+          const fxDetails: string[] = [];
           if (selectedRangedWeapon.onHitActions?.length) {
             const effectLog: string[] = [];
             executeWeaponEffects(
@@ -313,10 +320,8 @@ export function CombatTab() {
               },
               addCombatLog
             );
-            for (const msg of effectLog) {
-              log.push(`    ⚡ ${msg}`);
-              await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, selectedRangedWeapon.name, msg);
-            }
+            for (const msg of effectLog) log.push(`    ⚡ ${msg}`);
+            if (effectLog.length > 0) fxDetails.push(`⚔ ${selectedRangedWeapon.name}`, ...effectLog);
           }
           
           if (selectedAmmo.onHitActions?.length) {
@@ -339,10 +344,21 @@ export function CombatTab() {
               },
               addCombatLog
             );
-            for (const msg of effectLog) {
-              log.push(`    ⚡ ${msg}`);
-              await diceService.broadcastWeaponEffect(unit.shortName ?? unit.name, selectedAmmo.name, msg);
-            }
+            for (const msg of effectLog) log.push(`    ⚡ ${msg}`);
+            if (effectLog.length > 0) fxDetails.push(`🎯 ${selectedAmmo.name}`, ...effectLog);
+          }
+
+          if (fxDetails.length > 0) {
+            await diceService.broadcastMessage({
+              id: `fx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: 'custom',
+              unitName: unit.shortName ?? unit.name,
+              title: `⚡ Эффекты: ${selectedRangedWeapon.name}`,
+              icon: '⚡',
+              color: 'purple',
+              details: fxDetails,
+              timestamp: Date.now(),
+            });
           }
         }
       }
