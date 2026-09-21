@@ -2,6 +2,7 @@
 import type { SpellAction } from '../types';
 import { DAMAGE_TYPE_NAMES } from '../types';
 import { rollFormula } from '../services/diceService';
+import { resolveAmountValue } from '../utils/dice';
 import { useGameStore } from '../stores/useGameStore';
 
 /**
@@ -58,7 +59,6 @@ export function executeWeaponEffects(
         if (!cond) { currentIndex++; break; }
         
         const condMet = evaluateBranchCondition(cond, ctx);
-        console.log('[WeaponFX] Branch:', cond.key, cond.type, cond.value, '→', condMet);
         const targetId = condMet ? action.branchTrueStepId : action.branchFalseStepId;
         currentIndex = resolveTarget(targetId, sorted, currentIndex);
         break;
@@ -150,9 +150,8 @@ export function executeWeaponEffects(
         const unit = ctx.unitId ? store.units.find(u => u.id === ctx.unitId) : undefined;
         if (!unit) { currentIndex++; break; }
 
-        const amount = action.resourceAmountFormula
-          ? rollFormula(action.resourceAmountFormula)
-          : Number(action.resourceAmount ?? 0);
+        // 🔧 Число / формула («2d6») / переменная контекста («{lastRoll}»)
+        const amount = resolveAmountValue(action.resourceAmount, ctx.values);
         const spend = action.resourceOperation !== 'restore';
 
         try {
@@ -255,7 +254,6 @@ function evaluateBranchCondition(
 ): boolean {
   const val = resolveValue(cond.key, ctx);
   
-  console.log('[WeaponFX] Branch eval:', `key="${cond.key}" → cleaned="${cleanKey(cond.key)}" → val=${val}, compare ${cond.type} ${cond.value}`);
   
   switch (cond.type) {
     case 'value_gte': return Number(val) >= Number(cond.value);

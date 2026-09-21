@@ -91,7 +91,6 @@ export function CombatTab() {
     const log: string[] = [];
     // Берём свежие данные юнита (могли измениться от rage effects)
     const freshUnit = useGameStore.getState().units.find(u => u.id === unit.id) ?? unit;
-    console.log('[Combat] Fresh unit stats:', JSON.stringify(freshUnit.stats), 'proficiencies:', JSON.stringify(freshUnit.proficiencies));
     try {
       const meleeMod = meleeModifier;
       setMeleeModifier('normal');
@@ -124,7 +123,6 @@ export function CombatTab() {
         
         const isCrit = hitResult.isCrit;
         const statBonus = getStatDamageBonus(freshUnit, selectedMeleeWeapon.statBonus, selectedMeleeWeapon.proficiencyType);
-        console.log('[Combat] statBonus:', statBonus, 'from stat:', freshUnit.stats[selectedMeleeWeapon.statBonus === 'physicalPower' ? 'physicalPower' : 'dexterity'], 'profType:', selectedMeleeWeapon.proficiencyType, 'profVal:', freshUnit.proficiencies[selectedMeleeWeapon.proficiencyType]);
         const base = selectedMeleeWeapon.damageFormula ?? 'd6';
         const formula = statBonus > 0 ? `${base}+${statBonus}` : base;
         // 🔧 Тихий бросок: один общий broadcast после всех компонент урона
@@ -176,8 +174,6 @@ export function CombatTab() {
         }
         
         if (selectedMeleeWeapon.onHitActions?.length) {
-          console.log('[WeaponFX] Melee onHitActions:', JSON.stringify(selectedMeleeWeapon.onHitActions, null, 2));
-          console.log('[WeaponFX] Context: hitRoll=', hitResult.rawD20, 'hitTotal=', hitResult.total, 'damage=', dmg.total);
           
           const effectLog: string[] = [];
           executeWeaponEffects(
@@ -199,7 +195,6 @@ export function CombatTab() {
             addCombatLog
           );
           
-          console.log('[WeaponFX] Effect log:', effectLog);
           
           for (const msg of effectLog) {
             log.push(`    ⚡ ${msg}`);
@@ -299,7 +294,6 @@ export function CombatTab() {
           } else { log.push(`🎯 Стрела ${a + 1}: ${d20Txt(hit)}+${hitBonus}=${hit.total} — Попадание!`); if (pendingBonus) log.push(`    💠 Заряженный урон сгорел (попадание без урона)`); }
           
           if (selectedRangedWeapon.onHitActions?.length) {
-            console.log('[WeaponFX] Ranged weapon onHitActions:', selectedRangedWeapon.onHitActions.length, 'hitTotal:', hit.total);
             const effectLog: string[] = [];
             executeWeaponEffects(
               selectedRangedWeapon.onHitActions,
@@ -326,7 +320,6 @@ export function CombatTab() {
           }
           
           if (selectedAmmo.onHitActions?.length) {
-            console.log('[WeaponFX] Ammo onHitActions:', selectedAmmo.onHitActions.length, 'hitTotal:', hit.total);
             const effectLog: string[] = [];
             executeWeaponEffects(
               selectedAmmo.onHitActions,

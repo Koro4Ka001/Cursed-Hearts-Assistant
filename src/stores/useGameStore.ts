@@ -7,6 +7,7 @@ import { tokenBarService } from '../services/tokenBarService';
 import { docsService } from '../services/docsService';
 import { loadAssistantSettings } from '../utils/assistantSettings';
 import { formatHungerValue } from '../utils/hunger';
+import { getUnitTokenIds } from '../utils/tokenBindings';
 
 /** Заряженный урон к следующей атаке/касту с уроном */
 export interface PendingBonusDamage {
@@ -230,30 +231,34 @@ interface GameState {
 
 async function updateTokenBars(unit: Unit, settings: AppSettings): Promise<void> {
   // Общий флаг (Google Docs) + персональный флаг этого игрока (localStorage)
-  if (!(settings.showTokenBars ?? true) || !loadAssistantSettings().showTokenBars || !unit.owlbearTokenId) return;
+  if (!(settings.showTokenBars ?? true) || !loadAssistantSettings().showTokenBars) return;
 
-  // 🔧 Бары обновляются для всех юнитов (игроков и зарегистрированных сущностей).
-  // Прежний фильтр isMonster блокировал ВСЕХ: id юнитов игроков никогда не совпадают
-  // с ключами monsterStore (там tokenId), из-за чего рейдж-бар создавался, но
-  // никогда не обновлялся, а бары useManaAsHp-юнитов не пересоздавались.
-  try {
-    const hasRage = unit.hasRage ?? false;
-    await tokenBarService.updateBars(
-      unit.owlbearTokenId,
-      unit.useManaAsHp ? unit.mana.current : unit.health.current,
-      unit.useManaAsHp ? unit.mana.max : unit.health.max,
-      unit.mana.current,
-      unit.mana.max,
-      unit.useManaAsHp,
-      hasRage ? (unit.rage?.current ?? 0) : 0,
-      hasRage ? (unit.rage?.max ?? unit.rageConfig?.max ?? 100) : 100,
-      hasRage,
-      unit.hasHunger ? (unit.hunger?.current ?? 0) : 0,
-      unit.hasHunger ? (unit.hunger?.max ?? 1000) : 1000,
-      unit.hasHunger ?? false
-    );
-  } catch (e) {
-    console.warn('[Store] Failed to update token bars:', e);
+  // 🔗 Юнит может быть привязан к нескольким токенам (сцена города, карманное
+  // пространство...). Бар создаётся только для токенов, присутствующих на
+  // текущей сцене (createBars сам проверяет наличие токена и тихо пропускает).
+  const tokenIds = getUnitTokenIds(unit);
+  if (tokenIds.length === 0) return;
+
+  const hasRage = unit.hasRage ?? false;
+  for (const tokenId of tokenIds) {
+    try {
+      await tokenBarService.updateBars(
+        tokenId,
+        unit.useManaAsHp ? unit.mana.current : unit.health.current,
+        unit.useManaAsHp ? unit.mana.max : unit.health.max,
+        unit.mana.current,
+        unit.mana.max,
+        unit.useManaAsHp,
+        hasRage ? (unit.rage?.current ?? 0) : 0,
+        hasRage ? (unit.rage?.max ?? unit.rageConfig?.max ?? 100) : 100,
+        hasRage,
+        unit.hasHunger ? (unit.hunger?.current ?? 0) : 0,
+        unit.hasHunger ? (unit.hunger?.max ?? 1000) : 1000,
+        unit.hasHunger ?? false
+      );
+    } catch (e) {
+      console.warn('[Store] Failed to update token bars:', e);
+    }
   }
 }
 
@@ -328,7 +333,6 @@ export const useGameStore = create<GameState>()(
         writeLogs: true,
         showTokenBars: true,
         autoSyncInterval: 5,
-        showRokCards: false
       },
       notifications: [],
       combatLog: [],
@@ -376,8 +380,8 @@ export const useGameStore = create<GameState>()(
       
       deleteUnit: (id) => {
         const unit = get().units.find(u => u.id === id);
-        if (unit?.owlbearTokenId) {
-          tokenBarService.removeBars(unit.owlbearTokenId);
+        for (const tokenId of getUnitTokenIds(unit ?? { id: '', name: '' } as Unit)) {
+          void tokenBarService.removeBars(tokenId);
         }
         set(state => ({
           units: state.units.filter(u => u.id !== id),

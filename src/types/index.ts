@@ -246,6 +246,8 @@ export interface SpellAction {
   rollBonus?: number;
   /** Доп. бонус к d20-броскам шага: характеристика персонажа */
   rollBonusStat?: string;
+  /** 🎯 Разрешает этому броску получать помеху/преимущество (one-shot тумблер в действиях) */
+  mayTakeRollModifier?: boolean;
   useThresholdFromContext?: string;
   
   resultTable?: TableResultEntry[];
@@ -269,7 +271,6 @@ export interface SpellAction {
   resourceType?: 'mana' | 'health' | 'resource' | 'rage';
   resourceId?: string;
   resourceAmount?: number | string;
-  resourceAmountFormula?: string;
   resourceOperation?: 'spend' | 'restore';
   
   messageTemplate?: string;
@@ -513,6 +514,8 @@ export interface Unit {
   shortName: string;
   googleDocsHeader: string;
   owlbearTokenId?: string;
+  /** 🔗 Все привязанные токены (города/карманное пространство — токен в каждой сцене) */
+  owlbearTokenIds?: string[];
   
   health: { current: number; max: number };
   mana: { current: number; max: number };
@@ -645,7 +648,6 @@ export interface AppSettings {
   writeLogs?: boolean;
   showTokenBars?: boolean;
   autoSyncInterval?: number;
-  showRokCards?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════

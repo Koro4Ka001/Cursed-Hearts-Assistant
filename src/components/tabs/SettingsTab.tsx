@@ -10,7 +10,6 @@ import { generateId } from '../../constants/spellActions';
 import { docsService } from '../../services/docsService';
 import { tokenBarService } from '../../services/tokenBarService';
 import { loadAssistantSettings, saveAssistantSettings, type AssistantUISettings, type AssistantTabId } from '../../utils/assistantSettings';
-import { selectToken } from '../../services/hpTrackerService';
 import { GAME_ELEMENTS } from '../../constants/elements';
 import type { 
   Unit, Weapon, Spell, SpellV2, Resource, DamageType, ProficiencyType, WeaponType,
@@ -23,6 +22,8 @@ import {
 } from '../../types';
 import { parseResistInput, formatResist } from '../../utils/damage';
 import { defaultHungerConfig } from '../../utils/hunger';
+import { getUnitTokenIds, normalizeTokenBindings } from '../../utils/tokenBindings';
+import { isImage } from '@owlbear-rodeo/sdk';
 import { SPELL_TYPES } from '../../constants/elements';
 
 export function SettingsTab() {
@@ -476,12 +477,94 @@ function BasicEditor({ localUnit, update }: { localUnit: Unit; update: (p: Parti
         )}
       </div>
       
-      <div className="pt-2 border-t border-edge-bone">
-        <div className="text-xs text-faded mb-2">Привязка токена OBR:</div>
-        <div className="flex items-center gap-2">
-          <Input value={localUnit.owlbearTokenId ?? ''} onChange={(e) => update({ owlbearTokenId: e.target.value })} placeholder="ID токена" className="flex-1" />
-          <Button variant="secondary" size="sm" onClick={async () => { const tokenId = await selectToken(); if (tokenId) update({ owlbearTokenId: tokenId }); }}>🎯</Button>
-        </div>
+      {/* 🔗 Привязки токенов: можно несколько (сцена города + карманное пространство) */}
+      <TokenBindingsEditor unit={localUnit} update={update} />
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ПРИВЯЗКИ ТОКЕНОВ (несколько на юнита + удобное удаление)
+// ═══════════════════════════════════════════════════════════════
+
+function TokenBindingsEditor({ unit, update }: { unit: Unit; update: (p: Partial<Unit>) => void }) {
+  const addNotification = useGameStore(s => s.addNotification);
+  const bindings = getUnitTokenIds(unit);
+  // id → имя предметов текущей сцены (живой список)
+  const [sceneItems, setSceneItems] = useState<Map<string, string>>(new Map());
+  const [manual, setManual] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    let unsub: (() => void) | null = null;
+    const refresh = async () => {
+      try {
+        const items = await OBR.scene.items.getItems();
+        if (!alive) return;
+        const map = new Map<string, string>();
+        for (const it of items) map.set(it.id, (it as { name?: string }).name ?? '');
+        setSceneItems(map);
+      } catch { /* сцена не готова — повтор на следующем onChange */ }
+    };
+    OBR.onReady(() => {
+      if (!alive) return;
+      void refresh();
+      unsub = OBR.scene.items.onChange(() => { void refresh(); });
+    });
+    return () => { alive = false; unsub?.(); };
+  }, []);
+
+  const save = (next: string[]) => update(normalizeTokenBindings(unit, next));
+
+  const unbind = (tid: string) => {
+    save(bindings.filter(x => x !== tid));
+    void tokenBarService.removeBars(tid);
+  };
+
+  const bindSelection = async () => {
+    try {
+      const sel = await OBR.player.getSelection();
+      if (!sel?.length) { addNotification('Выдели токен на карте', 'warning'); return; }
+      const items = await OBR.scene.items.getItems(sel);
+      const ids = items.filter(isImage).map(i => i.id).filter(id => !bindings.includes(id));
+      if (ids.length === 0) { addNotification('Выделенные токены уже привязаны', 'info'); return; }
+      save([...bindings, ...ids]);
+      addNotification(`🔗 Привязано токенов: ${ids.length}`, 'success');
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div className="pt-2 border-t border-edge-bone space-y-2">
+      <div className="text-xs text-faded">🔗 <strong className="text-bone">Привязки токенов:</strong> можно несколько — по одному на каждую сцену (город, карманное пространство). Бар появится на токене, когда ты на его сцене.</div>
+
+      {bindings.length === 0 && <div className="text-xs text-faded italic">Токены не привязаны.</div>}
+
+      {bindings.map(tid => {
+        const onScene = sceneItems.has(tid);
+        const name = sceneItems.get(tid);
+        return (
+          <div key={tid} className="flex items-center gap-2 p-1.5 bg-obsidian rounded border border-edge-bone">
+            <span className={onScene ? 'text-green-500' : 'text-faded'}>{onScene ? '✓' : '🌐'}</span>
+            <span className="flex-1 text-xs text-bone truncate" title={tid}>
+              {name || `Токен ${tid.slice(0, 8)}…`}
+              <span className="text-faded"> — {onScene ? 'эта сцена' : 'другая сцена'}</span>
+            </span>
+            <Button variant="danger" size="sm" onClick={() => unbind(tid)}>×</Button>
+          </div>
+        );
+      })}
+
+      <div className="flex items-center gap-2">
+        <Input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="ID токена вручную" className="flex-1" />
+        <Button variant="secondary" size="sm" onClick={() => { if (manual.trim()) { save([...bindings, manual.trim()]); setManual(''); } }}>+</Button>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="gold" size="sm" onClick={() => void bindSelection()}>🎯 Привязать выделенный токен</Button>
+        {bindings.length > 1 && (
+          <Button variant="secondary" size="sm" onClick={() => { for (const tid of bindings) void tokenBarService.removeBars(tid); save([]); }}>
+            Очистить все
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -251,6 +251,13 @@ function RollCheckFields({ action, update }: { action: SpellAction; update: (u: 
         bonuses={action.bonuses ?? []}
         onChange={(bonuses) => update({ bonuses })}
       />
+
+      {/* 🎯 Галочка: этот бросок может получать помеху/преимущество из тумблера */}
+      <Checkbox
+        checked={action.mayTakeRollModifier ?? false}
+        onChange={(v) => update({ mayTakeRollModifier: v })}
+        label="🎲 Может бросаться с преимуществом/помехой"
+      />
     </div>
   );
 }
@@ -326,6 +333,13 @@ function RollDiceFields({ action, update }: { action: SpellAction; update: (u: P
             max={50}
           />
         )}
+
+        {/* 🎯 Галочка: этот бросок может получать помеху/преимущество из тумблера */}
+        <Checkbox
+          checked={action.mayTakeRollModifier ?? false}
+          onChange={(v) => update({ mayTakeRollModifier: v })}
+          label="🎲 Может бросаться с преимуществом/помехой"
+        />
       </div>
     </div>
   );
@@ -784,13 +798,15 @@ function ModifyResourceFields({ action, update }: { action: SpellAction; update:
           { value: 'restore', label: '+ Восстановить' },
         ]}
       />
-      <NumberStepper
+      <Input
         label="Количество"
-        value={Number(action.resourceAmount) || 0}
-        onChange={(v) => update({ resourceAmount: v })}
-        min={0}
-        max={999}
+        value={String(action.resourceAmount ?? '')}
+        onChange={(e) => update({ resourceAmount: e.target.value })}
+        placeholder="5 / 2d6 / {lastRoll}"
       />
+      <div className="text-[10px] text-faded col-span-3">
+        💡 Число (<code className="text-ancient">5</code>), формула кубов (<code className="text-ancient">2d6</code>) или переменная из «Сохранить результат» (<code className="text-ancient">{'{lastRoll}'}</code>, <code className="text-ancient">{'{damage}'}</code>).
+      </div>
     </div>
   );
 }

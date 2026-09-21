@@ -9,6 +9,7 @@ import type {
 import { ELEMENT_ICONS } from '../constants/elements';
 import { DAMAGE_TYPE_NAMES, ELEMENT_NAMES } from '../types';
 import { rebalance } from '../utils/entropy';
+import { resolveAmountValue } from '../utils/dice';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ТИПЫ
@@ -93,11 +94,14 @@ function rollDice(formula: string): { formula: string; rolls: number[]; bonus: n
 // ═══════════════════════════════════════════════════════════════════════════
 
 function doubleDiceInFormula(formula: string): string {
-  return formula.replace(/([+-]?\d*)d(\d+)/gi, (_, count, sides) => {
-    const sign = count.startsWith('-') ? '-' : '';
-    const c = Math.abs(parseInt(count || '1', 10));
-    return `${sign}${c * 2}d${sides}`;
-  });
+  // 🔧 Крит удваивает И кубы, И плоские числа (как в diceService.doubleDice):
+  // «2d6+45» → «4d6+90»
+  const { dice, bonus } = parseFormula(formula);
+  let out = dice.map(d => `${d.sign < 0 ? '-' : '+'}${d.count * 2}d${d.sides}`).join('');
+  if (out.startsWith('+')) out = out.slice(1);
+  const b = bonus * 2;
+  if (b !== 0) out += `${b > 0 ? '+' : '-'}${Math.abs(b)}`;
+  return out || formula;
 }
 
 function rollWithModifier(formula: string, modifier: RollModifier = 'normal'): {
@@ -334,7 +338,7 @@ const stepExecutors: Record<string, StepExecutor> = {
     const rb = resolveRollBonus(caster, action);
     let formula = action.diceFormula ?? 'd6';
     if (rb !== 0) formula = `${formula}${rb > 0 ? '+' : ''}${rb}`;
-    const { result, rawD20, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
+    const { result, rawD20, allD20Rolls, isCrit, isCritFail } = rollWithModifier(formula, rollModifier);
     context.rolls.push({ stepId: action.id, formula, rolls: result.rolls, total: result.total, rawD20, isCrit, isCritFail });
     context.lastRoll = result.total;
     context.values['lastRoll'] = result.total;
@@ -348,8 +352,9 @@ const stepExecutors: Record<string, StepExecutor> = {
     context.isCritFail = isCritFail;
 
     const rollsStr = `[${result.rolls.join(', ')}]`;
+    const modText = allD20Rolls && allD20Rolls.length > 1 ? ` (${rollModifier === 'advantage' ? '🎯' : '💨'}[${allD20Rolls.join(', ')}])` : '';
     const modMark = rawD20 !== undefined && isCrit ? ' ✨' : rawD20 !== undefined && isCritFail ? ' 💀' : '';
-    context.log.push(`🎲 ${action.label}: ${formula} = ${rollsStr} = ${result.total}${modMark}`);
+    context.log.push(`🎲 ${action.label}: ${formula} = ${rollsStr} = ${result.total}${modText}${modMark}`);
 
     return evaluateTransitions(action, context);
   },
@@ -522,16 +527,8 @@ const stepExecutors: Record<string, StepExecutor> = {
   },
 
   modify_resource: (action, context) => {
-    // 🔥 ИЗМЕНЕНО: Поддержка формул в resourceAmount
-    let amount = action.resourceAmount ?? 0;
-    if (typeof amount === 'string') {
-        try {
-            amount = rollDice(amount).total;
-        } catch (e) {
-            console.error('Invalid resource formula', amount);
-            amount = 0;
-        }
-    }
+    // 🔧 Количество: число, формула кубов («2d6») или переменная контекста («{lastRoll}»)
+    const amount = resolveAmountValue(action.resourceAmount, context.values);
 
     const op = action.resourceOperation === 'restore' ? '+' : '-';
     const type = action.resourceType ?? 'mana';
@@ -671,7 +668,6 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
       const isCastRoll = action.type === 'roll_cast';
       const isAttackRoll = action.type === 'roll_attack';
       const isCheckRoll = action.type === 'roll_check';
-      const isDiceRoll = action.type === 'roll_dice';
       let useModifier: RollModifier = 'normal';
       if (isCastRoll && !castModifierUsed && castModifier && castModifier !== 'normal') {
         useModifier = castModifier;
@@ -679,7 +675,10 @@ export async function executeSpell(options: ExecuteSpellOptions): Promise<Execut
       } else if (isAttackRoll && !hitModifierUsed && hitModifier && hitModifier !== 'normal') {
         useModifier = hitModifier;
         hitModifierUsed = true;
-      } else if ((isCheckRoll || isDiceRoll) && !d20ModifierUsed && rollModifier !== 'normal') {
+      } else if (
+        action.mayTakeRollModifier && // 🎯 только шаги с галочкой «может с преим./помехой»
+        !d20ModifierUsed && rollModifier !== 'normal'
+      ) {
         useModifier = rollModifier;
         d20ModifierUsed = true;
       }

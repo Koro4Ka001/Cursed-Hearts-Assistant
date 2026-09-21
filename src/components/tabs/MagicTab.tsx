@@ -212,7 +212,6 @@ export function MagicTab() {
           rollModifier: 'normal',
           castModifier,
           hitModifier,
-          onLog: (msg) => console.log('[Spell]', msg),
         });
         // одноразовые модификаторы снимаются после каста
         if (castModifier !== 'normal') setCastModifier('normal');

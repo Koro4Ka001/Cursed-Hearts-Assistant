@@ -8,6 +8,7 @@ import OBR, {
   type Text,
 } from "@owlbear-rodeo/sdk";
 import type { Unit } from "../types";
+import { getUnitTokenIds } from "../utils/tokenBindings";
 
 const META = "cursed-hearts-assistant";
 
@@ -552,20 +553,24 @@ class TokenBarService {
   async syncAllBars(units: Unit[]): Promise<void> {
     const valid = new Set<string>();
     for (const u of units) {
-      if (!u.owlbearTokenId) continue;
-      valid.add(u.owlbearTokenId);
-      const hasRage = u.hasRage ?? false;
-      await this.createBars(
-        u.owlbearTokenId,
-        u.useManaAsHp ? u.mana.current : u.health.current,
-        u.useManaAsHp ? u.mana.max : u.health.max,
-        u.mana.current, u.mana.max, u.useManaAsHp,
-        undefined, // 🔧 Имя-лейбл не рисуем: у юнитов (игроков) оно не нужно.
-        // removeBars внутри createBars удаляет старые лейблы, оставшиеся на сцене.
-        hasRage ? (u.rage?.current ?? 0) : 0,
-        hasRage ? (u.rage?.max ?? u.rageConfig?.max ?? 100) : 100,
-        hasRage
-      );
+      for (const tokenId of getUnitTokenIds(u)) {
+        valid.add(tokenId);
+        const hasRage = u.hasRage ?? false;
+        await this.createBars(
+          tokenId,
+          u.useManaAsHp ? u.mana.current : u.health.current,
+          u.useManaAsHp ? u.mana.max : u.health.max,
+          u.mana.current, u.mana.max, u.useManaAsHp,
+          undefined, // 🔧 Имя-лейбл не рисуем: у юнитов (игроков) оно не нужно.
+          // removeBars внутри createBars удаляет старые лейблы, оставшиеся на сцене.
+          hasRage ? (u.rage?.current ?? 0) : 0,
+          hasRage ? (u.rage?.max ?? u.rageConfig?.max ?? 100) : 100,
+          hasRage,
+          u.hasHunger ? (u.hunger?.current ?? 0) : 0,
+          u.hasHunger ? (u.hunger?.max ?? 1000) : 1000,
+          u.hasHunger ?? false
+        );
+      }
     }
     for (const id of this.states.keys()) {
       if (!valid.has(id)) await this.removeBars(id);

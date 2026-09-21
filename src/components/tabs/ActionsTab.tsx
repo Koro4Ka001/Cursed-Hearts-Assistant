@@ -226,7 +226,6 @@ export function ActionsTab() {
         targetCount: 1,
         rollModifier: useModifier,
         onLog: (msg) => {
-          console.log('[Action]', msg);
           setActionLog(prev => [...prev, msg]);
         },
       });
@@ -412,8 +411,8 @@ export function ActionsTab() {
         <ModifierToggle value={pendingModifier} onChange={setPendingModifier} />
         <div className="text-[10px] text-ancient italic mt-1.5">
           {pendingModifier === 'normal'
-            ? 'Применится к первому броску действия'
-            : 'Сработает на первый бросок и снимется сам'}
+            ? 'Применится к броскам действия с галочкой «Может бросаться с преимуществом/помехой»'
+            : 'Сработает на первый помеченный бросок и снимется сам'}
         </div>
       </Section>
       {/* Кастомные действия */}

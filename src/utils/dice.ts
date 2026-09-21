@@ -1,5 +1,6 @@
 // src/utils/dice.ts
 import type { DiceRollResult, RollModifier } from '../types';
+import { rebalance } from './entropy';
 
 /**
  * Парсит формулу кубиков и возвращает структуру для броска
@@ -65,7 +66,29 @@ function parseFormula(formula: string): ParsedFormula {
  * Бросает один кубик с указанным количеством сторон
  */
 function rollSingleDie(sides: number): number {
-  return Math.floor(Math.random() * sides) + 1;
+  // 🔧 d20 проходит через профиль распределения (сам знает роль игрока/GM)
+  const raw = Math.floor(Math.random() * sides) + 1;
+  return sides === 20 ? rebalance(raw) : raw;
+}
+
+/**
+ * 🔧 Количество для «Изменить ресурс» (и подобных полей): принимает
+ * число (5), формулу кубов (2d6+3) или переменную контекста ({lastRoll}/lastRoll).
+ * Переменная берётся из переданного набора значений (ключи «Сохранить результат»).
+ */
+export function resolveAmountValue(raw: number | string | undefined, values: Record<string, unknown> = {}): number {
+  if (typeof raw === 'number') return raw;
+  const s = String(raw ?? '').trim();
+  if (!s) return 0;
+  const varMatch = s.match(/^\{?(\w+)\}?$/);
+  if (varMatch && varMatch[1]! in values) {
+    return Math.max(0, Number(values[varMatch[1]!]) || 0);
+  }
+  if (/\d*d\d+/i.test(s)) {
+    return Math.max(0, rollDice(s, undefined, 'normal').total);
+  }
+  const v = parseFloat(s.replace(',', '.'));
+  return isNaN(v) ? 0 : Math.max(0, v);
 }
 
 /**
